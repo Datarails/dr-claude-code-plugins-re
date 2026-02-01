@@ -1,0 +1,26 @@
+{
+  "environments": {
+    "dev": {
+      "base_url": "https://dev.datarails.com",
+      "auth_url": "https://dev-auth.datarails.com",
+      "display_name": "Development"
+    },
+    "demo": {
+      "base_url": "https://demo.datarails.com",
+      "auth_url": "https://demo-auth.datarails.com",
+      "display_name": "Demo"
+    },
+    "testapp": {
+      "base_url": "https://testapp.datarails.com",
+      "auth_url": "https://testapp-auth.datarails.com",
+      "display_name": "Test App"
+    },
+    "app": {
+      "base_url": "https://app.datarails.com",
+      "auth_url": "https://auth.datarails.com",
+      "display_name": "Production"
+    }
+  },
+  "default_environment": "dev",
+  "active_environment": "dev"
+}

@@ -1,0 +1,201 @@
+# Datarails Finance OS Plugin for Claude Code
+
+Analyze financial data, detect anomalies, and query Finance OS tables directly from Claude Code.
+
+## Features
+
+- **Multi-Account Support** - Connect to dev, demo, testapp, and production environments
+- **Easy Authentication** - Browser cookie extraction for seamless login
+- **Table Discovery** - List and explore all Finance OS tables
+- **Data Profiling** - Numeric and categorical field analysis
+- **Anomaly Detection** - Automated data quality checks
+- **Data Queries** - Filter, sample, and query records
+
+## Quick Start
+
+**For detailed setup instructions, see [SETUP.md](SETUP.md).**
+
+```bash
+# 1. Clone the plugin
+git clone https://github.com/Datarails/dr-claude-code-plugins.git
+cd dr-claude-code-plugins
+
+# 2. Set up skills directory
+mkdir -p .claude && ln -s ../skills .claude/skills
+
+# 3. Authenticate (be logged into Datarails in browser first)
+cd mcp-server && uv run datarails-mcp auth && cd ..
+
+# 4. Start Claude Code
+claude
+
+# 5. Test
+/dr-tables
+```
+
+## Skills
+
+| Skill | Description |
+|-------|-------------|
+| `/dr-auth` | Authenticate with Datarails |
+| `/dr-tables` | List and explore tables |
+| `/dr-profile` | Profile field statistics |
+| `/dr-anomalies` | Detect data quality issues |
+| `/dr-query` | Query and filter records |
+
+### /dr-auth
+
+Authenticate with Datarails Finance OS. Supports multiple environments.
+
+```
+/dr-auth                    # Authenticate to active environment
+/dr-auth --env app          # Authenticate to production
+/dr-auth --list             # List all environments & auth status
+/dr-auth --switch app       # Switch active environment
+/dr-auth --logout dev       # Clear credentials for dev
+```
+
+### /dr-tables
+
+Discover and explore Finance OS tables.
+
+```
+/dr-tables                          # List all tables
+/dr-tables 11442                    # Show table schema
+/dr-tables 11442 --field account    # Show distinct values
+/dr-tables --env app                # List tables in production
+```
+
+### /dr-profile
+
+Profile table fields for statistics and patterns.
+
+```
+/dr-profile 11442                   # Full profile
+/dr-profile 11442 --numeric         # Numeric fields only
+/dr-profile 11442 --categorical     # Categorical fields only
+/dr-profile 11442 --field amount    # Specific field
+```
+
+### /dr-anomalies
+
+Automated anomaly detection.
+
+```
+/dr-anomalies 11442                      # Full scan
+/dr-anomalies 11442 --severity critical  # Critical only
+/dr-anomalies 11442 --type outliers      # Specific type
+```
+
+### /dr-query
+
+Query table records with filters.
+
+```
+/dr-query 11442 --sample                          # Random sample
+/dr-query 11442 amount > 100000                   # Filter records
+/dr-query 11442 department = "Sales" --limit 50   # With limit
+```
+
+## Multi-Environment Support
+
+The plugin supports simultaneous authentication to multiple Datarails environments:
+
+| Environment | URL | Description |
+|-------------|-----|-------------|
+| `dev` | dev.datarails.com | Development (default) |
+| `demo` | demo.datarails.com | Demo |
+| `testapp` | testapp.datarails.com | Test App |
+| `app` | app.datarails.com | Production |
+
+### Authenticate to Multiple Environments
+
+```bash
+cd mcp-server
+uv run datarails-mcp auth --env dev
+uv run datarails-mcp auth --env app
+uv run datarails-mcp auth --list
+```
+
+### Query Different Environments
+
+```
+/dr-tables --env app               # Production tables
+/dr-profile 11442 --env dev        # Profile in dev
+/dr-query 11442 --sample --env app # Sample from production
+```
+
+### Add Custom Environments
+
+Edit `config/environments.json`:
+
+```json
+{
+  "environments": {
+    "custom-client": {
+      "base_url": "https://custom-client.datarails.com",
+      "auth_url": "https://custom-client-auth.datarails.com",
+      "display_name": "Custom Client"
+    }
+  }
+}
+```
+
+## Plugin Structure
+
+```
+dr-claude-code-plugins/
+├── .claude/
+│   └── skills -> ../skills      # Symlink for skill discovery
+├── .claude-plugin/
+│   └── plugin.json              # Plugin manifest
+├── skills/
+│   ├── auth/SKILL.md            # /dr-auth
+│   ├── tables/SKILL.md          # /dr-tables
+│   ├── profile/SKILL.md         # /dr-profile
+│   ├── anomalies/SKILL.md       # /dr-anomalies
+│   └── query/SKILL.md           # /dr-query
+├── mcp-server/                  # Bundled MCP server
+│   ├── src/datarails_mcp/
+│   └── pyproject.toml
+├── config/
+│   └── environments.json        # Configurable environments
+├── .mcp.json                    # MCP server config
+├── CLAUDE.md                    # Claude Code instructions
+├── SETUP.md                     # Detailed setup guide
+└── README.md                    # This file
+```
+
+## Data Limits
+
+The plugin enforces sensible limits to prevent data overload:
+
+| Operation | Max Rows |
+|-----------|----------|
+| Sample records | 20 |
+| Filtered query | 500 |
+| Custom query | 1,000 |
+
+For larger datasets, use the profiling tools which work via aggregation.
+
+## Troubleshooting
+
+See [SETUP.md](SETUP.md#troubleshooting-authentication) for detailed troubleshooting.
+
+### Quick Fixes
+
+| Problem | Solution |
+|---------|----------|
+| Skills not showing | Run `mkdir -p .claude && ln -s ../skills .claude/skills` |
+| "Not authenticated" | Run `cd mcp-server && uv run datarails-mcp auth` |
+| "Session expired" | Re-authenticate with `datarails-mcp auth` |
+| Wrong environment | Use `--env` flag or `datarails-mcp auth --switch <env>` |
+
+## License
+
+MIT License - see LICENSE file.
+
+## Support
+
+- GitHub Issues: https://github.com/Datarails/dr-claude-code-plugins/issues
+- Datarails Support: support@datarails.com
