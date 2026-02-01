@@ -1,0 +1,20 @@
+{
+  "$schema": "https://claude.ai/schemas/hooks.json",
+  "hooks": {
+    "on_session_start": {
+      "description": "Check Datarails authentication status on session start",
+      "enabled": false,
+      "action": {
+        "type": "mcp_tool",
+        "server": "datarails-finance-os",
+        "tool": "check_auth_status"
+      },
+      "on_failure": "ignore"
+    }
+  },
+  "notes": [
+    "Enable on_session_start to automatically check auth when opening Claude Code",
+    "This is disabled by default to avoid unnecessary API calls",
+    "To enable: set 'enabled' to true"
+  ]
+}
