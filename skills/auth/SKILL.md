@@ -5,15 +5,52 @@ user-invocable: true
 allowed-tools:
   - Bash
   - mcp__datarails-finance-os__check_auth_status
-  - mcp__datarails-finance-os__set_auth_cookies
-  - mcp__datarails-finance-os__get_cookie_extraction_script
-  - mcp__datarails-finance-os__clear_auth_cookies
-argument-hint: "[--env dev|demo|testapp|app] [--list] [--switch <env>] [--logout <env>] [--manual]"
+argument-hint: "[--env dev|demo|testapp|app] [--list] [--switch <env>] [--logout <env>]"
 ---
 
 # Datarails Authentication
 
-Help the user authenticate with Datarails Finance OS. Supports multi-account authentication to multiple environments.
+Help the user authenticate with Datarails Finance OS using the CLI.
+
+## IMPORTANT: Use the CLI for Authentication
+
+**ALWAYS use the `datarails-mcp` CLI command for authentication.** The CLI automatically extracts cookies from the user's browser - no manual JavaScript or copy/paste needed.
+
+## Workflow
+
+### Step 1: Check Current Status
+
+Run this Bash command to check authentication status:
+
+```bash
+cd mcp-server && uv run datarails-mcp status
+```
+
+Or use the MCP tool: `mcp__datarails-finance-os__check_auth_status`
+
+### Step 2: If Not Authenticated
+
+1. **Ask the user to log into Datarails in their browser first** (e.g., https://dev.datarails.com)
+
+2. **Run the CLI auth command** - it will automatically extract cookies from the browser:
+
+```bash
+cd mcp-server && uv run datarails-mcp auth
+```
+
+For a specific environment:
+```bash
+cd mcp-server && uv run datarails-mcp auth --env app
+```
+
+3. **Verify it worked:**
+```bash
+cd mcp-server && uv run datarails-mcp status
+```
+
+### Step 3: If Already Authenticated
+
+Confirm the connection is active and show which environment is connected.
 
 ## Available Environments
 
@@ -24,139 +61,70 @@ Help the user authenticate with Datarails Finance OS. Supports multi-account aut
 | `testapp` | testapp.datarails.com | Test App |
 | `app` | app.datarails.com | Production |
 
-## Workflow
+## CLI Commands
 
-### Step 1: Check Current Status
+All commands should be run from the plugin directory:
 
-First, check the current authentication status using `mcp__datarails-finance-os__check_auth_status`.
-
-### Step 2: Handle Based on Request
-
-**List all environments (--list):**
 ```bash
-datarails-mcp auth --list
+# Check status
+cd mcp-server && uv run datarails-mcp status
+
+# Authenticate (auto-extracts from browser)
+cd mcp-server && uv run datarails-mcp auth
+
+# Authenticate to specific environment
+cd mcp-server && uv run datarails-mcp auth --env app
+cd mcp-server && uv run datarails-mcp auth --env dev
+cd mcp-server && uv run datarails-mcp auth --env demo
+
+# List all environments and auth status
+cd mcp-server && uv run datarails-mcp auth --list
+
+# Switch active environment
+cd mcp-server && uv run datarails-mcp auth --switch app
+
+# Logout from environment
+cd mcp-server && uv run datarails-mcp auth --logout dev
+
+# Logout from all
+cd mcp-server && uv run datarails-mcp auth --logout-all
+
+# Manual entry (only if automatic fails)
+cd mcp-server && uv run datarails-mcp auth --manual
 ```
-Shows all environments with their authentication status.
-
-**Switch active environment (--switch):**
-```bash
-datarails-mcp auth --switch app
-```
-Changes the active environment (no re-auth if already authenticated).
-
-**Logout from environment (--logout):**
-```bash
-datarails-mcp auth --logout dev
-```
-Clears credentials for specific environment.
-
-**Authenticate to environment:**
-```bash
-datarails-mcp auth                    # Active environment (default: dev)
-datarails-mcp auth --env app          # Production
-datarails-mcp auth --env demo         # Demo
-datarails-mcp auth --manual           # Manual cookie entry
-```
-
-### Step 3: Authentication Flow
-
-1. Ask the user to log into Datarails in their browser
-2. Run `datarails-mcp auth --env <env>`
-3. If CLI doesn't work, offer manual cookie extraction:
-   - Get the extraction script with `mcp__datarails-finance-os__get_cookie_extraction_script`
-   - Guide user to paste cookies
-   - Use `mcp__datarails-finance-os__set_auth_cookies` to store them
-4. Verify authentication succeeded
-
-## Arguments
-
-| Argument | Description |
-|----------|-------------|
-| `--env <env>` | Authenticate to specific environment (dev, demo, testapp, app) |
-| `--list` | List all environments and their auth status |
-| `--switch <env>` | Switch active environment |
-| `--logout <env>` | Clear credentials for specific environment |
-| `--logout-all` | Clear credentials for all environments |
-| `--manual` | Skip automatic extraction, use manual cookie entry |
 
 ## Example Interactions
 
 **User: "/dr-auth"**
-1. Check status -> Show active environment status
-2. If not authenticated, guide through auth flow
+1. Run `cd mcp-server && uv run datarails-mcp status`
+2. If authenticated: "You're connected to Datarails (dev)"
+3. If not: Ask user to log into Datarails in browser, then run `cd mcp-server && uv run datarails-mcp auth`
 
 **User: "/dr-auth --list"**
-```
-Datarails Environments
-==================================================
-
-| Status | Name   | Display     | URL                           |
-|--------|--------|-------------|-------------------------------|
-| ✓      | dev    | Development | https://dev.datarails.com     |
-| ✓      | app    | Production  | https://app.datarails.com     |
-| ✗      | demo   | Demo        | https://demo.datarails.com    |
-| ✗      | testapp| Test App    | https://testapp.datarails.com |
-
-2 of 4 environments authenticated
-```
+Run: `cd mcp-server && uv run datarails-mcp auth --list`
 
 **User: "/dr-auth --env app"**
-1. Check current status for app environment
-2. Run `datarails-mcp auth --env app`
-3. Verify -> "Successfully connected to Datarails (Production)"
+1. Ask user to log into https://app.datarails.com in browser
+2. Run: `cd mcp-server && uv run datarails-mcp auth --env app`
+3. Verify: `cd mcp-server && uv run datarails-mcp status`
 
 **User: "/dr-auth --switch app"**
-1. Run `datarails-mcp auth --switch app`
-2. Confirm -> "Switched active environment to Production (app)"
+Run: `cd mcp-server && uv run datarails-mcp auth --switch app`
 
 **User: "/dr-auth --logout dev"**
-1. Run `datarails-mcp auth --logout dev`
-2. Confirm -> "Logged out of Development (dev)"
-
-## Commands Summary
-
-```bash
-# List all environments
-datarails-mcp auth --list
-
-# Authenticate to environment
-datarails-mcp auth --env dev
-datarails-mcp auth --env app
-datarails-mcp auth --env demo
-datarails-mcp auth --env testapp
-
-# Switch active environment
-datarails-mcp auth --switch app
-
-# Logout
-datarails-mcp auth --logout dev
-datarails-mcp auth --logout-all
-
-# Manual authentication
-datarails-mcp auth --manual
-
-# Check status
-datarails-mcp status
-datarails-mcp status --all
-datarails-mcp status --env app
-```
+Run: `cd mcp-server && uv run datarails-mcp auth --logout dev`
 
 ## Troubleshooting
 
-If automatic auth fails:
-1. Ensure user is logged into Datarails in browser (correct environment!)
-2. Try `datarails-mcp auth --manual`
-3. If still failing, guide through DevTools cookie extraction:
-   - Open Datarails in browser
-   - Open DevTools (F12) -> Application -> Cookies
-   - Copy `sessionid` and `csrftoken` values
-   - Use `set_auth_cookies` MCP tool
+| Problem | Solution |
+|---------|----------|
+| "No browser cookies found" | User must log into Datarails in browser first |
+| "Browser may be locked" | Close the browser and try again |
+| "Cookie decryption failed" | Grant keychain access (macOS) or try `--manual` |
+| Wrong environment | Specify with `--env` flag |
 
-## Error Messages
-
-| Error | Solution |
-|-------|----------|
-| "No browser cookies found" | User needs to log into Datarails in browser first |
-| "Session expired" | Re-run authentication for that environment |
-| "Invalid credentials" | Clear cookies with --logout and re-authenticate |
-| "Not authenticated to <env>" | Run auth with --env flag for that environment |
+**If automatic extraction fails**, use manual mode:
+```bash
+cd mcp-server && uv run datarails-mcp auth --manual
+```
+Then user copies cookies from DevTools (F12 → Application → Cookies).
