@@ -17,21 +17,20 @@ Analyze financial data, detect anomalies, and query Finance OS tables directly f
 
 ```bash
 # 1. Clone the plugin
-git clone https://github.com/Datarails/dr-claude-code-plugins.git
-cd dr-claude-code-plugins
+git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
+cd dr-claude-code-plugins-re
 
-# 2. Set up skills directory
-mkdir -p .claude && ln -s ../skills .claude/skills
-
-# 3. Authenticate (be logged into Datarails in browser first)
+# 2. Authenticate (be logged into Datarails in browser first)
 cd mcp-server && uv run datarails-mcp auth && cd ..
 
-# 4. Start Claude Code
+# 3. Start Claude Code
 claude
 
-# 5. Test
+# 4. Test
 /dr-tables
 ```
+
+Skills are pre-configured - no additional setup needed!
 
 ## Skills
 
