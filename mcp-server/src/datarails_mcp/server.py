@@ -24,6 +24,12 @@ def get_client() -> DatarailsClient:
     if _client is None:
         auth = get_auth()
         _client = DatarailsClient(auth)
+    else:
+        # Check if credentials changed (e.g., CLI saved new cookies)
+        fresh_auth = get_auth()
+        if fresh_auth.has_session() and not _client.auth.has_session():
+            # Credentials were added externally, recreate client
+            _client = DatarailsClient(fresh_auth)
     return _client
 
 

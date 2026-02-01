@@ -95,7 +95,7 @@ class EnvChoice(click.ParamType):
 
     name = "environment"
 
-    def get_metavar(self, param):
+    def get_metavar(self, param, ctx=None):
         return "[ENV]"
 
     def convert(self, value, param, ctx):
