@@ -13,7 +13,20 @@ Analyze financial data, detect anomalies, and query Finance OS tables directly f
 
 ## Quick Start
 
-**For detailed setup instructions, see [SETUP.md](SETUP.md).**
+**Option 1: Setup Wizard (Recommended)**
+
+```bash
+# 1. Clone the plugin
+git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
+cd dr-claude-code-plugins-re
+
+# 2. Run the setup wizard
+python setup.py
+```
+
+The wizard will guide you through prerequisites, authentication, and testing.
+
+**Option 2: Manual Setup**
 
 ```bash
 # 1. Clone the plugin

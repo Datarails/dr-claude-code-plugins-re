@@ -2,6 +2,29 @@
 
 This guide will help you set up and test the Datarails Finance OS plugin for Claude Code.
 
+## Quick Setup (Recommended)
+
+Run the interactive setup wizard:
+
+```bash
+git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
+cd dr-claude-code-plugins-re
+python setup.py
+```
+
+The wizard will:
+1. Check prerequisites (Python, uv, Claude Code)
+2. Verify skills are configured
+3. Guide you through authentication
+4. Test the connection
+5. Show next steps
+
+---
+
+## Manual Setup
+
+If you prefer manual setup, follow the steps below.
+
 ## Prerequisites
 
 Before starting, ensure you have:
