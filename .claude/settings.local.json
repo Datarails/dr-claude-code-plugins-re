@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__datarails-finance-os__check_auth_status",
+      "mcp__datarails-finance-os__list_finance_tables",
+      "mcp__datarails-finance-os__get_table_schema",
+      "mcp__datarails-finance-os__profile_table_summary",
+      "mcp__datarails-finance-os__get_field_distinct_values",
+      "Bash(uv run:*)",
+      "mcp__datarails-finance-os__set_auth_cookies",
+      "mcp__datarails-finance-os__detect_anomalies",
+      "mcp__datarails-finance-os__profile_numeric_fields",
+      "mcp__datarails-finance-os__profile_categorical_fields",
+      "mcp__datarails-finance-os__get_sample_records",
+      "mcp__datarails-finance-os__get_records_by_filter",
+      "Bash(uv pip install:*)",
+      "Bash(python3 -m pip install:*)",
+      "Bash(python3:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "datarails-finance-os"
+  ]
+}
