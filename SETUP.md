@@ -23,44 +23,20 @@ uv --version
 
 ---
 
-## Step 1: Get the Plugin
-
-### Option A: Clone from GitHub
+## Step 1: Clone the Plugin
 
 ```bash
-git clone https://github.com/Datarails/dr-claude-code-plugins.git
-cd dr-claude-code-plugins
+git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
+cd dr-claude-code-plugins-re
 ```
 
-### Option B: From Zip File
-
-```bash
-unzip dr-claude-code-plugins.zip
-cd dr-claude-code-plugins
-```
+Skills are pre-configured in `.claude/skills/` - no additional setup needed.
 
 ---
 
-## Step 2: Set Up Skills Directory
+## Step 2: Authenticate with Datarails
 
-Claude Code needs a symlink to discover the skills:
-
-```bash
-mkdir -p .claude
-ln -s ../skills .claude/skills
-```
-
-Verify the symlink:
-```bash
-ls -la .claude/
-# Should show: skills -> ../skills
-```
-
----
-
-## Step 3: Authenticate with Datarails
-
-### 3.1 Log into Datarails in Your Browser
+### 2.1 Log into Datarails in Your Browser
 
 Open your browser and log into Datarails:
 - **Development**: https://dev.datarails.com
@@ -68,7 +44,7 @@ Open your browser and log into Datarails:
 
 Make sure you're logged in and can see the Datarails dashboard.
 
-### 3.2 Run Authentication
+### 2.2 Run Authentication
 
 ```bash
 cd mcp-server
@@ -91,7 +67,7 @@ Browser Cookie Authentication
 • Run 'datarails-mcp status' to verify
 ```
 
-### 3.3 Verify Authentication
+### 2.3 Verify Authentication
 
 ```bash
 uv run datarails-mcp status
@@ -125,11 +101,11 @@ Then copy cookies from browser DevTools (F12 → Application → Cookies).
 
 ---
 
-## Step 4: Start Claude Code
+## Step 3: Start Claude Code
 
 ```bash
 # Make sure you're in the plugin directory
-cd /path/to/dr-claude-code-plugins
+cd /path/to/dr-claude-code-plugins-re
 
 # Start Claude Code
 claude
@@ -137,7 +113,7 @@ claude
 
 ---
 
-## Step 5: Test the Plugin
+## Step 4: Test the Plugin
 
 ### Test 1: Check Authentication
 
@@ -246,15 +222,12 @@ If you encounter problems:
    cd mcp-server && uv run datarails-mcp status --all
    ```
 
-2. **Check MCP server logs:**
-   Start Claude Code with verbose output to see MCP errors.
-
-3. **Common issues:**
-   - Skills not showing: Make sure `.claude/skills` symlink exists
+2. **Common issues:**
+   - Skills not showing: Restart Claude Code
    - Auth fails: Make sure you're logged into Datarails in browser
-   - Tools not working: Check MCP server is configured in `.mcp.json`
+   - Tools not working: Check MCP server is running
 
-4. **Report the issue** with:
+3. **Report the issue** with:
    - Error message
    - Output of `datarails-mcp status`
    - Steps to reproduce
@@ -265,13 +238,12 @@ If you encounter problems:
 
 ```bash
 # Setup (one-time)
-git clone https://github.com/Datarails/dr-claude-code-plugins.git
-cd dr-claude-code-plugins
-mkdir -p .claude && ln -s ../skills .claude/skills
+git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
+cd dr-claude-code-plugins-re
 cd mcp-server && uv run datarails-mcp auth && cd ..
 
 # Daily use
-cd dr-claude-code-plugins
+cd dr-claude-code-plugins-re
 claude
 
 # In Claude Code
