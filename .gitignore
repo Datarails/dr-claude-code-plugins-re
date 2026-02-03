@@ -24,4 +24,10 @@ build/
 htmlcov/
 
 # Temp/output files
-tmp/
+tmp/*
+!tmp/.gitkeep
+/tmp
+
+# Client-specific profiles (created by /dr-learn)
+config/client-profiles/*.json
+!config/client-profiles/.gitkeep
