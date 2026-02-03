@@ -4,12 +4,24 @@ Analyze financial data, detect anomalies, and query Finance OS tables directly f
 
 ## Features
 
+### Data Access & Exploration
 - **Multi-Account Support** - Connect to dev, demo, testapp, and production environments
 - **Easy Authentication** - Browser cookie extraction for seamless login
 - **Table Discovery** - List and explore all Finance OS tables
 - **Data Profiling** - Numeric and categorical field analysis
 - **Anomaly Detection** - Automated data quality checks
 - **Data Queries** - Filter, sample, and query records
+- **Data Extraction** - Export validated financial data to Excel
+
+### Financial Analysis Suite (NEW! 🎯)
+- **Anomaly Detection** - Data quality monitoring with severity scoring
+- **Trend Analysis** - P&L trends, KPI analysis, growth metrics
+- **Executive Insights** - Professional PowerPoint presentations with visualizations
+- **Data Reconciliation** - P&L vs KPI consistency validation
+- **Executive Dashboard** - Real-time KPI monitoring
+- **Forecast Analysis** - Multi-scenario (Actuals/Budget/Forecast) variance analysis
+- **Compliance Auditing** - SOX compliance control testing and audit reports
+- **Department Analytics** - Departmental P&L and performance analysis
 
 ## Quick Start
 
@@ -47,15 +59,26 @@ Skills are pre-configured - no additional setup needed!
 
 ## Skills
 
+### Data Access & Setup
 | Skill | Description |
 |-------|-------------|
 | `/dr-auth` | Authenticate with Datarails |
 | `/dr-learn` | Discover table structure and create client profile |
 | `/dr-tables` | List and explore tables |
 | `/dr-profile` | Profile field statistics |
-| `/dr-anomalies` | Detect data quality issues |
 | `/dr-query` | Query and filter records |
 | `/dr-extract` | Extract financial data to Excel |
+
+### Financial Analysis Agents (NEW! 🚀)
+| Skill | Description | Output |
+|-------|-------------|--------|
+| `/dr-anomalies-report` | Data quality assessment with anomaly detection | Excel report |
+| `/dr-insights` | Trend analysis and executive insights | PowerPoint + Excel |
+| `/dr-reconcile` | P&L vs KPI consistency validation | Excel report |
+| `/dr-dashboard` | Executive KPI monitoring | Excel + PowerPoint |
+| `/dr-forecast-variance` | Budget vs actual variance analysis | Excel + PowerPoint |
+| `/dr-audit` | SOX compliance audit reporting | PDF + Excel |
+| `/dr-departments` | Department P&L analysis | Excel + PowerPoint |
 
 ### /dr-auth
 
@@ -143,6 +166,67 @@ Requires a client profile (run `/dr-learn` first). Generates Excel with:
 - KPIs by quarter
 - Validation checks
 
+## Financial Agents Suite
+
+A complete suite of 7 specialized financial analysis agents for executive reporting, compliance, and business intelligence.
+
+### Quick Examples
+
+**Check data quality**:
+```
+/dr-anomalies-report --env app
+```
+Generates Excel report with critical, high, medium, and low priority findings.
+
+**Generate quarterly insights**:
+```
+/dr-insights --year 2025 --quarter Q4
+```
+Generates professional PowerPoint presentation (7 slides) + Excel data book with trends, KPIs, and recommendations.
+
+**Validate P&L vs KPI consistency**:
+```
+/dr-reconcile --year 2025
+```
+Validates consistency between P&L and KPI tables, identifies variance exceptions.
+
+**Executive KPI dashboard**:
+```
+/dr-dashboard --env app
+```
+Real-time executive dashboard in Excel and one-page PowerPoint summary.
+
+**Budget vs actual variance analysis**:
+```
+/dr-forecast-variance --year 2025 --scenarios Actuals,Budget,Forecast
+```
+Multi-scenario variance analysis comparing actual, budget, and forecast.
+
+**SOX compliance audit**:
+```
+/dr-audit --year 2025 --quarter Q4
+```
+Generates professional PDF audit report + Excel evidence package.
+
+**Department performance analysis**:
+```
+/dr-departments --year 2025
+```
+Department P&L analysis with Excel + PowerPoint outputs.
+
+### Financial Agents Documentation
+
+See individual skill documentation for complete details:
+- `/dr-anomalies-report` - Data quality assessment
+- `/dr-insights` - Trend analysis & visualizations
+- `/dr-reconcile` - Consistency validation
+- `/dr-dashboard` - Executive KPI monitoring
+- `/dr-forecast-variance` - Variance analysis
+- `/dr-audit` - Compliance auditing
+- `/dr-departments` - Department analytics
+
+For comprehensive implementation details, see [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md).
+
 ## Multi-Environment Support
 
 The plugin supports simultaneous authentication to multiple Datarails environments:
@@ -202,19 +286,53 @@ dr-claude-code-plugins/
 │   ├── profile/SKILL.md         # /dr-profile
 │   ├── anomalies/SKILL.md       # /dr-anomalies
 │   ├── query/SKILL.md           # /dr-query
-│   └── extract/SKILL.md         # /dr-extract
+│   ├── extract/SKILL.md         # /dr-extract
+│   ├── anomalies-report/SKILL.md        # /dr-anomalies-report (NEW!)
+│   ├── insights/SKILL.md                # /dr-insights (NEW!)
+│   ├── reconciliation/SKILL.md          # /dr-reconcile (NEW!)
+│   ├── dashboard/SKILL.md               # /dr-dashboard (NEW!)
+│   ├── forecast-variance/SKILL.md       # /dr-forecast-variance (NEW!)
+│   ├── audit/SKILL.md                   # /dr-audit (NEW!)
+│   └── departments/SKILL.md             # /dr-departments (NEW!)
+├── agents/                      # Agent definitions
+│   ├── anomaly-detector.md
+│   ├── insights.md
+│   ├── reconciliation.md
+│   ├── dashboard.md
+│   ├── forecast.md
+│   ├── audit.md
+│   └── departments.md
 ├── mcp-server/                  # Bundled MCP server
 │   ├── src/datarails_mcp/
-│   ├── scripts/                 # Extraction scripts
+│   │   ├── report_utils.py              # Report formatting utilities (NEW!)
+│   │   ├── chart_builder.py             # Chart generation (NEW!)
+│   │   ├── excel_builder.py             # Excel generation (NEW!)
+│   │   ├── pptx_builder.py              # PowerPoint generation (NEW!)
+│   │   ├── pdf_builder.py               # PDF generation (NEW!)
+│   │   └── ... (existing modules)
+│   ├── scripts/
+│   │   ├── extract_financials.py
+│   │   ├── anomaly_detector.py          # (NEW!)
+│   │   ├── insights_generator.py        # (NEW!)
+│   │   ├── reconciliation_engine.py     # (NEW!)
+│   │   ├── executive_dashboard.py       # (NEW!)
+│   │   ├── forecast_analyzer.py         # (NEW!)
+│   │   ├── compliance_auditor.py        # (NEW!)
+│   │   └── department_analytics.py      # (NEW!)
+│   ├── templates/               # Report styling (NEW!)
+│   ├── tests/
 │   └── pyproject.toml
 ├── config/
 │   ├── environments.json        # Configurable environments
 │   ├── profile-schema.json      # Client profile schema
 │   └── client-profiles/         # Client-specific configs (not committed)
+├── tmp/                         # Output files location
 ├── .mcp.json                    # MCP server config
 ├── CLAUDE.md                    # Claude Code instructions
 ├── SETUP.md                     # Detailed setup guide
-└── README.md                    # This file
+├── README.md                    # This file
+├── IMPLEMENTATION_COMPLETE.md   # Full implementation details (NEW!)
+└── PHASE_1_2_SUMMARY.md         # Phase summary (NEW!)
 ```
 
 ## Data Limits
