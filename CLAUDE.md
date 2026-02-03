@@ -1,5 +1,35 @@
 # CLAUDE.md - Datarails Finance OS Plugin
 
+## 🚨 CRITICAL PRINCIPLE: ALWAYS USE FRESH REAL DATA
+
+**NEVER generate reports, Excel files, PowerPoint presentations, or any artifacts without first fetching fresh data from the live Datarails API.**
+
+### Why This Matters
+Reports with fake/placeholder data have ZERO value. They mislead stakeholders and waste time. Every agent must:
+1. Connect to the live environment (verify authentication)
+2. Fetch fresh data from Datarails tables
+3. Analyze the real data
+4. Generate reports based on that analysis
+
+### How to Verify
+Before creating any artifact:
+```python
+# Always start with fresh API calls
+records = json.loads(await client.get_sample(table_id, n=50))
+print(f"✓ Got {len(records)} real records")
+
+# Never use placeholder data
+assert len(records) > 0, "No data to analyze!"
+
+# Generate report from actual analysis
+total = sum([r.get("Amount", 0) for r in records])
+excel.add_data([["Total", total]])  # Real number, not made up
+```
+
+See `DEVELOPMENT_GUIDELINES.md` for complete requirements.
+
+---
+
 ## Output Files
 
 Generated output files (Excel exports, reports, documentation, etc.) should be saved to the `tmp/` folder in the project root. This keeps generated artifacts separate from code and configuration files.
