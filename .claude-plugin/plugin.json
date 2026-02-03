@@ -31,7 +31,9 @@
     "skills/tables",
     "skills/profile",
     "skills/anomalies",
-    "skills/query"
+    "skills/query",
+    "skills/extract",
+    "skills/learn"
   ],
   "agents": [
     "agents/finance-analyst.md"

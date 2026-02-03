@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Datarails Client Profile",
+  "description": "Client knowledge base storing table mappings, field definitions, and discovered insights about a Datarails environment",
+  "type": "object",
+  "required": ["version", "environment", "tables", "field_mappings"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Profile schema version",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "environment": {
+      "type": "string",
+      "description": "Environment name (dev, demo, testapp, app, or custom)"
+    },
+    "discovered_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this profile was created/last updated"
+    },
+    "tables": {
+      "type": "object",
+      "description": "Table mappings by purpose",
+      "properties": {
+        "financials": {
+          "$ref": "#/$defs/tableMapping"
+        },
+        "kpis": {
+          "$ref": "#/$defs/tableMapping"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/tableMapping"
+      }
+    },
+    "field_mappings": {
+      "type": "object",
+      "description": "Semantic field name mappings to actual field names",
+      "properties": {
+        "amount": { "type": "string" },
+        "scenario": { "type": "string" },
+        "year": { "type": "string" },
+        "date": { "type": "string" },
+        "account_l0": { "type": "string" },
+        "account_l1": { "type": "string" },
+        "account_l2": { "type": "string" },
+        "department_l1": { "type": "string" },
+        "department_l2": { "type": "string" },
+        "kpi_name": { "type": "string" },
+        "kpi_value": { "type": "string" },
+        "quarter": { "type": "string" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "account_hierarchy": {
+      "type": "object",
+      "description": "Account category names for filtering",
+      "properties": {
+        "pnl_filter": { "type": "string", "description": "Value for P&L filtering in account_l0" },
+        "balance_sheet_filter": { "type": "string", "description": "Value for Balance Sheet filtering" },
+        "revenue": { "type": "string" },
+        "cogs": { "type": "string" },
+        "opex": { "type": "string" },
+        "other_expense": { "type": "string" },
+        "financial_expense": { "type": "string" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "kpi_definitions": {
+      "type": "object",
+      "description": "KPI name mappings",
+      "additionalProperties": { "type": "string" }
+    },
+    "scenarios": {
+      "type": "array",
+      "description": "Available scenarios in the data",
+      "items": { "type": "string" }
+    },
+    "years_available": {
+      "type": "array",
+      "description": "Years with data available",
+      "items": { "type": "string" }
+    },
+    "notes": {
+      "type": "object",
+      "description": "Freeform knowledge discovered during agent work",
+      "additionalProperties": { "type": "string" },
+      "examples": [
+        {
+          "fiscal_year": "Starts in February",
+          "data_gaps": "Missing March 2024 data",
+          "revenue_recognition": "Q4 includes annual true-ups"
+        }
+      ]
+    },
+    "business_rules": {
+      "type": "object",
+      "description": "Client-specific business logic and calculations",
+      "additionalProperties": { "type": "string" }
+    },
+    "data_quality": {
+      "type": "object",
+      "description": "Known data quality issues and anomalies",
+      "properties": {
+        "known_issues": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "missing_periods": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "naming_inconsistencies": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the profile was last modified (by /dr-learn or manual edit)"
+    }
+  },
+  "$defs": {
+    "tableMapping": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Table ID in Finance OS"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable table name"
+        },
+        "purpose": {
+          "type": "string",
+          "description": "What this table is used for"
+        }
+      }
+    }
+  }
+}
