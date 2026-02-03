@@ -135,7 +135,7 @@ def check_skills_setup(plugin_dir):
 
     if skills_dir.exists():
         # Check if symlinks are valid
-        expected_skills = ["dr-auth", "dr-tables", "dr-profile", "dr-anomalies", "dr-query"]
+        expected_skills = ["dr-auth", "dr-tables", "dr-profile", "dr-anomalies", "dr-query", "dr-extract", "dr-learn"]
         all_valid = True
         for skill in expected_skills:
             skill_path = skills_dir / skill
@@ -174,7 +174,9 @@ def setup_skills(plugin_dir):
         "tables": "dr-tables",
         "profile": "dr-profile",
         "anomalies": "dr-anomalies",
-        "query": "dr-query"
+        "query": "dr-query",
+        "extract": "dr-extract",
+        "learn": "dr-learn"
     }
 
     for source_name, target_name in skill_names.items():
@@ -256,12 +258,16 @@ def show_next_steps(plugin_dir):
    cd {plugin_dir}
    claude
 
-{Colors.BOLD}2. Try these commands:{Colors.END}
+{Colors.BOLD}2. Learn your data structure (first time):{Colors.END}
+   /dr-learn               # Discover tables and create client profile
+
+{Colors.BOLD}3. Try these commands:{Colors.END}
    /dr-tables              # List all Finance OS tables
    /dr-profile <table_id>  # Profile a table
    /dr-query <table_id> --sample  # Get sample data
+   /dr-extract --year 2025 # Extract financial data to Excel
 
-{Colors.BOLD}3. Multi-environment:{Colors.END}
+{Colors.BOLD}4. Multi-environment:{Colors.END}
    /dr-auth --list         # See all environments
    /dr-auth --env app      # Authenticate to production
 

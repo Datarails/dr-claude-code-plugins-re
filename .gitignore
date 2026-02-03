@@ -31,3 +31,4 @@ tmp/*
 # Client-specific profiles (created by /dr-learn)
 config/client-profiles/*.json
 !config/client-profiles/.gitkeep
+/mcp-server/tmp

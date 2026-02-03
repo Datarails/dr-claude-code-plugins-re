@@ -50,10 +50,12 @@ Skills are pre-configured - no additional setup needed!
 | Skill | Description |
 |-------|-------------|
 | `/dr-auth` | Authenticate with Datarails |
+| `/dr-learn` | Discover table structure and create client profile |
 | `/dr-tables` | List and explore tables |
 | `/dr-profile` | Profile field statistics |
 | `/dr-anomalies` | Detect data quality issues |
 | `/dr-query` | Query and filter records |
+| `/dr-extract` | Extract financial data to Excel |
 
 ### /dr-auth
 
@@ -109,6 +111,38 @@ Query table records with filters.
 /dr-query 11442 department = "Sales" --limit 50   # With limit
 ```
 
+### /dr-learn
+
+Discover table structure and create a client profile. Run this once per environment to enable `/dr-extract`.
+
+```
+/dr-learn                   # Discover tables in active environment
+/dr-learn --env app         # Discover in production
+/dr-learn --force           # Overwrite existing profile
+```
+
+Creates a profile at `config/client-profiles/<env>.json` with:
+- Table IDs and field mappings
+- Account hierarchy names
+- KPI definitions
+- Any discovered business rules or data notes
+
+### /dr-extract
+
+Extract validated financial data to Excel workbooks.
+
+```
+/dr-extract --year 2025                    # Extract current year
+/dr-extract --year 2025 --env app          # From production
+/dr-extract --year 2025 --scenario Budget  # Budget data
+/dr-extract --year 2025 --output report.xlsx
+```
+
+Requires a client profile (run `/dr-learn` first). Generates Excel with:
+- P&L by month
+- KPIs by quarter
+- Validation checks
+
 ## Multi-Environment Support
 
 The plugin supports simultaneous authentication to multiple Datarails environments:
@@ -158,20 +192,25 @@ Edit `config/environments.json`:
 ```
 dr-claude-code-plugins/
 ├── .claude/
-│   └── skills -> ../skills      # Symlink for skill discovery
+│   └── skills/                  # Skill symlinks
 ├── .claude-plugin/
 │   └── plugin.json              # Plugin manifest
 ├── skills/
 │   ├── auth/SKILL.md            # /dr-auth
+│   ├── learn/SKILL.md           # /dr-learn
 │   ├── tables/SKILL.md          # /dr-tables
 │   ├── profile/SKILL.md         # /dr-profile
 │   ├── anomalies/SKILL.md       # /dr-anomalies
-│   └── query/SKILL.md           # /dr-query
+│   ├── query/SKILL.md           # /dr-query
+│   └── extract/SKILL.md         # /dr-extract
 ├── mcp-server/                  # Bundled MCP server
 │   ├── src/datarails_mcp/
+│   ├── scripts/                 # Extraction scripts
 │   └── pyproject.toml
 ├── config/
-│   └── environments.json        # Configurable environments
+│   ├── environments.json        # Configurable environments
+│   ├── profile-schema.json      # Client profile schema
+│   └── client-profiles/         # Client-specific configs (not committed)
 ├── .mcp.json                    # MCP server config
 ├── CLAUDE.md                    # Claude Code instructions
 ├── SETUP.md                     # Detailed setup guide
