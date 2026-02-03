@@ -1,0 +1,75 @@
+{
+  "color_schemes": {
+    "default": {
+      "primary": "#2E75B6",
+      "secondary": "#ED7D31",
+      "success": "#70AD47",
+      "warning": "#FFC000",
+      "danger": "#C5504D",
+      "neutral": "#595959"
+    },
+    "warm": {
+      "primary": "#ED7D31",
+      "secondary": "#FFC000",
+      "success": "#70AD47",
+      "warning": "#C5504D",
+      "danger": "#C5504D",
+      "neutral": "#595959"
+    },
+    "cool": {
+      "primary": "#2E75B6",
+      "secondary": "#5B9BD5",
+      "success": "#70AD47",
+      "warning": "#FFC000",
+      "danger": "#C5504D",
+      "neutral": "#595959"
+    }
+  },
+  "chart_defaults": {
+    "dpi": 100,
+    "figsize": {
+      "small": [8, 6],
+      "medium": [10, 7],
+      "large": [12, 8]
+    },
+    "fonts": {
+      "family": "sans-serif",
+      "title_size": 14,
+      "label_size": 10,
+      "tick_size": 9
+    },
+    "grid": {
+      "enabled": true,
+      "alpha": 0.3,
+      "style": "dashed"
+    }
+  },
+  "excel_defaults": {
+    "header_fill": "4472C4",
+    "header_font_color": "FFFFFF",
+    "border_style": "thin",
+    "freeze_panes": "A2"
+  },
+  "powerpoint_defaults": {
+    "primary_color": "2E75B6",
+    "secondary_color": "ED7D31",
+    "text_color": "333333",
+    "background_color": "FFFFFF",
+    "slide_width": 10,
+    "slide_height": 7.5,
+    "font_family": "Calibri",
+    "title_size": 54,
+    "heading_size": 40,
+    "body_size": 18
+  },
+  "pdf_defaults": {
+    "page_size": "letter",
+    "margin_top": 1.0,
+    "margin_bottom": 0.75,
+    "margin_left": 0.75,
+    "margin_right": 0.75,
+    "header_background": "2E75B6",
+    "header_text_color": "FFFFFF",
+    "table_alternating_rows": true
+  }
+}
