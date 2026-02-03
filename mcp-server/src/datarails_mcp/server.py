@@ -357,6 +357,55 @@ async def execute_query(table_id: str, query: str) -> str:
     return await client.execute_query(table_id, query)
 
 
+# =============================================================================
+# Aggregation Tools
+# =============================================================================
+
+
+@mcp.tool()
+async def aggregate_table_data(
+    table_id: str,
+    dimensions: list[str],
+    metrics: list[dict],
+    filters: list[dict] | None = None,
+) -> str:
+    """Aggregate table data with grouping dimensions and metrics. NO ROW LIMIT.
+
+    This is the correct way to extract financial totals - use aggregation
+    instead of raw queries which are limited to 500-1000 rows.
+
+    Args:
+        table_id: The ID of the table to aggregate
+        dimensions: List of fields to group by (e.g., ["Reporting Date", "DR_ACC_L1", "Department L1"])
+        metrics: List of metric definitions with field and aggregation type.
+                 Example: [{"field": "Amount", "agg": "SUM"}, {"field": "Amount", "agg": "COUNT"}]
+        filters: Optional list of filter objects to narrow the data.
+                 Example: [{"name": "Scenario", "values": ["Actuals"], "is_excluded": false}]
+
+    Aggregation types supported:
+    - SUM: Sum of values
+    - AVG: Average of values
+    - MIN: Minimum value
+    - MAX: Maximum value
+    - COUNT: Count of records
+    - COUNT_DISTINCT: Count of distinct values
+
+    Returns aggregated data grouped by the specified dimensions.
+    Unlike get_records_by_filter (500 rows) or execute_query (1000 rows),
+    aggregation has NO row limit and returns properly computed totals.
+
+    Example for P&L extraction:
+        dimensions: ["Reporting Date", "DR_ACC_L1", "DR_ACC_L2", "Department L1"]
+        metrics: [{"field": "Amount", "agg": "SUM"}]
+        filters: [
+            {"name": "Scenario", "values": ["Actuals"], "is_excluded": false},
+            {"name": "DR_ACC_L0", "values": ["P&L"], "is_excluded": false}
+        ]
+    """
+    client = get_client()
+    return await client.aggregate(table_id, dimensions, metrics, filters)
+
+
 def main():
     """Run the MCP server."""
     mcp.run(transport="stdio")

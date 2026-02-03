@@ -373,3 +373,35 @@ class DatarailsClient:
             },
         )
         return self._format_response(result)
+
+    # Aggregation Tools
+
+    async def aggregate(
+        self,
+        table_id: str,
+        dimensions: list[str],
+        metrics: list[dict],
+        filters: list[dict] | None = None,
+    ) -> str:
+        """Aggregate table data with grouping dimensions and metrics. NO ROW LIMIT.
+
+        Args:
+            table_id: The ID of the table to aggregate
+            dimensions: List of fields to group by
+            metrics: List of metric definitions with field and aggregation type
+            filters: Optional list of filter objects
+        """
+        request_body = {
+            "dimensions": dimensions,
+            "metrics": metrics,
+        }
+
+        if filters:
+            request_body["filters"] = filters
+
+        result = await self._request(
+            "POST",
+            f"/tables/v1/{table_id}/aggregate",
+            json_data=request_body,
+        )
+        return self._format_response(result)
