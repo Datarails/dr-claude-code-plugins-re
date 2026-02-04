@@ -40,7 +40,8 @@
       "Bash(python generate_real_reports.py:*)",
       "mcp__datarails-finance-os__get_cookie_extraction_script",
       "Bash(git reset:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(xargs:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

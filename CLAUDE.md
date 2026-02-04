@@ -47,21 +47,21 @@ tmp/analysis_output.csv
 
 ### Where to Save System Knowledge
 
-**Location:** Root of project directory (versioned with git)
+**Location:** `docs/analysis/` directory (versioned with git)
 
 **File types:**
 - `*_ANALYSIS.md` - Technical analysis and findings
 - `*_STRATEGY.md` - Implementation strategies and architectures
-- `*_GUIDE.md` - Operational guides and how-to documents
+- `*_GUIDE.md` - Operational guides and how-to documents (in `docs/guides/`)
 - `*_REPORT.md` - Investigation reports and discoveries
 
 **Examples:**
 ```bash
 # System-specific documentation (COMMIT THESE)
-TABLE_STRUCTURE_ANALYSIS.md      # How this table is organized
-DATA_EXTRACTION_STRATEGY.md       # Caching and optimization strategies
-API_DIAGNOSTIC_REPORT.md         # API findings and performance
-DEVELOPMENT_GUIDELINES.md        # Build and architecture guidelines
+docs/analysis/TABLE_STRUCTURE_ANALYSIS.md      # How this table is organized
+docs/analysis/DATA_EXTRACTION_STRATEGY.md      # Caching and optimization strategies
+docs/analysis/API_DIAGNOSTIC_REPORT.md         # API findings and performance
+docs/guides/NOTEBOOK_GUIDE.md                  # Operational guides
 
 # NOT here - goes to tmp/
 tmp/daily_export_20260204.xlsx   # Generated reports
