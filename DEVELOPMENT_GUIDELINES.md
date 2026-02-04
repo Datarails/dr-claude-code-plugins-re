@@ -165,6 +165,62 @@ def verify_report_has_real_data(excel_path):
     return True
 ```
 
+## Professional Excel Report Standards
+
+All FP&A Excel reports MUST follow this professional standard:
+
+### Required Sheets
+1. **Executive Summary** - KPI metrics, trends, status
+2. **P&L Analysis** - Full income statement with budget vs actual
+3. **Account Breakdown** - Revenue/expense by category
+4. **Variance Analysis** - Budget variance with status indicators
+
+### Professional Formatting
+```
+Color Scheme:
+  • Headers: Dark Blue (#1F4E78)
+  • Subheaders: Medium Blue (#4472C4)
+  • Positive: Green (#70AD47)
+  • Negative: Red (#C5504D)
+  • Accents: Orange (#ED7D31)
+  • Backgrounds: Light Gray (#E7E6E6)
+
+Typography:
+  • Font: Calibri
+  • Headers: 14-24pt, Bold, White text
+  • Data: 10-11pt, Black text
+  • Merged cells for titles
+  • Proper row heights (22-35pt for headers)
+
+Formatting:
+  • Currency: $#,##0 (no decimals)
+  • Percentages: 0.0% or +0.0%;-0.0%
+  • All data cells: thin borders
+  • Alignment: Left for text, Right for numbers
+  • Bold + gray background for subtotals
+```
+
+### Required Columns in P&L
+```
+Account | YTD Actual | YTD Budget | Variance | Variance % | Prior Year
+```
+
+### Required Status Indicators
+```
+✓ Favorable / On Target (green)
+✗ Unfavorable (red)
+→ For trend analysis
+```
+
+### Data Requirements
+- Real financial data from fresh API calls
+- Budget vs Actual comparison
+- Variance calculations
+- Prior period comparison
+- Trend indicators
+
+**Example**: Professional_FP&A_Report.xlsx in tmp/ folder
+
 ## Project Memory
 
 **CRITICAL PRINCIPLE FOR ALL AGENTS:**
@@ -174,8 +230,18 @@ def verify_report_has_real_data(excel_path):
 - If no data: return error message, don't create fake report
 - Data freshness is more important than speed
 
+**EXCEL REPORT STANDARD:**
+- Follow Professional_FP&A_Report.xlsx template
+- 4 sheets minimum (Executive Summary, P&L, Account Breakdown, Variance)
+- Professional color scheme (blue/orange/green/red)
+- Currency and percentage formatting
+- Budget vs actual analysis
+- Hierarchical P&L structure
+- Status indicators and trend analysis
+- Executive-ready presentation
+
 ---
 
 **Added:** 2026-02-03
-**Reason:** Prevent inaccurate reports that have no real value
+**Reason:** Prevent inaccurate reports that have no real value, ensure professional quality
 **Priority:** CRITICAL - Apply to all future work
