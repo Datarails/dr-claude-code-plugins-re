@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "environment": "app",
+  "discovered_at": "2026-02-03T00:00:00Z",
+
+  "tables": {
+    "financials": {
+      "id": "16528",
+      "name": "Financials Cube",
+      "purpose": "P&L and Balance Sheet"
+    },
+    "kpis": {
+      "id": "34298",
+      "name": "KPI Metrics",
+      "purpose": "ARR, Churn, LTV, Revenue totals"
+    }
+  },
+
+  "field_mappings": {
+    "amount": "Amount",
+    "scenario": "Scenario",
+    "year": "System_Year",
+    "date": "Reporting Date",
+    "account_l0": "DR_ACC_L0",
+    "account_l1": "DR_ACC_L1",
+    "account_l2": "DR_ACC_L2",
+    "department_l1": "Department L1",
+    "department_l2": "Department L2",
+    "kpi_name": "KPI",
+    "kpi_value": "value",
+    "quarter": "Quarter & Year"
+  },
+
+  "account_hierarchy": {
+    "pnl_filter": "P&L",
+    "balance_sheet_filter": "Balance Sheet",
+    "revenue": "REVENUE",
+    "cogs": "Cost of Good sold",
+    "opex": "Operating Expense",
+    "financial_expense": "Financial Expenses",
+    "other_expense": "Other Expense"
+  },
+
+  "kpi_definitions": {
+    "revenue": "Revenue",
+    "gross_profit": "Gross Profit",
+    "arr_opening": "ARR Opening Balance",
+    "new_arr": "New ARR",
+    "net_new_arr": "Net New ARR",
+    "churn_dollar": "Churn $",
+    "churn_pct": "Churn %",
+    "ltv": "LTV",
+    "ltv_cac": "LTV / CAC",
+    "opex": "Operating Expense"
+  },
+
+  "scenarios": ["Actuals", "Budget", "Forecast"],
+  "years_available": ["2023", "2024", "2025", "2026"]
+}

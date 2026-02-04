@@ -16,8 +16,9 @@ The wizard will:
 1. Check prerequisites (Python, uv, Claude Code)
 2. Verify skills are configured
 3. Guide you through authentication
-4. Test the connection
-5. Show next steps
+4. Test the connection with data access skills
+5. Test Financial Agents (anomaly detection, insights, dashboards)
+6. Show next steps
 
 ---
 
@@ -121,6 +122,24 @@ Datarails MCP Status
 uv run datarails-mcp auth --manual
 ```
 Then copy cookies from browser DevTools (F12 → Application → Cookies).
+
+---
+
+## Step 2b: Test Financial Agents (NEW!)
+
+After authentication, you can now test the Financial Agents Suite:
+
+```bash
+cd /path/to/dr-claude-code-plugins-re
+claude
+
+# In Claude Code, try:
+/dr-anomalies-report --env dev
+/dr-insights --year 2025 --quarter Q4
+/dr-dashboard --env dev
+```
+
+These agents provide professional financial analysis with Excel and PowerPoint outputs.
 
 ---
 

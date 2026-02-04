@@ -41,6 +41,71 @@ tmp/budget_report.xlsx
 tmp/analysis_output.csv
 ```
 
+## System-Specific Documentation
+
+**Important:** All system-specific analysis, discoveries, and operational knowledge should be saved as part of the plugin, not as temporary files.
+
+### Where to Save System Knowledge
+
+**Location:** Root of project directory (versioned with git)
+
+**File types:**
+- `*_ANALYSIS.md` - Technical analysis and findings
+- `*_STRATEGY.md` - Implementation strategies and architectures
+- `*_GUIDE.md` - Operational guides and how-to documents
+- `*_REPORT.md` - Investigation reports and discoveries
+
+**Examples:**
+```bash
+# System-specific documentation (COMMIT THESE)
+TABLE_STRUCTURE_ANALYSIS.md      # How this table is organized
+DATA_EXTRACTION_STRATEGY.md       # Caching and optimization strategies
+API_DIAGNOSTIC_REPORT.md         # API findings and performance
+DEVELOPMENT_GUIDELINES.md        # Build and architecture guidelines
+
+# NOT here - goes to tmp/
+tmp/daily_export_20260204.xlsx   # Generated reports
+tmp/extraction_log.txt            # Temporary logs
+```
+
+### What Gets Saved Where
+
+| Content Type | Location | Commit? | Purpose |
+|-------------|----------|---------|---------|
+| Table schemas, structures | Root `.md` files | ✅ YES | Reference for agents/developers |
+| Analysis findings | `*_ANALYSIS.md` | ✅ YES | Document discoveries |
+| Implementation strategies | `*_STRATEGY.md` | ✅ YES | Guide future development |
+| Operational guides | `*_GUIDE.md` | ✅ YES | Train agents/developers |
+| Generated reports/data | `tmp/` | ❌ NO | Temporary, not versioned |
+| Client profiles | `config/client-profiles/` | ❌ NO | Client-specific, not shared |
+| Logs/debugging | `tmp/` or `.local/` | ❌ NO | Temporary |
+
+### For Agents & Skills
+
+When agents discover system-specific information:
+1. **Document in markdown** - Create `*_ANALYSIS.md` or update existing `.md` file
+2. **Update client profile** - Store in `config/client-profiles/<env>.json`
+3. **Add to skills** - If knowledge is procedural, add to skill definitions in `skills/*/`
+4. **Commit to git** - `.md` files are part of the plugin codebase
+
+### Example: Table Discovery
+
+When you discover how a table is organized:
+```bash
+# ✅ DO THIS:
+1. Create TABLE_STRUCTURE_ANALYSIS.md with findings
+2. Update config/client-profiles/app.json with structure
+3. git add TABLE_STRUCTURE_ANALYSIS.md config/client-profiles/app.json
+4. git commit -m "docs: Add table structure analysis and findings"
+
+# ❌ DON'T DO THIS:
+1. Create a temporary PDF report
+2. Forget to document for next agent
+3. Leave knowledge only in notebook cells
+```
+
+---
+
 ## Git Commit Guidelines
 
 **DO commit** (general plugin changes):
@@ -49,6 +114,8 @@ tmp/analysis_output.csv
 - Plugin configuration (`.claude-plugin/plugin.json`)
 - Schema files (`config/profile-schema.json`, `config/environments.json`)
 - Documentation (`CLAUDE.md`, `README.md`)
+- Analysis & findings (`*_ANALYSIS.md`, `*_STRATEGY.md`, `*_GUIDE.md`, `*_REPORT.md`)
+- Client profiles (`config/client-profiles/*.json`)
 
 **DO NOT commit** (client-specific data):
 - Client profiles (`config/client-profiles/*.json`) - contain client-specific table IDs, field mappings, and discovered knowledge

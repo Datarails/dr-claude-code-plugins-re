@@ -1,0 +1,106 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                           FIX THE TOKEN ERROR NOW                              ║
+║                    (This will take you 3 minutes)                              ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+YOU HAVE A JUPYTER NOTEBOOK ERROR:
+  KeyError: 'records_returned'
+  (Caused by expired authentication token)
+
+HERE'S EXACTLY WHAT TO DO:
+════════════════════════════════════════════════════════════════════════════════
+
+STEP 1: Generate Fresh Credentials (In Terminal)
+────────────────────────────────────────────────────────────────────────────────
+
+Run this command:
+
+  python3 /Users/stasg/DataRails-dev/dr-claude-code-plugins-re/GET_DYNAMIC_JWT.py
+
+You'll see output like:
+  ✓ Credentials generated from session
+  ✓ CONFIG ready to use in notebook
+
+  CONFIG = {
+      "base_url": "https://app.datarails.com",
+      "jwt_token": "eyJ0eXAi...",
+      "csrf_token": "PHwKH3J...",
+      "table_id": "16528",
+  }
+
+COPY THIS ENTIRE CONFIG DICT
+
+
+STEP 2: Update Notebook
+────────────────────────────────────────────────────────────────────────────────
+
+1. Go back to your Jupyter notebook
+2. Find the cell called "Authentication Configuration"
+3. Replace the entire CONFIG = { ... } section with what you copied
+4. Press Shift+Enter to run the cell
+
+
+STEP 3: Reinitialize API Client
+────────────────────────────────────────────────────────────────────────────────
+
+In the next cell that says "Utility Functions for API Access":
+1. Run it (Shift+Enter)
+2. You should see: "✓ DatarailsAPI client initialized"
+
+
+STEP 4: Test It
+────────────────────────────────────────────────────────────────────────────────
+
+Go to "Test 1: Simple Single Request" cell
+Press Shift+Enter
+
+EXPECTED OUTPUT:
+  Status Code: 200    ← This is the magic line!
+  Records returned: 100
+  Response time: 2.30 seconds
+
+If you see "Status Code: 200", YOU'RE DONE! Everything works now.
+
+════════════════════════════════════════════════════════════════════════════════
+
+NOW WHAT?
+
+You can now run all 9 tests without token expiration errors!
+
+The tokens will auto-refresh during testing, so you won't need to update
+them again for your entire notebook session.
+
+════════════════════════════════════════════════════════════════════════════════
+
+WHERE'S THE DOCUMENTATION?
+
+  README_NOTEBOOK_SETUP.md
+    - Complete setup guide
+    - What each test does
+    - Customization examples
+
+  DYNAMIC_JWT_GUIDE.md
+    - How dynamic tokens work
+    - Why they're better
+    - Token lifecycle
+
+  NOTEBOOK_TROUBLESHOOTING.md
+    - More troubleshooting tips
+    - Common issues
+    - Detailed error explanations
+
+════════════════════════════════════════════════════════════════════════════════
+
+THAT'S IT!
+
+You now have:
+  ✅ Working Jupyter notebook
+  ✅ 9 interactive tests
+  ✅ Dynamic token generation (no manual refresh)
+  ✅ Complete documentation
+
+Ready to explore the Datarails API! 🚀
+
+════════════════════════════════════════════════════════════════════════════════
+
+Questions? See README_NOTEBOOK_SETUP.md
