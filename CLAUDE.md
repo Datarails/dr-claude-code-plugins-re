@@ -1,11 +1,14 @@
 # CLAUDE.md - Datarails Finance OS Plugin
+**Guidelines for agents and developers working with this plugin.**
+
+---
 
 ## 🚨 CRITICAL PRINCIPLE: ALWAYS USE FRESH REAL DATA
 
-**NEVER generate reports, Excel files, PowerPoint presentations, or any artifacts without first fetching fresh data from the live Datarails API.**
+**NEVER generate reports, Excel files, or any artifacts without first fetching fresh data from the live Datarails API.**
 
 ### Why This Matters
-Reports with fake/placeholder data have ZERO value. They mislead stakeholders and waste time. Every agent must:
+Reports with fake/placeholder data have ZERO value and mislead stakeholders. Every agent must:
 1. Connect to the live environment (verify authentication)
 2. Fetch fresh data from Datarails tables
 3. Analyze the real data
@@ -15,7 +18,7 @@ Reports with fake/placeholder data have ZERO value. They mislead stakeholders an
 Before creating any artifact:
 ```python
 # Always start with fresh API calls
-records = json.loads(await client.get_sample(table_id, n=50))
+records = await client.get_sample(table_id, n=50)
 print(f"✓ Got {len(records)} real records")
 
 # Never use placeholder data
@@ -26,230 +29,235 @@ total = sum([r.get("Amount", 0) for r in records])
 excel.add_data([["Total", total]])  # Real number, not made up
 ```
 
-See `DEVELOPMENT_GUIDELINES.md` for complete requirements.
+---
+
+## Project Structure
+
+```
+datarails-plugin/
+├── CLAUDE.md                    # This file
+├── README.md                    # Project overview
+├── SETUP.md                     # Setup instructions
+│
+├── skills/                      # Skill definitions
+│   ├── dr-auth/
+│   ├── dr-learn/
+│   ├── dr-extract/
+│   └── ... (other skills)
+│
+├── mcp-server/                  # Bundled MCP server
+│   ├── src/datarails_mcp/       # Core MCP implementation
+│   ├── scripts/                 # Utility scripts
+│   └── pyproject.toml
+│
+├── config/
+│   ├── environments.json        # Available Datarails environments
+│   ├── profile-schema.json      # Client profile JSON schema
+│   └── client-profiles/         # 🔒 CLIENT-SPECIFIC DATA (not committed)
+│       ├── app.json             # Production profile
+│       ├── dev.json             # Development profile
+│       └── .gitkeep
+│
+├── docs/
+│   ├── analysis/                # System analysis & strategy
+│   │   ├── TABLE_STRUCTURE_ANALYSIS.md
+│   │   ├── DATA_EXTRACTION_STRATEGY.md
+│   │   └── API_DIAGNOSTIC_REPORT.md
+│   ├── guides/                  # Operational documentation
+│   │   ├── NOTEBOOK_GUIDE.md
+│   │   ├── DYNAMIC_JWT_GUIDE.md
+│   │   └── ...
+│   └── notebooks/               # Jupyter notebooks
+│       └── DATARAILS_API_EXPLORER.ipynb
+│
+├── tmp/                         # Generated outputs (not committed)
+│   └── .gitkeep
+│
+└── .gitignore                   # Excludes client profiles & tmp/
+```
+
+---
+
+## Documentation Organization
+
+### System Analysis & Strategy (Versioned)
+**Location:** `docs/analysis/`
+
+These files document how systems work and are versioned with the project:
+- `*_ANALYSIS.md` - Technical analysis and findings
+- `*_STRATEGY.md` - Implementation strategies and architectures
+- `*_REPORT.md` - Investigation reports and discoveries
+
+**Purpose:** Help future agents understand system architecture and optimization opportunities.
+
+### Operational Guides (Versioned)
+**Location:** `docs/guides/`
+
+How-to documents and tutorials:
+- `*_GUIDE.md` - Step-by-step operational guides
+- `README_*.md` - Setup and tutorial documentation
+
+**Purpose:** Train agents on how to use features and workflows.
+
+### Notebooks & Tools (Versioned)
+**Location:** `docs/notebooks/`
+
+Interactive Jupyter notebooks for testing and exploration.
+
+### Generated Outputs (Not Versioned)
+**Location:** `tmp/`
+
+Generated reports, exports, and temporary files:
+- Excel exports (`.xlsx`)
+- CSV extracts (`.csv`)
+- Temporary logs and debugging output
+
+**Not committed to git** - Use `.gitignore`
+
+---
+
+## 🔒 Client-Specific Information
+
+### Where Client Data Goes
+**NEVER put client-specific information in CLAUDE.md or root documentation.**
+
+All client-specific data belongs in `config/client-profiles/<env>.json`:
+- Table IDs
+- Field mappings
+- Account hierarchies
+- Data quirks and special handling
+- Business rules and calculations
+
+### What Goes in Client Profiles
+
+```json
+{
+  "version": "1.0",
+  "environment": "app",
+
+  "tables": {
+    "financials": {
+      "id": "12345",
+      "name": "Financial Records"
+    }
+  },
+
+  "field_mappings": {
+    "amount": "Amount",
+    "date": "Reporting Date",
+    "account": "DR_ACC_L1"
+  },
+
+  "account_hierarchy": {
+    "revenue": "REVENUE",
+    "cogs": "Cost of Goods Sold",
+    "opex": "Operating Expense"
+  },
+
+  "data_quality": {
+    "known_issues": ["Missing July data"],
+    "missing_periods": ["2025-07", "2025-10"],
+    "negative_values_valid": true
+  },
+
+  "notes": {
+    "data_organization": "Records randomly distributed, sort client-side",
+    "optimization": "Use 500-record batches for optimal throughput",
+    "special_handling": "14.9% negative values are legitimate reversals"
+  }
+}
+```
+
+### Updating Client Profiles
+
+When agents discover new system information during analysis:
+
+1. **Document in docs/analysis/**: Create analysis markdown files
+2. **Update client profile**: Add findings to `config/client-profiles/<env>.json`
+3. **Git commit**: Only commit the analysis files, NOT the profile
+   ```bash
+   git add docs/analysis/TABLE_STRUCTURE_ANALYSIS.md
+   git commit -m "docs: Add table structure analysis"
+   # Client profile stays local (protected by .gitignore)
+   ```
+
+### What NOT to Include in CLAUDE.md
+
+❌ **DON'T document here:**
+- Table IDs (e.g., "TABLE_ID")
+- Field names (e.g., "DR_ACC_L1")
+- Business logic specifics
+- Account hierarchies
+- Data anomalies or quirks
+- Client-specific workflows
+
+✅ **DO document client data in:** `config/client-profiles/<env>.json`
+
+---
+
+## System-Specific Documentation
+
+When agents discover how the system works, document it in `docs/analysis/`:
+
+### Example: Table Structure Discovery
+
+If you discover how a table is organized:
+
+1. **Create analysis file:**
+   ```bash
+   docs/analysis/TABLE_STRUCTURE_ANALYSIS.md
+   ```
+   Document what you discovered (publicly shareable)
+
+2. **Update client profile:**
+   ```bash
+   config/client-profiles/app.json
+   ```
+   Add client-specific details (stay local)
+
+3. **Commit analysis, not profile:**
+   ```bash
+   git add docs/analysis/TABLE_STRUCTURE_ANALYSIS.md
+   git commit -m "docs: Add table structure analysis"
+   ```
+   Profile changes don't get committed
 
 ---
 
 ## Output Files
 
-Generated output files (Excel exports, reports, documentation, etc.) should be saved to the `tmp/` folder in the project root. This keeps generated artifacts separate from code and configuration files.
+Generated output files should be saved to `tmp/`:
 
 ```bash
 # Example output locations
 tmp/Financial_Extract_20260203.xlsx
-tmp/budget_report.xlsx
-tmp/analysis_output.csv
+tmp/budget_report_2025_Q1.xlsx
+tmp/anomaly_detection_results.csv
 ```
 
-## System-Specific Documentation
-
-**Important:** All system-specific analysis, discoveries, and operational knowledge should be saved as part of the plugin, not as temporary files.
-
-### Where to Save System Knowledge
-
-**Location:** `docs/analysis/` directory (versioned with git)
-
-**File types:**
-- `*_ANALYSIS.md` - Technical analysis and findings
-- `*_STRATEGY.md` - Implementation strategies and architectures
-- `*_GUIDE.md` - Operational guides and how-to documents (in `docs/guides/`)
-- `*_REPORT.md` - Investigation reports and discoveries
-
-**Examples:**
-```bash
-# System-specific documentation (COMMIT THESE)
-docs/analysis/TABLE_STRUCTURE_ANALYSIS.md      # How this table is organized
-docs/analysis/DATA_EXTRACTION_STRATEGY.md      # Caching and optimization strategies
-docs/analysis/API_DIAGNOSTIC_REPORT.md         # API findings and performance
-docs/guides/NOTEBOOK_GUIDE.md                  # Operational guides
-
-# NOT here - goes to tmp/
-tmp/daily_export_20260204.xlsx   # Generated reports
-tmp/extraction_log.txt            # Temporary logs
-```
-
-### What Gets Saved Where
-
-| Content Type | Location | Commit? | Purpose |
-|-------------|----------|---------|---------|
-| Table schemas, structures | Root `.md` files | ✅ YES | Reference for agents/developers |
-| Analysis findings | `*_ANALYSIS.md` | ✅ YES | Document discoveries |
-| Implementation strategies | `*_STRATEGY.md` | ✅ YES | Guide future development |
-| Operational guides | `*_GUIDE.md` | ✅ YES | Train agents/developers |
-| Generated reports/data | `tmp/` | ❌ NO | Temporary, not versioned |
-| Client profiles | `config/client-profiles/` | ❌ NO | Client-specific, not shared |
-| Logs/debugging | `tmp/` or `.local/` | ❌ NO | Temporary |
-
-### For Agents & Skills
-
-When agents discover system-specific information:
-1. **Document in markdown** - Create `*_ANALYSIS.md` or update existing `.md` file
-2. **Update client profile** - Store in `config/client-profiles/<env>.json`
-3. **Add to skills** - If knowledge is procedural, add to skill definitions in `skills/*/`
-4. **Commit to git** - `.md` files are part of the plugin codebase
-
-### Example: Table Discovery
-
-When you discover how a table is organized:
-```bash
-# ✅ DO THIS:
-1. Create TABLE_STRUCTURE_ANALYSIS.md with findings
-2. Update config/client-profiles/app.json with structure
-3. git add TABLE_STRUCTURE_ANALYSIS.md config/client-profiles/app.json
-4. git commit -m "docs: Add table structure analysis and findings"
-
-# ❌ DON'T DO THIS:
-1. Create a temporary PDF report
-2. Forget to document for next agent
-3. Leave knowledge only in notebook cells
-```
+Files in `tmp/` are **not committed** (protected by `.gitignore`).
 
 ---
 
 ## Git Commit Guidelines
 
-**DO commit** (general plugin changes):
+### ✅ DO COMMIT (Plugin changes)
 - Skill definitions (`skills/*/SKILL.md`)
 - MCP server code (`mcp-server/src/`, `mcp-server/scripts/`)
 - Plugin configuration (`.claude-plugin/plugin.json`)
 - Schema files (`config/profile-schema.json`, `config/environments.json`)
-- Documentation (`CLAUDE.md`, `README.md`)
-- Analysis & findings (`*_ANALYSIS.md`, `*_STRATEGY.md`, `*_GUIDE.md`, `*_REPORT.md`)
-- Client profiles (`config/client-profiles/*.json`)
+- Documentation (`CLAUDE.md`, `README.md`, `SETUP.md`)
+- **Analysis & findings** (`docs/analysis/*.md`)
+- **Operational guides** (`docs/guides/*.md`)
+- **Jupyter notebooks** (`docs/notebooks/*.ipynb`)
 
-**DO NOT commit** (client-specific data):
-- Client profiles (`config/client-profiles/*.json`) - contain client-specific table IDs, field mappings, and discovered knowledge
-- Output files (`tmp/`) - extraction results
-- Authentication credentials (stored in system keyring, not in files)
+### ❌ DO NOT COMMIT (Protected by .gitignore)
+- **Client profiles** (`config/client-profiles/*.json`) - Use these for data that varies per environment
+- **Output files** (`tmp/`) - Generated reports and exports
+- **Authentication credentials** - Stored in system keyring, not files
+- **Environment variables** (`.env.local`)
 
-## Client Knowledge Base
-
-Client profiles (`config/client-profiles/<env>.json`) serve as a **knowledge base** for each Datarails environment. They store not just table mappings, but any client-specific information discovered during agent work.
-
-### What to Store in Client Profiles
-
-- **Table mappings** - discovered by `/dr-learn`
-- **Field mappings** - column names, data types, relationships
-- **Business logic** - how the client calculates certain metrics, fiscal year definitions
-- **Data quirks** - known issues, missing data periods, naming inconsistencies
-- **Custom KPIs** - client-specific metric definitions
-- **Preferred formats** - report layouts, naming conventions
-- **Notes** - anything useful for future analysis
-
-### Adding Knowledge During Agent Work
-
-When you discover new information about a client's data during analysis, **add it to the client profile**. Use the `notes` section for freeform knowledge:
-
-```json
-{
-  "tables": { ... },
-  "field_mappings": { ... },
-  "notes": {
-    "fiscal_year": "Starts in February, not January",
-    "revenue_recognition": "Q4 includes annual true-ups that inflate numbers",
-    "data_gaps": "Missing March 2024 data due to system migration",
-    "naming": "Department 'R&D' is sometimes labeled 'Product' in older data"
-  }
-}
-```
-
-This knowledge persists across sessions and helps the agent provide better, more context-aware analysis.
-
-## Overview
-
-This Claude Code plugin provides integration with Datarails Finance OS for financial data analysis, anomaly detection, and table querying. It includes a bundled MCP server and supports multi-account authentication.
-
-## Quick Start
-
-### 1. Authenticate
-
-```bash
-# Be logged into Datarails in your browser first, then:
-/dr-auth
-
-# Or authenticate to specific environment
-/dr-auth --env app
-```
-
-### 2. Learn Your Data Structure (First Time)
-
-```bash
-# Discover tables and create a client profile
-/dr-learn
-
-# Or for a specific environment
-/dr-learn --env app
-```
-
-This creates a profile at `config/client-profiles/<env>.json` that maps your specific table IDs and field names.
-
-### 3. Explore Data
-
-```
-/dr-tables                    # List all tables
-/dr-tables 11442              # View table schema
-/dr-profile 11442             # Profile table statistics
-/dr-anomalies 11442           # Detect data quality issues
-/dr-query 11442 --sample      # Get sample records
-```
-
-### 4. Extract Financial Data
-
-```bash
-# Extract data using your client profile
-/dr-extract --year 2025
-
-# Specify environment
-/dr-extract --year 2025 --env app
-```
-
-## Client Profile System
-
-Different clients have different table structures, field names, and account hierarchies. The plugin uses **client profiles** to adapt to each environment.
-
-### How It Works
-
-1. **First-time setup**: Run `/dr-learn` to discover your table structure
-2. **Profile saved**: Creates `config/client-profiles/<env>.json`
-3. **Subsequent extractions**: `/dr-extract` reads the profile automatically
-
-### Profile Location
-
-```
-config/client-profiles/
-├── app.json      # Production profile
-├── dev.json      # Development profile
-└── demo.json     # Demo profile
-```
-
-### Profile Contents
-
-Each profile contains:
-- **Table IDs**: Which tables contain financials and KPIs
-- **Field mappings**: Amount, Date, Account, Scenario field names
-- **Account hierarchy**: Revenue, COGS, OpEx category names
-- **KPI definitions**: KPI name mappings
-
-### Manual Profile Editing
-
-You can edit profiles directly:
-
-```json
-{
-  "tables": {
-    "financials": { "id": "TABLE_ID", "name": "Financials Cube" },
-    "kpis": { "id": "34298", "name": "KPI Metrics" }
-  },
-  "field_mappings": {
-    "amount": "Amount",
-    "account_l1": "DR_ACC_L1"
-  },
-  "account_hierarchy": {
-    "revenue": "REVENUE",
-    "cogs": "Cost of Good sold"
-  }
-}
-```
+---
 
 ## Multi-Account Support
 
@@ -274,39 +282,28 @@ This plugin supports simultaneous authentication to multiple Datarails environme
 /dr-auth --env app
 /dr-auth --env dev
 
-# Switch active environment (uses stored credentials)
+# Switch active environment
 /dr-auth --switch app
 
 # Logout from specific environment
 /dr-auth --logout dev
 
-# Logout from all environments
+# Logout from all
 /dr-auth --logout-all
 ```
 
 ### Using --env Flag
 
-All skills support the `--env` flag to query a specific environment:
+All skills support the `--env` flag:
 
-```
+```bash
 /dr-tables --env app               # List tables in production
-/dr-profile 11442 --env dev        # Profile in development
-/dr-query 11442 --sample --env app # Sample from production
+/dr-profile TABLE_ID --env dev     # Profile in development
 /dr-learn --env app                # Create profile for production
-/dr-extract --year 2025 --env app  # Extract from production
+/dr-extract --env app --year 2025  # Extract from production
 ```
 
-## Available Skills
-
-| Skill | Description |
-|-------|-------------|
-| `/dr-auth` | Authenticate with Datarails |
-| `/dr-learn` | Discover table structure and create client profile |
-| `/dr-tables` | List and explore tables |
-| `/dr-profile` | Profile table statistics |
-| `/dr-anomalies` | Detect data anomalies |
-| `/dr-query` | Query table data |
-| `/dr-extract` | Extract validated financial data to Excel |
+---
 
 ## Adding Custom Environments
 
@@ -315,23 +312,41 @@ Edit `config/environments.json` to add custom environments:
 ```json
 {
   "environments": {
-    "custom-client": {
-      "base_url": "https://custom-client.datarails.com",
-      "auth_url": "https://custom-client-auth.datarails.com",
-      "display_name": "Custom Client"
+    "custom-instance": {
+      "base_url": "https://custom.datarails.com",
+      "auth_url": "https://custom-auth.datarails.com",
+      "display_name": "Custom Instance"
     }
   }
 }
 ```
 
 After adding a custom environment:
-1. `/dr-auth --env custom-client` to authenticate
-2. `/dr-learn --env custom-client` to discover tables
-3. `/dr-extract --env custom-client --year 2025` to extract
+1. `/dr-auth --env custom-instance` to authenticate
+2. `/dr-learn --env custom-instance` to discover tables
+3. `/dr-extract --env custom-instance --year 2025` to extract
+
+---
+
+## Available Skills
+
+| Skill | Description | Output |
+|-------|-------------|--------|
+| `/dr-auth` | Authenticate with Datarails | Session stored in keyring |
+| `/dr-learn` | Discover table structure | Creates client profile |
+| `/dr-tables` | List and explore tables | Table metadata |
+| `/dr-profile` | Profile table statistics | Data quality metrics |
+| `/dr-anomalies` | Detect data anomalies | Quality findings |
+| `/dr-query` | Query table data | Sample records |
+| `/dr-extract` | Extract to Excel | Financial reports |
+
+---
 
 ## MCP Server
 
-The MCP server is bundled in `mcp-server/` and runs automatically. For development:
+The MCP server is bundled in `mcp-server/` and runs automatically.
+
+### For Development
 
 ```bash
 # Install for development
@@ -342,22 +357,29 @@ datarails-mcp serve
 
 # Check status
 datarails-mcp status --all
+
+# Check specific environment
+datarails-mcp status --env app
 ```
+
+---
 
 ## Authentication Flow
 
-1. **Browser Cookie Extraction**: The CLI reads cookies directly from your browser's local storage
+1. **Browser Cookie Extraction**: CLI reads cookies from your browser's local storage
 2. **Keyring Storage**: Credentials are securely stored in your system keyring (per environment)
-3. **JWT Auto-refresh**: Session cookies are used to automatically fetch/refresh JWT tokens
+3. **JWT Auto-refresh**: Session cookies are used to automatically fetch/refresh JWT tokens (5-min expiry)
 
-Supported browsers: Chrome, Firefox, Safari, Edge, Brave, Opera, Chromium
+**Supported browsers:** Chrome, Firefox, Safari, Edge, Brave, Opera, Chromium
+
+---
 
 ## Troubleshooting
 
 ### "Not authenticated" error
 1. Make sure you're logged into Datarails in your browser
 2. Run `/dr-auth` to extract cookies
-3. Check status with `datarails-mcp status`
+3. Check status: `datarails-mcp status`
 
 ### Browser cookie extraction fails
 1. Try closing the browser first (some browsers lock the cookie database)
@@ -366,43 +388,56 @@ Supported browsers: Chrome, Firefox, Safari, Edge, Brave, Opera, Chromium
 
 ### Wrong environment
 1. Check active environment: `/dr-auth --list`
-2. Switch with: `/dr-auth --switch <env>`
+2. Switch: `/dr-auth --switch <env>`
 3. Or specify explicitly: `/dr-tables --env app`
 
 ### "No profile found" error
 1. Run `/dr-learn --env <env>` to create a profile
-2. Or copy an existing profile and modify it
+2. Or copy an existing profile and modify it locally
 
-### Extraction returns wrong data
+### Extraction returns unexpected data
 1. Check profile at `config/client-profiles/<env>.json`
-2. Verify table IDs match your environment
-3. Re-run `/dr-learn` to rediscover structure
+2. Verify all field mappings are correct
+3. Re-run `/dr-learn --env <env>` to rediscover structure
 
-## Plugin Structure
+---
 
+## For Developers
+
+### Adding New Skills
+
+Create a new skill in `skills/<skill-name>/SKILL.md`:
 ```
-dr-claude-code-plugins/
-├── .claude-plugin/
-│   └── plugin.json          # Plugin manifest
-├── skills/
-│   ├── auth/SKILL.md        # /dr-auth
-│   ├── learn/SKILL.md       # /dr-learn (NEW)
-│   ├── tables/SKILL.md      # /dr-tables
-│   ├── profile/SKILL.md     # /dr-profile
-│   ├── anomalies/SKILL.md   # /dr-anomalies
-│   ├── query/SKILL.md       # /dr-query
-│   └── extract/SKILL.md     # /dr-extract
-├── mcp-server/              # Bundled MCP server
-│   ├── src/datarails_mcp/
-│   ├── scripts/
-│   │   └── extract_financials.py  # Profile-aware extraction
-│   └── pyproject.toml
-├── config/
-│   ├── environments.json    # Configurable environments
-│   ├── profile-schema.json  # JSON schema for profiles
-│   └── client-profiles/     # Client-specific configs
-│       └── app.json         # Default production profile
-├── agents/
-│   └── finance-analyst.md
-└── CLAUDE.md                # This file
+skills/
+└── new-skill/
+    └── SKILL.md
 ```
+
+### Adding System Analysis
+
+Document discoveries in `docs/analysis/`:
+```
+docs/analysis/
+└── NEW_SYSTEM_ANALYSIS.md
+```
+
+### Adding Guides
+
+Document procedures in `docs/guides/`:
+```
+docs/guides/
+└── HOW_TO_*.md
+```
+
+All new files should be committed to git when they're ready for team use.
+
+---
+
+## Notes
+
+- All client-specific data stays in `config/client-profiles/` (not committed)
+- All system documentation goes in `docs/` (committed)
+- All generated outputs go in `tmp/` (not committed)
+- Keep CLAUDE.md free of specific table IDs, field names, and client business logic
+- Use markdown files in `docs/analysis/` for system documentation
+- Use client profiles for environment-specific configuration
