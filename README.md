@@ -1,6 +1,35 @@
-# Datarails Finance OS Plugin for Claude Code
+# Datarails Finance OS Plugin for Claude Code & Cowork
 
-Analyze financial data, detect anomalies, and query Finance OS tables directly from Claude Code.
+Analyze financial data, detect anomalies, and query Finance OS tables directly from Claude Code or Claude Cowork.
+
+## Claude Cowork Support (NEW!)
+
+This plugin works with both **Claude Code** (for developers) and **Claude Cowork** (for finance teams).
+
+### For Cowork Users (No Terminal Required)
+
+Simple commands designed for non-technical users:
+
+| Command | What It Does |
+|---------|--------------|
+| `/datarails-finance-os:login` | Connect to Datarails via browser (no CLI needed) |
+| `/datarails-finance-os:financial-summary` | Quick overview of your finances |
+| `/datarails-finance-os:expense-analysis` | Analyze where money is going |
+| `/datarails-finance-os:revenue-trends` | See revenue patterns over time |
+| `/datarails-finance-os:budget-comparison` | Compare actual vs budget |
+| `/datarails-finance-os:data-check` | Check for data quality issues |
+| `/datarails-finance-os:explore-tables` | Discover available data |
+
+**Getting Started with Cowork:**
+1. Install the plugin from [claude.com/plugins](https://claude.com/plugins)
+2. Run `/datarails-finance-os:login` and follow the prompts
+3. Start exploring your data!
+
+### For Claude Code Users
+
+Full-featured skills with CLI support - see [Skills](#skills) section below.
+
+---
 
 ## Features
 

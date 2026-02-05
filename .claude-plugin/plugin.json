@@ -1,7 +1,7 @@
 {
   "name": "datarails-finance-os",
-  "version": "1.0.0",
-  "description": "Datarails Finance OS integration for Claude Code - analyze financial data, detect anomalies, and query tables with multi-account support",
+  "version": "1.1.0",
+  "description": "Datarails Finance OS integration for Claude Code and Cowork - analyze financial data, detect anomalies, and generate insights. Works with browser-based authentication (no CLI required for Cowork users).",
   "author": {
     "name": "Datarails",
     "email": "support@datarails.com"
@@ -15,17 +15,28 @@
     "fpna",
     "data-analysis",
     "anomaly-detection",
-    "multi-account"
+    "multi-account",
+    "cowork",
+    "financial-analysis"
   ],
   "mcpServers": {
     "datarails-finance-os": {
       "command": "uv",
-      "args": ["--directory", "${pluginDir}/mcp-server", "run", "datarails-mcp", "serve"],
+      "args": ["--directory", "${CLAUDE_PLUGIN_ROOT}/mcp-server", "run", "datarails-mcp", "serve"],
       "env": {
-        "DATARAILS_CONFIG_DIR": "${pluginDir}/config"
+        "DATARAILS_CONFIG_DIR": "${CLAUDE_PLUGIN_ROOT}/config"
       }
     }
   },
+  "commands": [
+    "commands/login.md",
+    "commands/financial-summary.md",
+    "commands/expense-analysis.md",
+    "commands/revenue-trends.md",
+    "commands/budget-comparison.md",
+    "commands/data-check.md",
+    "commands/explore-tables.md"
+  ],
   "skills": [
     "skills/auth",
     "skills/tables",
