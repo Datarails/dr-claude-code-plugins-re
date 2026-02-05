@@ -125,7 +125,16 @@ datarails-plugin/
 ├── .claude-plugin/
 │   └── plugin.json              # Plugin manifest (required)
 │
-├── skills/                      # Skill definitions (official location)
+├── commands/                    # Cowork-friendly commands (no CLI)
+│   ├── login.md                 # Browser-based authentication
+│   ├── financial-summary.md     # Quick financial overview
+│   ├── expense-analysis.md      # Expense breakdown
+│   ├── revenue-trends.md        # Revenue patterns
+│   ├── budget-comparison.md     # Actual vs budget
+│   ├── data-check.md            # Data quality check
+│   └── explore-tables.md        # Discover data
+│
+├── skills/                      # Full-featured skills (Claude Code)
 │   ├── auth/SKILL.md
 │   ├── intelligence/SKILL.md    # Most powerful skill
 │   ├── extract/SKILL.md
@@ -195,6 +204,22 @@ datarails-plugin/
 | `/dr-forecast-variance` | Variance analysis | Excel + PowerPoint |
 | `/dr-audit` | SOX compliance | PDF + Excel |
 | `/dr-departments` | Department analytics | Excel + PowerPoint |
+
+### Cowork Commands (No CLI Required)
+
+Simple commands for non-technical users in Claude Cowork:
+
+| Command | Description |
+|---------|-------------|
+| `/datarails-finance-os:login` | Browser-based authentication |
+| `/datarails-finance-os:financial-summary` | Quick financial overview |
+| `/datarails-finance-os:expense-analysis` | Expense breakdown and insights |
+| `/datarails-finance-os:revenue-trends` | Revenue patterns over time |
+| `/datarails-finance-os:budget-comparison` | Actual vs budget analysis |
+| `/datarails-finance-os:data-check` | Data quality assessment |
+| `/datarails-finance-os:explore-tables` | Discover available data |
+
+These commands use only MCP tools (no Bash) and provide guided workflows suitable for finance teams.
 
 ---
 
