@@ -31,6 +31,93 @@ excel.add_data([["Total", total]])  # Real number, not made up
 
 ---
 
+## 🔴 CRITICAL: API Limitations & Best Practices
+
+The Finance OS API has significant limitations. **Read `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` for full details.**
+
+### Known Issues
+
+| Issue | Status | Impact |
+|-------|--------|--------|
+| **Aggregation API** | 🔴 BROKEN | Returns 500/502/202 - use client-side aggregation |
+| **JWT Token Expiry** | ⚠️ 5 minutes | Must refresh every 20K rows |
+| **Distinct Values** | 🔴 BROKEN | Returns 409 - use sample data |
+| **Page Size Limit** | ⚠️ 500 max | Requires pagination |
+
+### REQUIRED: Pagination Pattern
+
+**NEVER use simple queries for large datasets.** Always paginate:
+
+```python
+async def fetch_all_data(table_id, filters, max_rows=100000):
+    """Fetch ALL data using pagination with token refresh."""
+    all_data = []
+    offset = 0
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        while len(all_data) < max_rows:
+            # CRITICAL: Refresh token every 20K rows (5-min expiry)
+            if offset > 0 and offset % 20000 == 0:
+                await auth.ensure_valid_token()
+
+            # Fetch page
+            resp = await client.post(url, headers=auth.get_headers(), json={
+                'filters': filters,
+                'limit': 500,
+                'offset': offset
+            })
+
+            # Handle errors with retry
+            if resp.status_code == 401:
+                await auth.ensure_valid_token()
+                continue
+            if resp.status_code >= 500:
+                await asyncio.sleep(1)
+                continue
+
+            page = resp.json().get('data', [])
+            if not page:
+                break
+
+            all_data.extend(page)
+            offset += 500
+
+    return all_data
+```
+
+### REQUIRED: Client-Side Aggregation
+
+**The aggregation API is broken.** Use client-side aggregation:
+
+```python
+from collections import defaultdict
+
+def aggregate_client_side(data, group_by_fields, sum_field):
+    """Aggregate data in Python since server aggregation fails."""
+    aggregated = defaultdict(float)
+
+    for record in data:
+        key = tuple(str(record.get(f, "")) for f in group_by_fields)
+        aggregated[key] += float(record.get(sum_field, 0) or 0)
+
+    return [
+        dict(zip(group_by_fields, k), **{sum_field: v})
+        for k, v in aggregated.items()
+    ]
+```
+
+### Performance Expectations
+
+| Dataset Size | Expected Time | Notes |
+|--------------|---------------|-------|
+| < 10K rows | ~2 minutes | Acceptable |
+| 10-50K rows | ~5 minutes | Normal |
+| 50K+ rows | ~10 minutes | Due to API limitations |
+
+**Throughput:** ~90 records/second (limited by API, not network)
+
+---
+
 ## Project Structure
 
 ```
@@ -39,15 +126,19 @@ datarails-plugin/
 ├── README.md                    # Project overview
 ├── SETUP.md                     # Setup instructions
 │
-├── skills/                      # Skill definitions
+├── .claude/skills/              # Skill definitions
 │   ├── dr-auth/
-│   ├── dr-learn/
+│   ├── dr-intelligence/         # NEW - Most powerful skill
 │   ├── dr-extract/
 │   └── ... (other skills)
 │
 ├── mcp-server/                  # Bundled MCP server
 │   ├── src/datarails_mcp/       # Core MCP implementation
-│   ├── scripts/                 # Utility scripts
+│   ├── scripts/
+│   │   ├── intelligence_workbook.py  # FP&A intelligence generator
+│   │   ├── api_diagnostic.py         # API testing tool
+│   │   ├── extract_financials.py     # Data extraction
+│   │   └── ...
 │   └── pyproject.toml
 │
 ├── config/
@@ -60,21 +151,44 @@ datarails-plugin/
 │
 ├── docs/
 │   ├── analysis/                # System analysis & strategy
+│   │   ├── FINANCE_OS_API_ISSUES_REPORT.md  # API limitations doc
 │   │   ├── TABLE_STRUCTURE_ANALYSIS.md
-│   │   ├── DATA_EXTRACTION_STRATEGY.md
-│   │   └── API_DIAGNOSTIC_REPORT.md
+│   │   └── DATA_EXTRACTION_STRATEGY.md
 │   ├── guides/                  # Operational documentation
-│   │   ├── NOTEBOOK_GUIDE.md
-│   │   ├── DYNAMIC_JWT_GUIDE.md
-│   │   └── ...
 │   └── notebooks/               # Jupyter notebooks
-│       └── DATARAILS_API_EXPLORER.ipynb
 │
 ├── tmp/                         # Generated outputs (not committed)
 │   └── .gitkeep
 │
 └── .gitignore                   # Excludes client profiles & tmp/
 ```
+
+---
+
+## Available Skills
+
+### Core Skills
+| Skill | Description | Output |
+|-------|-------------|--------|
+| `/dr-auth` | Authenticate with Datarails | Session stored in keyring |
+| `/dr-learn` | Discover table structure | Creates client profile |
+| `/dr-tables` | List and explore tables | Table metadata |
+| `/dr-profile` | Profile table statistics | Data quality metrics |
+| `/dr-anomalies` | Detect data anomalies | Quality findings |
+| `/dr-query` | Query table data | Sample records |
+| `/dr-extract` | Extract to Excel | Financial reports |
+
+### Financial Analysis Skills
+| Skill | Description | Output |
+|-------|-------------|--------|
+| `/dr-intelligence` | **Most powerful** - FP&A intelligence with auto-insights | 10-sheet Excel |
+| `/dr-anomalies-report` | Data quality assessment | Excel report |
+| `/dr-insights` | Executive insights | PowerPoint + Excel |
+| `/dr-reconcile` | P&L vs KPI validation | Excel report |
+| `/dr-dashboard` | KPI monitoring | Excel + PowerPoint |
+| `/dr-forecast-variance` | Variance analysis | Excel + PowerPoint |
+| `/dr-audit` | SOX compliance | PDF + Excel |
+| `/dr-departments` | Department analytics | Excel + PowerPoint |
 
 ---
 
@@ -87,6 +201,7 @@ These files document how systems work and are versioned with the project:
 - `*_ANALYSIS.md` - Technical analysis and findings
 - `*_STRATEGY.md` - Implementation strategies and architectures
 - `*_REPORT.md` - Investigation reports and discoveries
+- `FINANCE_OS_API_ISSUES_REPORT.md` - **Critical API limitations**
 
 **Purpose:** Help future agents understand system architecture and optimization opportunities.
 
@@ -109,7 +224,9 @@ Interactive Jupyter notebooks for testing and exploration.
 
 Generated reports, exports, and temporary files:
 - Excel exports (`.xlsx`)
+- PowerPoint presentations (`.pptx`)
 - CSV extracts (`.csv`)
+- Diagnostic reports (`.txt`)
 - Temporary logs and debugging output
 
 **Not committed to git** - Use `.gitignore`
@@ -139,16 +256,25 @@ All client-specific data belongs in `config/client-profiles/<env>.json`:
     "financials": {
       "id": "12345",
       "name": "Financial Records"
+    },
+    "kpis": {
+      "id": "67890",
+      "name": "KPI Metrics"
     }
   },
 
   "field_mappings": {
     "amount": "Amount",
     "date": "Reporting Date",
-    "account": "DR_ACC_L1"
+    "account_l0": "DR_ACC_L0",
+    "account_l1": "DR_ACC_L1",
+    "account_l2": "DR_ACC_L2",
+    "scenario": "Scenario",
+    "year": "System_Year"
   },
 
   "account_hierarchy": {
+    "pnl_filter": "P&L",
     "revenue": "REVENUE",
     "cogs": "Cost of Goods Sold",
     "opex": "Operating Expense"
@@ -168,19 +294,6 @@ All client-specific data belongs in `config/client-profiles/<env>.json`:
 }
 ```
 
-### Updating Client Profiles
-
-When agents discover new system information during analysis:
-
-1. **Document in docs/analysis/**: Create analysis markdown files
-2. **Update client profile**: Add findings to `config/client-profiles/<env>.json`
-3. **Git commit**: Only commit the analysis files, NOT the profile
-   ```bash
-   git add docs/analysis/TABLE_STRUCTURE_ANALYSIS.md
-   git commit -m "docs: Add table structure analysis"
-   # Client profile stays local (protected by .gitignore)
-   ```
-
 ### What NOT to Include in CLAUDE.md
 
 ❌ **DON'T document here:**
@@ -195,44 +308,16 @@ When agents discover new system information during analysis:
 
 ---
 
-## System-Specific Documentation
-
-When agents discover how the system works, document it in `docs/analysis/`:
-
-### Example: Table Structure Discovery
-
-If you discover how a table is organized:
-
-1. **Create analysis file:**
-   ```bash
-   docs/analysis/TABLE_STRUCTURE_ANALYSIS.md
-   ```
-   Document what you discovered (publicly shareable)
-
-2. **Update client profile:**
-   ```bash
-   config/client-profiles/app.json
-   ```
-   Add client-specific details (stay local)
-
-3. **Commit analysis, not profile:**
-   ```bash
-   git add docs/analysis/TABLE_STRUCTURE_ANALYSIS.md
-   git commit -m "docs: Add table structure analysis"
-   ```
-   Profile changes don't get committed
-
----
-
 ## Output Files
 
 Generated output files should be saved to `tmp/`:
 
 ```bash
 # Example output locations
-tmp/Financial_Extract_20260203.xlsx
-tmp/budget_report_2025_Q1.xlsx
-tmp/anomaly_detection_results.csv
+tmp/FPA_Intelligence_Workbook_2025_20260205.xlsx
+tmp/Financial_Extract_2025.xlsx
+tmp/API_Diagnostic_Report_20260205.txt
+tmp/Insights_2025_Q4.pptx
 ```
 
 Files in `tmp/` are **not committed** (protected by `.gitignore`).
@@ -242,7 +327,7 @@ Files in `tmp/` are **not committed** (protected by `.gitignore`).
 ## Git Commit Guidelines
 
 ### ✅ DO COMMIT (Plugin changes)
-- Skill definitions (`skills/*/SKILL.md`)
+- Skill definitions (`.claude/skills/*/SKILL.md`)
 - MCP server code (`mcp-server/src/`, `mcp-server/scripts/`)
 - Plugin configuration (`.claude-plugin/plugin.json`)
 - Schema files (`config/profile-schema.json`, `config/environments.json`)
@@ -301,6 +386,7 @@ All skills support the `--env` flag:
 /dr-profile TABLE_ID --env dev     # Profile in development
 /dr-learn --env app                # Create profile for production
 /dr-extract --env app --year 2025  # Extract from production
+/dr-intelligence --year 2025 --env app  # Intelligence workbook
 ```
 
 ---
@@ -328,20 +414,6 @@ After adding a custom environment:
 
 ---
 
-## Available Skills
-
-| Skill | Description | Output |
-|-------|-------------|--------|
-| `/dr-auth` | Authenticate with Datarails | Session stored in keyring |
-| `/dr-learn` | Discover table structure | Creates client profile |
-| `/dr-tables` | List and explore tables | Table metadata |
-| `/dr-profile` | Profile table statistics | Data quality metrics |
-| `/dr-anomalies` | Detect data anomalies | Quality findings |
-| `/dr-query` | Query table data | Sample records |
-| `/dr-extract` | Extract to Excel | Financial reports |
-
----
-
 ## MCP Server
 
 The MCP server is bundled in `mcp-server/` and runs automatically.
@@ -361,6 +433,21 @@ datarails-mcp status --all
 # Check specific environment
 datarails-mcp status --env app
 ```
+
+### Diagnostic Tool
+
+Test API connectivity and identify issues:
+
+```bash
+# Run comprehensive API diagnostic
+uv --directory mcp-server run python scripts/api_diagnostic.py --env app
+```
+
+Generates report with:
+- Endpoint test results
+- Response times
+- Error analysis
+- Recommendations
 
 ---
 
@@ -400,18 +487,38 @@ datarails-mcp status --env app
 2. Verify all field mappings are correct
 3. Re-run `/dr-learn --env <env>` to rediscover structure
 
+### Slow extraction (normal behavior)
+Due to API limitations, extraction is slow:
+- ~90 records/second
+- 54K records = ~10 minutes
+- This is expected, not a bug
+
+### API returns 500/502 errors
+1. Aggregation API is broken - use pagination + client-side aggregation
+2. See `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` for details
+3. The scripts handle this automatically
+
 ---
 
 ## For Developers
 
 ### Adding New Skills
 
-Create a new skill in `skills/<skill-name>/SKILL.md`:
+Create a new skill in `.claude/skills/<skill-name>/SKILL.md`:
 ```
-skills/
+.claude/skills/
 └── new-skill/
     └── SKILL.md
 ```
+
+**Required sections:**
+- Frontmatter (name, description, allowed-tools, argument-hint)
+- Client Profile System section
+- Workflow section with phases
+- Execution Instructions
+- Troubleshooting
+
+See `.claude/skills/dr-intelligence/SKILL.md` as reference.
 
 ### Adding System Analysis
 
@@ -441,3 +548,4 @@ All new files should be committed to git when they're ready for team use.
 - Keep CLAUDE.md free of specific table IDs, field names, and client business logic
 - Use markdown files in `docs/analysis/` for system documentation
 - Use client profiles for environment-specific configuration
+- **Read `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` before building new features**
