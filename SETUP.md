@@ -54,7 +54,7 @@ git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
 cd dr-claude-code-plugins-re
 ```
 
-Skills are pre-configured in `.claude/skills/` - no additional setup needed.
+Skills are pre-configured in `skills/` directory - no additional setup needed.
 
 ---
 

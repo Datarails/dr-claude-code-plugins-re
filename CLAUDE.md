@@ -122,15 +122,19 @@ def aggregate_client_side(data, group_by_fields, sum_field):
 
 ```
 datarails-plugin/
-├── CLAUDE.md                    # This file
-├── README.md                    # Project overview
-├── SETUP.md                     # Setup instructions
+├── .claude-plugin/
+│   └── plugin.json              # Plugin manifest (required)
 │
-├── .claude/skills/              # Skill definitions
-│   ├── dr-auth/
-│   ├── dr-intelligence/         # NEW - Most powerful skill
-│   ├── dr-extract/
-│   └── ... (other skills)
+├── skills/                      # Skill definitions (official location)
+│   ├── auth/SKILL.md
+│   ├── intelligence/SKILL.md    # Most powerful skill
+│   ├── extract/SKILL.md
+│   └── ... (15 skills total)
+│
+├── .claude/
+│   └── skills/                  # Symlinks for standalone mode
+│       ├── dr-auth -> ../../skills/auth
+│       └── ...
 │
 ├── mcp-server/                  # Bundled MCP server
 │   ├── src/datarails_mcp/       # Core MCP implementation
@@ -158,8 +162,10 @@ datarails-plugin/
 │   └── notebooks/               # Jupyter notebooks
 │
 ├── tmp/                         # Generated outputs (not committed)
-│   └── .gitkeep
 │
+├── CLAUDE.md                    # This file
+├── README.md                    # Project overview
+├── SETUP.md                     # Setup instructions
 └── .gitignore                   # Excludes client profiles & tmp/
 ```
 
@@ -327,7 +333,7 @@ Files in `tmp/` are **not committed** (protected by `.gitignore`).
 ## Git Commit Guidelines
 
 ### ✅ DO COMMIT (Plugin changes)
-- Skill definitions (`.claude/skills/*/SKILL.md`)
+- Skill definitions (`skills/*/SKILL.md`)
 - MCP server code (`mcp-server/src/`, `mcp-server/scripts/`)
 - Plugin configuration (`.claude-plugin/plugin.json`)
 - Schema files (`config/profile-schema.json`, `config/environments.json`)
@@ -504,21 +510,26 @@ Due to API limitations, extraction is slow:
 
 ### Adding New Skills
 
-Create a new skill in `.claude/skills/<skill-name>/SKILL.md`:
+Create a new skill in `skills/<skill-name>/SKILL.md` (official plugin location):
 ```
-.claude/skills/
+skills/
 └── new-skill/
     └── SKILL.md
 ```
 
-**Required sections:**
+Then create a symlink in `.claude/skills/` for standalone mode:
+```bash
+cd .claude/skills && ln -sf ../../skills/new-skill dr-new-skill
+```
+
+**Required SKILL.md sections:**
 - Frontmatter (name, description, allowed-tools, argument-hint)
-- Client Profile System section
+- Client Profile System section (if using profiles)
 - Workflow section with phases
 - Execution Instructions
 - Troubleshooting
 
-See `.claude/skills/dr-intelligence/SKILL.md` as reference.
+See `skills/intelligence/SKILL.md` as reference.
 
 ### Adding System Analysis
 
