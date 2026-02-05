@@ -33,7 +33,15 @@
     "skills/anomalies",
     "skills/query",
     "skills/extract",
-    "skills/learn"
+    "skills/learn",
+    "skills/intelligence",
+    "skills/anomalies-report",
+    "skills/insights",
+    "skills/reconciliation",
+    "skills/dashboard",
+    "skills/forecast-variance",
+    "skills/audit",
+    "skills/departments"
   ],
   "agents": [
     "agents/finance-analyst.md"
