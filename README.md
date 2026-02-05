@@ -301,11 +301,18 @@ Edit `config/environments.json`:
 
 ```
 dr-claude-code-plugins/
+├── .claude-plugin/
+│   └── plugin.json              # Plugin manifest (required)
+├── skills/                      # Skill definitions (official location)
+│   ├── auth/SKILL.md
+│   ├── intelligence/SKILL.md    # FP&A Intelligence Workbook
+│   ├── extract/SKILL.md
+│   ├── insights/SKILL.md
+│   └── ... (15 skills total)
 ├── .claude/
-│   └── skills/                  # Skill definitions
-│       ├── dr-auth/
-│       ├── dr-intelligence/     # NEW - FP&A Intelligence Workbook
-│       ├── dr-extract/
+│   └── skills/                  # Symlinks for standalone mode
+│       ├── dr-auth -> ../../skills/auth
+│       ├── dr-intelligence -> ../../skills/intelligence
 │       └── ...
 ├── mcp-server/                  # Bundled MCP server
 │   ├── src/datarails_mcp/
@@ -313,11 +320,10 @@ dr-claude-code-plugins/
 │   │   ├── auth.py              # Authentication
 │   │   ├── report_utils.py      # Report formatting
 │   │   ├── excel_builder.py     # Excel generation
-│   │   ├── pptx_builder.py      # PowerPoint generation
 │   │   └── ...
 │   ├── scripts/
-│   │   ├── intelligence_workbook.py  # NEW - Intelligence generator
-│   │   ├── api_diagnostic.py         # NEW - API testing tool
+│   │   ├── intelligence_workbook.py  # Intelligence generator
+│   │   ├── api_diagnostic.py         # API testing tool
 │   │   ├── extract_financials.py
 │   │   └── ...
 │   └── pyproject.toml
@@ -327,7 +333,7 @@ dr-claude-code-plugins/
 │   └── client-profiles/         # Client-specific configs (not committed)
 ├── docs/
 │   ├── analysis/
-│   │   ├── FINANCE_OS_API_ISSUES_REPORT.md  # NEW - API issues documentation
+│   │   ├── FINANCE_OS_API_ISSUES_REPORT.md  # API issues documentation
 │   │   └── ...
 │   └── guides/
 ├── tmp/                         # Output files location (not committed)
@@ -370,7 +376,7 @@ See [SETUP.md](SETUP.md#troubleshooting-authentication) for detailed troubleshoo
 
 | Problem | Solution |
 |---------|----------|
-| Skills not showing | Run `mkdir -p .claude && ln -s ../skills .claude/skills` |
+| Skills not showing | Restart Claude Code; skills are in `skills/` directory |
 | "Not authenticated" | Run `cd mcp-server && uv run datarails-mcp auth` |
 | "Session expired" | Re-authenticate with `datarails-mcp auth` |
 | Wrong environment | Use `--env` flag or `datarails-mcp auth --switch <env>` |
