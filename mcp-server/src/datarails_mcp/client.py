@@ -95,13 +95,17 @@ class DatarailsClient:
         except json.JSONDecodeError:
             return {"error": "Invalid response from server"}
 
-    def _format_response(self, data: dict[str, Any]) -> str:
+    def _format_response(self, data: dict[str, Any] | None) -> str:
         """Format API response as a readable string."""
+        # Handle None response (e.g., from 202 Accepted)
+        if data is None:
+            return json.dumps({"error": "Empty response from API"}, indent=2)
+
         # Check for error responses
-        if "error" in data and data["error"]:
+        if isinstance(data, dict) and "error" in data and data["error"]:
             return json.dumps(data, indent=2, default=str)
         # Finance OS API wraps responses in {"success": true, "data": [...], ...}
-        if "data" in data:
+        if isinstance(data, dict) and "data" in data:
             return json.dumps(data["data"], indent=2, default=str)
         return json.dumps(data, indent=2, default=str)
 

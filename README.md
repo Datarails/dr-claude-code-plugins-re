@@ -13,7 +13,8 @@ Analyze financial data, detect anomalies, and query Finance OS tables directly f
 - **Data Queries** - Filter, sample, and query records
 - **Data Extraction** - Export validated financial data to Excel
 
-### Financial Analysis Suite (NEW! 🎯)
+### Financial Analysis Suite
+- **Intelligence Workbook** - Comprehensive FP&A analysis with auto-insights (NEW!)
 - **Anomaly Detection** - Data quality monitoring with severity scoring
 - **Trend Analysis** - P&L trends, KPI analysis, growth metrics
 - **Executive Insights** - Professional PowerPoint presentations with visualizations
@@ -69,9 +70,10 @@ Skills are pre-configured - no additional setup needed!
 | `/dr-query` | Query and filter records |
 | `/dr-extract` | Extract financial data to Excel |
 
-### Financial Analysis Agents (NEW! 🚀)
+### Financial Analysis Agents
 | Skill | Description | Output |
 |-------|-------------|--------|
+| `/dr-intelligence` | **Most powerful** - FP&A intelligence workbook with auto-insights | 10-sheet Excel |
 | `/dr-anomalies-report` | Data quality assessment with anomaly detection | Excel report |
 | `/dr-insights` | Trend analysis and executive insights | PowerPoint + Excel |
 | `/dr-reconcile` | P&L vs KPI consistency validation | Excel report |
@@ -79,6 +81,37 @@ Skills are pre-configured - no additional setup needed!
 | `/dr-forecast-variance` | Budget vs actual variance analysis | Excel + PowerPoint |
 | `/dr-audit` | SOX compliance audit reporting | PDF + Excel |
 | `/dr-departments` | Department P&L analysis | Excel + PowerPoint |
+
+### /dr-intelligence (NEW - Most Powerful!)
+
+Generate comprehensive FP&A intelligence workbooks with auto-detected insights.
+
+```
+/dr-intelligence --year 2025                    # Full intelligence workbook
+/dr-intelligence --year 2025 --env app          # From production
+/dr-intelligence --year 2025 --output report.xlsx
+```
+
+**What makes it different:**
+| Traditional Report | Intelligence Workbook |
+|-------------------|----------------------|
+| Shows data | Answers questions |
+| Lists numbers | Explains "why" |
+| Static tables | Highlights anomalies |
+| Manual analysis | Insights auto-surfaced |
+| Data dump | Recommendations included |
+
+**10 Sheets Generated:**
+1. Insights Dashboard - Top 5 findings with severity
+2. Expense Deep Dive - Top 20 accounts, % of total
+3. Variance Waterfall - What changed and why
+4. Trend Analysis - 12-month trends
+5. Anomaly Report - Auto-detected outliers
+6. Vendor Analysis - Top vendors, concentration risk
+7. SaaS Metrics - ARR, LTV, CAC, Efficiency
+8. Sales Performance - Rep leaderboard
+9. Cost Center P&L - Department detail
+10. Raw Data - Pivot-ready for analysis
 
 ### /dr-auth
 
@@ -136,7 +169,7 @@ Query table records with filters.
 
 ### /dr-learn
 
-Discover table structure and create a client profile. Run this once per environment to enable `/dr-extract`.
+Discover table structure and create a client profile. Run this once per environment to enable `/dr-extract` and `/dr-intelligence`.
 
 ```
 /dr-learn                   # Discover tables in active environment
@@ -168,9 +201,15 @@ Requires a client profile (run `/dr-learn` first). Generates Excel with:
 
 ## Financial Agents Suite
 
-A complete suite of 7 specialized financial analysis agents for executive reporting, compliance, and business intelligence.
+A complete suite of specialized financial analysis agents for executive reporting, compliance, and business intelligence.
 
 ### Quick Examples
+
+**Generate comprehensive intelligence workbook** (NEW!):
+```
+/dr-intelligence --year 2025 --env app
+```
+Generates 10-sheet Excel with auto-detected insights, recommendations, and professional formatting.
 
 **Check data quality**:
 ```
@@ -213,19 +252,6 @@ Generates professional PDF audit report + Excel evidence package.
 /dr-departments --year 2025
 ```
 Department P&L analysis with Excel + PowerPoint outputs.
-
-### Financial Agents Documentation
-
-See individual skill documentation for complete details:
-- `/dr-anomalies-report` - Data quality assessment
-- `/dr-insights` - Trend analysis & visualizations
-- `/dr-reconcile` - Consistency validation
-- `/dr-dashboard` - Executive KPI monitoring
-- `/dr-forecast-variance` - Variance analysis
-- `/dr-audit` - Compliance auditing
-- `/dr-departments` - Department analytics
-
-For comprehensive implementation details, see [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md).
 
 ## Multi-Environment Support
 
@@ -276,64 +302,52 @@ Edit `config/environments.json`:
 ```
 dr-claude-code-plugins/
 ├── .claude/
-│   └── skills/                  # Skill symlinks
-├── .claude-plugin/
-│   └── plugin.json              # Plugin manifest
-├── skills/
-│   ├── auth/SKILL.md            # /dr-auth
-│   ├── learn/SKILL.md           # /dr-learn
-│   ├── tables/SKILL.md          # /dr-tables
-│   ├── profile/SKILL.md         # /dr-profile
-│   ├── anomalies/SKILL.md       # /dr-anomalies
-│   ├── query/SKILL.md           # /dr-query
-│   ├── extract/SKILL.md         # /dr-extract
-│   ├── anomalies-report/SKILL.md        # /dr-anomalies-report (NEW!)
-│   ├── insights/SKILL.md                # /dr-insights (NEW!)
-│   ├── reconciliation/SKILL.md          # /dr-reconcile (NEW!)
-│   ├── dashboard/SKILL.md               # /dr-dashboard (NEW!)
-│   ├── forecast-variance/SKILL.md       # /dr-forecast-variance (NEW!)
-│   ├── audit/SKILL.md                   # /dr-audit (NEW!)
-│   └── departments/SKILL.md             # /dr-departments (NEW!)
-├── agents/                      # Agent definitions
-│   ├── anomaly-detector.md
-│   ├── insights.md
-│   ├── reconciliation.md
-│   ├── dashboard.md
-│   ├── forecast.md
-│   ├── audit.md
-│   └── departments.md
+│   └── skills/                  # Skill definitions
+│       ├── dr-auth/
+│       ├── dr-intelligence/     # NEW - FP&A Intelligence Workbook
+│       ├── dr-extract/
+│       └── ...
 ├── mcp-server/                  # Bundled MCP server
 │   ├── src/datarails_mcp/
-│   │   ├── report_utils.py              # Report formatting utilities (NEW!)
-│   │   ├── chart_builder.py             # Chart generation (NEW!)
-│   │   ├── excel_builder.py             # Excel generation (NEW!)
-│   │   ├── pptx_builder.py              # PowerPoint generation (NEW!)
-│   │   ├── pdf_builder.py               # PDF generation (NEW!)
-│   │   └── ... (existing modules)
+│   │   ├── client.py            # API client
+│   │   ├── auth.py              # Authentication
+│   │   ├── report_utils.py      # Report formatting
+│   │   ├── excel_builder.py     # Excel generation
+│   │   ├── pptx_builder.py      # PowerPoint generation
+│   │   └── ...
 │   ├── scripts/
+│   │   ├── intelligence_workbook.py  # NEW - Intelligence generator
+│   │   ├── api_diagnostic.py         # NEW - API testing tool
 │   │   ├── extract_financials.py
-│   │   ├── anomaly_detector.py          # (NEW!)
-│   │   ├── insights_generator.py        # (NEW!)
-│   │   ├── reconciliation_engine.py     # (NEW!)
-│   │   ├── executive_dashboard.py       # (NEW!)
-│   │   ├── forecast_analyzer.py         # (NEW!)
-│   │   ├── compliance_auditor.py        # (NEW!)
-│   │   └── department_analytics.py      # (NEW!)
-│   ├── templates/               # Report styling (NEW!)
-│   ├── tests/
+│   │   └── ...
 │   └── pyproject.toml
 ├── config/
 │   ├── environments.json        # Configurable environments
 │   ├── profile-schema.json      # Client profile schema
 │   └── client-profiles/         # Client-specific configs (not committed)
-├── tmp/                         # Output files location
-├── .mcp.json                    # MCP server config
+├── docs/
+│   ├── analysis/
+│   │   ├── FINANCE_OS_API_ISSUES_REPORT.md  # NEW - API issues documentation
+│   │   └── ...
+│   └── guides/
+├── tmp/                         # Output files location (not committed)
 ├── CLAUDE.md                    # Claude Code instructions
 ├── SETUP.md                     # Detailed setup guide
-├── README.md                    # This file
-├── IMPLEMENTATION_COMPLETE.md   # Full implementation details (NEW!)
-└── PHASE_1_2_SUMMARY.md         # Phase summary (NEW!)
+└── README.md                    # This file
 ```
+
+## Known API Limitations
+
+The Finance OS API has documented limitations (see `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md`):
+
+| Issue | Impact | Workaround |
+|-------|--------|------------|
+| Aggregation API fails | Returns 500/502/202 | Client-side aggregation |
+| JWT expires in 5 min | Long operations fail | Auto-refresh every 20K rows |
+| 500 record page limit | Slow extraction | Pagination implemented |
+| Distinct values fails | Returns 409 | Sample data extraction |
+
+**Performance:** Extracting 54K records takes ~10 minutes due to these limitations.
 
 ## Data Limits
 
@@ -344,6 +358,7 @@ The plugin enforces sensible limits to prevent data overload:
 | Sample records | 20 |
 | Filtered query | 500 |
 | Custom query | 1,000 |
+| Paginated extraction | 100,000 |
 
 For larger datasets, use the profiling tools which work via aggregation.
 
@@ -359,6 +374,23 @@ See [SETUP.md](SETUP.md#troubleshooting-authentication) for detailed troubleshoo
 | "Not authenticated" | Run `cd mcp-server && uv run datarails-mcp auth` |
 | "Session expired" | Re-authenticate with `datarails-mcp auth` |
 | Wrong environment | Use `--env` flag or `datarails-mcp auth --switch <env>` |
+| Slow extraction | Normal - API requires pagination (~90 rec/sec) |
+| "No profile found" | Run `/dr-learn --env <env>` first |
+
+## Diagnostic Tools
+
+Test API connectivity and performance:
+
+```bash
+# Run API diagnostic
+uv --directory mcp-server run python scripts/api_diagnostic.py --env app
+```
+
+Generates report at `tmp/API_Diagnostic_Report_*.txt` with:
+- Endpoint test results
+- Response times
+- Error analysis
+- Recommendations
 
 ## License
 
