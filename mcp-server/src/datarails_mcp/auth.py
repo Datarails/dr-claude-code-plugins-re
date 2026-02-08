@@ -19,12 +19,12 @@ Datarails Auth Flow:
 import base64
 import json
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 import httpx
-import keyring
 
 from datarails_mcp.constants import (
     DEFAULT_ENV,
@@ -36,6 +36,102 @@ from datarails_mcp.constants import (
 
 # Fallback file location (used by Chrome extension native host)
 FALLBACK_AUTH_FILE = Path.home() / ".datarails-auth.json"
+
+# Keyring timeout (seconds) - prevents hanging in environments without a keyring backend
+KEYRING_TIMEOUT = 5
+
+# Lazy keyring import with availability check
+_keyring_available: bool | None = None
+_keyring_module = None
+
+
+def _get_keyring():
+    """Get keyring module with lazy import and availability check."""
+    global _keyring_available, _keyring_module
+    if _keyring_available is not None:
+        return _keyring_module if _keyring_available else None
+    try:
+        import keyring
+        _keyring_module = keyring
+        _keyring_available = True
+        return keyring
+    except ImportError:
+        _keyring_available = False
+        return None
+
+
+def _keyring_get_with_timeout(service: str, account: str, timeout: float = KEYRING_TIMEOUT) -> str | None:
+    """Call keyring.get_password with a timeout to prevent hanging.
+
+    On some platforms (containers, locked keychains), keyring can block
+    indefinitely. This wraps it with a thread-based timeout.
+    """
+    kr = _get_keyring()
+    if kr is None:
+        return None
+
+    result = [None]
+    error = [None]
+
+    def _get():
+        try:
+            result[0] = kr.get_password(service, account)
+        except Exception as e:
+            error[0] = e
+
+    thread = threading.Thread(target=_get, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+
+    if thread.is_alive():
+        # Keyring is hanging - give up
+        return None
+
+    return result[0]
+
+
+def _keyring_set_with_timeout(service: str, account: str, value: str, timeout: float = KEYRING_TIMEOUT) -> bool:
+    """Call keyring.set_password with a timeout."""
+    kr = _get_keyring()
+    if kr is None:
+        return False
+
+    success = [False]
+
+    def _set():
+        try:
+            kr.set_password(service, account, value)
+            success[0] = True
+        except Exception:
+            pass
+
+    thread = threading.Thread(target=_set, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+
+    return success[0] and not thread.is_alive()
+
+
+def _keyring_delete_with_timeout(service: str, account: str, timeout: float = KEYRING_TIMEOUT) -> bool:
+    """Call keyring.delete_password with a timeout."""
+    kr = _get_keyring()
+    if kr is None:
+        return False
+
+    success = [False]
+
+    def _delete():
+        try:
+            kr.delete_password(service, account)
+            success[0] = True
+        except Exception:
+            pass
+
+    thread = threading.Thread(target=_delete, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+
+    return success[0] and not thread.is_alive()
 
 
 class BrowserAuth:
@@ -98,17 +194,17 @@ class BrowserAuth:
 
     def _load_session(self) -> None:
         """Load session cookies from system keychain or fallback file."""
-        # Try keyring first (uses per-environment account)
-        try:
-            stored = keyring.get_password(self.SERVICE_NAME, self.keyring_account)
-            if stored:
+        # Try keyring first (uses per-environment account, with timeout)
+        stored = _keyring_get_with_timeout(self.SERVICE_NAME, self.keyring_account)
+        if stored:
+            try:
                 data = json.loads(stored)
                 self._session_id = data.get("session_id")
                 self._csrf_token = data.get("csrf_token")
                 if self._session_id and self._csrf_token:
                     return  # Successfully loaded from keyring
-        except Exception:
-            pass
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         # Fallback: check file (written by Chrome extension native host)
         try:
@@ -122,18 +218,31 @@ class BrowserAuth:
             pass
 
     def _save_session(self) -> None:
-        """Save session cookies to system keychain."""
+        """Save session cookies to system keychain and fallback file."""
+        value = json.dumps({
+            "session_id": self._session_id,
+            "csrf_token": self._csrf_token,
+            "env": self.env,
+            "saved_at": time.time(),
+        })
+        saved = _keyring_set_with_timeout(self.SERVICE_NAME, self.keyring_account, value)
+
+        # Always also save to fallback file for environments without keyring
+        if not saved:
+            self._save_to_fallback_file()
+
+    def _save_to_fallback_file(self) -> None:
+        """Save session to fallback file."""
         try:
-            keyring.set_password(
-                self.SERVICE_NAME,
-                self.keyring_account,
-                json.dumps({
-                    "session_id": self._session_id,
-                    "csrf_token": self._csrf_token,
-                    "env": self.env,
-                    "saved_at": time.time(),
-                })
-            )
+            existing = {}
+            if FALLBACK_AUTH_FILE.exists():
+                existing = json.loads(FALLBACK_AUTH_FILE.read_text())
+            existing[self.env] = {
+                "session_id": self._session_id,
+                "csrf_token": self._csrf_token,
+                "saved_at": time.time(),
+            }
+            FALLBACK_AUTH_FILE.write_text(json.dumps(existing, indent=2))
         except Exception:
             pass
 
@@ -148,8 +257,13 @@ class BrowserAuth:
 
     def clear_session(self) -> None:
         """Clear stored session and tokens (for logout)."""
+        _keyring_delete_with_timeout(self.SERVICE_NAME, self.keyring_account)
+        # Also clear fallback file
         try:
-            keyring.delete_password(self.SERVICE_NAME, self.keyring_account)
+            if FALLBACK_AUTH_FILE.exists():
+                data = json.loads(FALLBACK_AUTH_FILE.read_text())
+                data.pop(self.env, None)
+                FALLBACK_AUTH_FILE.write_text(json.dumps(data, indent=2))
         except Exception:
             pass
         self._session_id = None

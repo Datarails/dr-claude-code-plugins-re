@@ -21,11 +21,10 @@
   ],
   "mcpServers": {
     "datarails-finance-os": {
-      "command": "/Users/stasg/.local/bin/uv",
+      "command": "uv",
       "args": ["--directory", "${CLAUDE_PLUGIN_ROOT}/mcp-server", "run", "datarails-mcp", "serve"],
       "env": {
-        "DATARAILS_CONFIG_DIR": "${CLAUDE_PLUGIN_ROOT}/config",
-        "PATH": "/Users/stasg/.local/bin:/usr/local/bin:/usr/bin:/bin"
+        "DATARAILS_CONFIG_DIR": "${CLAUDE_PLUGIN_ROOT}/config"
       }
     }
   },

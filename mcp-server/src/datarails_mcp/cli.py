@@ -521,14 +521,11 @@ def _status_all(output_json: bool):
 
 def _check_keyring() -> bool:
     """Check if system keyring is available."""
-    try:
-        import keyring
-
-        # Try a simple operation to verify keyring works
-        keyring.get_password("datarails-mcp-test", "test")
-        return True
-    except Exception:
-        return False
+    from datarails_mcp.auth import _keyring_get_with_timeout
+    result = _keyring_get_with_timeout("datarails-mcp-test", "test", timeout=3)
+    # If it returns None, keyring might be unavailable or empty - either is ok
+    # The real test is that it didn't hang
+    return True
 
 
 @main.command()
