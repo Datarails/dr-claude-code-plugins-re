@@ -1,10 +1,10 @@
 ---
-description: See your revenue trends over time - growth rates, patterns, and insights
+description: See your revenue trends over time - growth rates, patterns, and insights using complete aggregated data
 ---
 
 # Revenue Trends
 
-Analyze revenue patterns over time. Shows growth trends, seasonal patterns, and revenue composition.
+Analyze revenue patterns over time using real aggregated data. Shows growth trends, seasonal patterns, and revenue composition.
 
 ## Step 1: Verify Connection
 
@@ -37,30 +37,41 @@ Look for:
 - Date/Period fields
 - Scenario field (Actuals)
 
-## Step 4: Profile Revenue Categories
+## Step 4: Get Monthly Revenue Totals via Aggregation
+
+Use aggregation for complete monthly revenue data:
 
 ```
-Use: mcp__datarails-finance-os__get_field_distinct_values
+Use: mcp__datarails-finance-os__aggregate_table_data
 Parameters:
   table_id: <financials_table_id>
-  field_name: <account_l1_field>
-  limit: 50
+  dimensions: ["<date_field>"]
+  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  filters: [
+    {"name": "<account_l1_field>", "values": ["<revenue_category>"], "is_excluded": false},
+    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false}
+  ]
 ```
 
-Identify revenue-related categories (REVENUE, Sales, Income, etc.)
+This returns real monthly revenue totals in ~5 seconds.
 
-## Step 5: Fetch Revenue Data
+## Step 5: Get Revenue by Sub-Category (if available)
+
+For revenue composition breakdown:
 
 ```
-Use: mcp__datarails-finance-os__get_records_by_filter
+Use: mcp__datarails-finance-os__aggregate_table_data
 Parameters:
   table_id: <financials_table_id>
-  filters: {
-    "<account_l1_field>": {"in": ["REVENUE", "Revenue", "Sales", "Income"]},
-    "<scenario_field>": "Actuals"
-  }
-  limit: 500
+  dimensions: ["<account_l2_field>"]
+  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  filters: [
+    {"name": "<account_l1_field>", "values": ["<revenue_category>"], "is_excluded": false},
+    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false}
+  ]
 ```
+
+**If the L2 field fails:** Try a different field level, or skip this step and show only top-level revenue.
 
 ## Step 6: Check KPI Metrics (if available)
 
@@ -77,26 +88,34 @@ Look for ARR, MRR, Net New ARR, Churn metrics.
 
 ## Step 7: Analyze and Present
 
-Create a compelling revenue story:
+Create a compelling revenue story with real numbers:
 
 > ## Your Revenue Trends
 >
 > ### Revenue Overview
-> - **Latest period revenue:** $[amount]
+> - **Total Revenue (Actuals):** $[real_total]
 > - **Data period:** [start] to [end]
-> - **Revenue sources:** [count] different categories
+> - **Months of data:** [count]
+>
+> ### Monthly Trend
+> | Month | Revenue | MoM Change |
+> |-------|---------|------------|
+> | [Month 1] | $XX,XXX | — |
+> | [Month 2] | $XX,XXX | +X% |
+> | ... | ... | ... |
 >
 > ### Trend Analysis
-> Based on your data:
 > - **Overall direction:** [Growing/Stable/Declining]
-> - **Key revenue drivers:** [top categories]
+> - **Average monthly revenue:** $[calculated]
+> - **Peak month:** [month] at $[amount]
+> - **Growth (first to last):** [X]%
 >
-> ### Revenue Composition
-> | Source | Share |
-> |--------|-------|
-> | [Source 1] | XX% |
-> | [Source 2] | XX% |
-> | [Other] | XX% |
+> ### Revenue Composition (if L2 data available)
+> | Source | Amount | Share |
+> |--------|--------|-------|
+> | [Source 1] | $XX,XXX | XX% |
+> | [Source 2] | $XX,XXX | XX% |
+> | [Other] | $XX,XXX | XX% |
 >
 > ### Key Metrics (if KPI data available)
 > - ARR: $[amount]
@@ -109,29 +128,27 @@ Create a compelling revenue story:
 > - [Recommendation based on data]
 >
 > **Questions to explore:**
-> - "How does this compare to last year?"
+> - "How does this compare to budget?"
 > - "What's driving the growth/decline?"
-> - "Show me revenue by customer segment"
+> - "Show me revenue by department"
 
 ## Handling Limited Data
 
 **If only one period of data:**
-> I can see your revenue data, but I only have [one period]. For trend analysis, I'd need multiple months or quarters. Would you like me to show you the breakdown for this period instead?
+> I can see your revenue data, but I only have [one period]. For trend analysis, I'd need multiple months. Would you like me to show you the breakdown for this period instead?
 
 **If no revenue category found:**
 > I'm having trouble identifying revenue in your data. The account categories I found are: [list them]. Which of these represents your revenue?
 
-## Visualization Suggestions
+## Handling Aggregation Failures
 
-Since Cowork can't generate charts, suggest:
-
-> **Tip:** For visual charts, you can:
-> 1. Export this data to Excel using `/datarails-finance-os:export-data`
-> 2. Or paste these numbers into your favorite charting tool
+If aggregation fails for a specific field:
+1. Try using a broader field (L1 instead of L2)
+2. If all aggregation fails, fall back to `get_records_by_filter` and note the data is partial
 
 ## Follow-up Options
 
 After analysis, offer:
 - "Compare revenue to expenses?"
 - "Look at revenue by department or product?"
-- "Check for seasonality patterns?"
+- "Compare to budget or forecast?"

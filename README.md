@@ -25,6 +25,8 @@ Simple commands designed for non-technical users:
 2. Run `/datarails-finance-os:login` and follow the prompts
 3. Start exploring your data!
 
+New to the plugin? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)** for a hands-on walkthrough (~15 minutes).
+
 ### For Claude Code Users
 
 Full-featured skills with CLI support - see [Skills](#skills) section below.
@@ -54,6 +56,8 @@ Full-featured skills with CLI support - see [Skills](#skills) section below.
 - **Department Analytics** - Departmental P&L and performance analysis
 
 ## Quick Start
+
+> New here? The **[Getting Started Guide](docs/guides/GETTING_STARTED.md)** walks you through your first 15 minutes, from authentication to your first intelligence report.
 
 **Option 1: Setup Wizard (Recommended)**
 

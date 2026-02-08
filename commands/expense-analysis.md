@@ -1,10 +1,10 @@
 ---
-description: Analyze your expenses - find top spending categories, trends, and potential issues
+description: Analyze your expenses - find top spending categories, trends, and potential issues using complete aggregated data
 ---
 
 # Expense Analysis
 
-Help the user understand where their money is going. Identifies top expense categories, unusual spending, and trends.
+Help the user understand where their money is going. Uses aggregation for complete, accurate expense totals instead of limited samples.
 
 ## Step 1: Verify Connection
 
@@ -32,55 +32,73 @@ Parameters:
 
 Look for:
 - Amount/Value fields
-- Account hierarchy fields (L1, L2, L3 categories)
+- Account hierarchy fields (L0, L1, L2 categories)
 - Date fields
 - Scenario field (Actuals vs Budget)
 
-## Step 4: Profile Expense Categories
+## Step 4: Get Complete Expense Totals by Category
+
+Use aggregation to get real totals (not estimates from 500-row samples):
 
 ```
-Use: mcp__datarails-finance-os__profile_categorical_fields
+Use: mcp__datarails-finance-os__aggregate_table_data
 Parameters:
   table_id: <financials_table_id>
-  fields: ["<account_l1_field>", "<account_l2_field>"]
+  dimensions: ["<account_l1_field>", "<account_l2_field>"]
+  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  filters: [
+    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false},
+    {"name": "<account_l1_field>", "values": ["<revenue_category>"], "is_excluded": true}
+  ]
 ```
 
-This shows the expense categories and their frequency.
+This excludes revenue and gives complete expense breakdown in ~5 seconds.
 
-## Step 5: Get Expense Data Sample
+**If a field fails (500 error):** Try a different account hierarchy field. For example, if "DR_ACC_L2" fails, try "DR_ACC_L1.5" or just use "DR_ACC_L1" for a higher-level breakdown.
+
+## Step 5: Get Monthly Expense Trend
 
 ```
-Use: mcp__datarails-finance-os__get_records_by_filter
+Use: mcp__datarails-finance-os__aggregate_table_data
 Parameters:
   table_id: <financials_table_id>
-  filters: {"<account_l1_field>": {"in": ["Operating Expense", "Cost of Good sold", "COGS", "OpEx"]}}
-  limit: 500
+  dimensions: ["<date_field>", "<account_l1_field>"]
+  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  filters: [
+    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false},
+    {"name": "<account_l1_field>", "values": ["<revenue_category>"], "is_excluded": true}
+  ]
 ```
-
-Note: Adjust filter values based on what you found in the categorical profile.
 
 ## Step 6: Analyze and Present
 
-Create a user-friendly expense breakdown:
+Create a user-friendly expense breakdown with real totals:
 
 > ## Your Expense Analysis
 >
-> ### Top Expense Categories
-> | Category | Estimated % of Total |
-> |----------|---------------------|
-> | [Category 1] | XX% |
-> | [Category 2] | XX% |
-> | [Category 3] | XX% |
+> ### Total Expenses: $[real_total]
+>
+> ### Top Expense Categories (Complete Totals)
+> | Category | Amount | % of Total |
+> |----------|--------|-----------|
+> | [Category 1] | $XX,XXX | XX% |
+> | [Category 2] | $XX,XXX | XX% |
+> | [Category 3] | $XX,XXX | XX% |
 >
 > ### Key Findings
-> - **Largest expense area:** [Category]
-> - **Number of expense accounts:** [X]
+> - **Largest expense area:** [Category] at $[amount] ([X]% of total)
+> - **Number of expense categories:** [X]
 > - **Data covers:** [date range]
+>
+> ### Monthly Trend
+> - [Direction: Growing/Stable/Declining]
+> - Highest month: [month] at $[amount]
+> - Lowest month: [month] at $[amount]
 >
 > ### Things to Watch
 > - [Any unusual patterns noticed]
-> - [Categories with high variability]
-> - [Potential data quality issues]
+> - [Categories with high concentration]
+> - [Significant month-over-month changes]
 >
 > ### Recommended Actions
 > 1. [Specific recommendation based on data]
@@ -88,6 +106,7 @@ Create a user-friendly expense breakdown:
 >
 > **Want more detail?**
 > - Ask me about a specific category: "Tell me more about [category] expenses"
+> - `/datarails-finance-os:budget-comparison` - Compare to budget
 > - `/datarails-finance-os:data-check` - Check for data anomalies
 
 ## Handling Different Data Structures
@@ -96,15 +115,15 @@ Different organizations structure their data differently. Adapt based on what yo
 
 **If account hierarchy uses different names:**
 - Look for fields containing "Account", "Category", "Cost Center", "Department"
-- Use `get_field_distinct_values` to understand the values
+- Use `get_table_schema` to discover available fields
 
-**If no clear expense indicator:**
-- Look for Amount fields with negative values (often expenses)
-- Or filter by Account Type if available
+**If aggregation fails for a field:**
+- Try a different hierarchy level (L1 instead of L2, or L1.5)
+- If all aggregation fails, fall back to `get_records_by_filter` with limit 500 and note the totals are partial
 
 ## Follow-up Questions to Offer
 
 After presenting the analysis, offer:
 - "Would you like me to compare this to your budget?"
 - "Should I look at how these expenses have changed over time?"
-- "Want me to identify any unusual transactions?"
+- "Want me to break this down by department or cost center?"

@@ -31,22 +31,50 @@ excel.add_data([["Total", total]])  # Real number, not made up
 
 ---
 
-## 🔴 CRITICAL: API Limitations & Best Practices
+## API Capabilities & Best Practices
 
-The Finance OS API has significant limitations. **Read `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` for full details.**
+The Finance OS API has a two-tier data access model. **Read `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` for full details.**
 
 ### Known Issues
 
 | Issue | Status | Impact |
 |-------|--------|--------|
-| **Aggregation API** | 🔴 BROKEN | Returns 500/502/202 - use client-side aggregation |
-| **JWT Token Expiry** | ⚠️ 5 minutes | Must refresh every 20K rows |
+| **Aggregation API** | ✅ WORKING (async polling) | ~5 seconds per query, 120x faster than pagination |
+| **JWT Token Expiry** | ⚠️ 5 minutes | Must refresh every 20K rows (pagination only) |
 | **Distinct Values** | 🔴 BROKEN | Returns 409 - use sample data |
-| **Page Size Limit** | ⚠️ 500 max | Requires pagination |
+| **Page Size Limit** | ⚠️ 500 max | Requires pagination for raw data |
+| **Some Fields Fail** | ⚠️ Per-client | Some fields cause 500 in aggregation - tracked in client profile |
 
-### REQUIRED: Pagination Pattern
+### PREFERRED: Aggregation API (Tier 1 - Fast)
 
-**NEVER use simple queries for large datasets.** Always paginate:
+**Use aggregation for summaries, totals, and grouped data (~5 seconds).**
+
+The aggregation API uses async polling (POST 202 + Location header). The `client.aggregate()` method handles this automatically. Most fields work (212/220 tested), but some fields fail per-client. The client profile tracks which fields work and provides alternatives.
+
+```python
+# Use aggregate_table_data MCP tool or client.aggregate()
+# The profile's aggregation.field_alternatives maps failed fields to working ones
+profile = load_profile(env)
+agg_hints = profile.get("aggregation", {})
+
+# Check if a field has a known alternative
+account_field = fields["account_l1"]
+if account_field in agg_hints.get("failed_fields", []):
+    # Use the alternative field from the profile
+    alt = agg_hints.get("field_alternatives", {}).get("account_l1", account_field)
+    account_field = fields.get(alt, account_field)
+
+result = await client.aggregate(
+    table_id=financials_table,
+    dimensions=["Reporting Date", account_field],
+    metrics=[{"field": "Amount", "agg": "SUM"}],
+    filters=[{"name": "Scenario", "values": ["Actuals"], "is_excluded": False}]
+)
+```
+
+### FALLBACK: Pagination (Tier 2 - Slow)
+
+**Use pagination only for raw data extraction or when aggregation fails.**
 
 ```python
 async def fetch_all_data(table_id, filters, max_rows=100000):
@@ -56,18 +84,15 @@ async def fetch_all_data(table_id, filters, max_rows=100000):
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         while len(all_data) < max_rows:
-            # CRITICAL: Refresh token every 20K rows (5-min expiry)
             if offset > 0 and offset % 20000 == 0:
                 await auth.ensure_valid_token()
 
-            # Fetch page
             resp = await client.post(url, headers=auth.get_headers(), json={
                 'filters': filters,
                 'limit': 500,
                 'offset': offset
             })
 
-            # Handle errors with retry
             if resp.status_code == 401:
                 await auth.ensure_valid_token()
                 continue
@@ -85,36 +110,35 @@ async def fetch_all_data(table_id, filters, max_rows=100000):
     return all_data
 ```
 
-### REQUIRED: Client-Side Aggregation
+### Profile-Based Aggregation Hints
 
-**The aggregation API is broken.** Use client-side aggregation:
+The client profile (`config/client-profiles/<env>.json`) tracks which fields work with aggregation:
 
-```python
-from collections import defaultdict
-
-def aggregate_client_side(data, group_by_fields, sum_field):
-    """Aggregate data in Python since server aggregation fails."""
-    aggregated = defaultdict(float)
-
-    for record in data:
-        key = tuple(str(record.get(f, "")) for f in group_by_fields)
-        aggregated[key] += float(record.get(sum_field, 0) or 0)
-
-    return [
-        dict(zip(group_by_fields, k), **{sum_field: v})
-        for k, v in aggregated.items()
-    ]
+```json
+"aggregation": {
+  "supported": true,
+  "failed_fields": ["DR_ACC_L1", "DR_ACC_L2"],
+  "field_alternatives": {
+    "account_l1": "account_l1_5",
+    "account_l2": "account_l1_5"
+  },
+  "tested_at": "2026-02-08T..."
+}
 ```
+
+Run `/dr-test` to discover field compatibility and update the profile automatically.
 
 ### Performance Expectations
 
-| Dataset Size | Expected Time | Notes |
-|--------------|---------------|-------|
-| < 10K rows | ~2 minutes | Acceptable |
-| 10-50K rows | ~5 minutes | Normal |
-| 50K+ rows | ~10 minutes | Due to API limitations |
+| Approach | Expected Time | Use Case |
+|----------|---------------|----------|
+| Aggregation (Tier 1) | ~5 seconds | Summaries, totals, grouped data |
+| Pagination (Tier 2) | ~10 minutes (50K+ rows) | Raw data extraction, full exports |
 
-**Throughput:** ~90 records/second (limited by API, not network)
+**Decision matrix:**
+- Need totals/summaries? → Use aggregation
+- Need raw records for Excel pivot? → Use pagination
+- Field fails in aggregation? → Check `aggregation.field_alternatives` in profile, or fall back to pagination
 
 ---
 
@@ -127,10 +151,11 @@ datarails-plugin/
 │
 ├── commands/                    # Cowork-friendly commands (no CLI)
 │   ├── login.md                 # Browser-based authentication
-│   ├── financial-summary.md     # Quick financial overview
-│   ├── expense-analysis.md      # Expense breakdown
-│   ├── revenue-trends.md        # Revenue patterns
-│   ├── budget-comparison.md     # Actual vs budget
+│   ├── financial-summary.md     # Quick financial overview (aggregation)
+│   ├── expense-analysis.md      # Expense breakdown (aggregation)
+│   ├── revenue-trends.md        # Revenue patterns (aggregation)
+│   ├── budget-comparison.md     # Actual vs budget (aggregation)
+│   ├── test-api.md              # API field compatibility test
 │   ├── data-check.md            # Data quality check
 │   └── explore-tables.md        # Discover data
 │
@@ -186,7 +211,8 @@ datarails-plugin/
 | Skill | Description | Output |
 |-------|-------------|--------|
 | `/dr-auth` | Authenticate with Datarails | Session stored in keyring |
-| `/dr-learn` | Discover table structure | Creates client profile |
+| `/dr-learn` | Discover table structure + aggregation compatibility | Creates client profile |
+| `/dr-test` | Test API field compatibility and performance | Diagnostic report + profile update |
 | `/dr-tables` | List and explore tables | Table metadata |
 | `/dr-profile` | Profile table statistics | Data quality metrics |
 | `/dr-anomalies` | Detect data anomalies | Quality findings |
@@ -212,10 +238,11 @@ Simple commands for non-technical users in Claude Cowork:
 | Command | Description |
 |---------|-------------|
 | `/datarails-finance-os:login` | Browser-based authentication |
-| `/datarails-finance-os:financial-summary` | Quick financial overview |
-| `/datarails-finance-os:expense-analysis` | Expense breakdown and insights |
+| `/datarails-finance-os:financial-summary` | Quick financial overview (real aggregated totals) |
+| `/datarails-finance-os:expense-analysis` | Expense breakdown with complete totals |
 | `/datarails-finance-os:revenue-trends` | Revenue patterns over time |
-| `/datarails-finance-os:budget-comparison` | Actual vs budget analysis |
+| `/datarails-finance-os:budget-comparison` | Actual vs budget variance analysis |
+| `/datarails-finance-os:test-api` | Test API field compatibility and performance |
 | `/datarails-finance-os:data-check` | Data quality assessment |
 | `/datarails-finance-os:explore-tables` | Discover available data |
 
@@ -518,16 +545,19 @@ Generates report with:
 2. Verify all field mappings are correct
 3. Re-run `/dr-learn --env <env>` to rediscover structure
 
-### Slow extraction (normal behavior)
-Due to API limitations, extraction is slow:
+### Slow extraction (normal for raw data)
+For raw data extraction via pagination:
 - ~90 records/second
 - 54K records = ~10 minutes
-- This is expected, not a bug
+- This is expected for `/dr-extract` raw exports
 
-### API returns 500/502 errors
-1. Aggregation API is broken - use pagination + client-side aggregation
-2. See `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` for details
-3. The scripts handle this automatically
+For summaries/totals, use aggregation instead (~5 seconds).
+
+### API returns 500 errors on aggregation
+Some fields fail in aggregation on a per-client basis:
+1. Run `/dr-test` to discover which fields work
+2. Check `aggregation.field_alternatives` in the client profile
+3. See `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` for details
 
 ---
 

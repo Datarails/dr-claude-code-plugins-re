@@ -1,6 +1,6 @@
 # Finance OS API Issues Report
 
-**Date:** February 5, 2026
+**Date:** February 5, 2026 (Updated: February 8, 2026)
 **Environment:** Production (app.datarails.com)
 **Analyst:** Claude Code
 
@@ -8,67 +8,124 @@
 
 ## Executive Summary
 
-The Datarails Finance OS API has significant reliability issues that require extensive workarounds for basic operations. The **aggregation API is fundamentally broken**, returning errors 100% of the time in our tests. This forces all data extraction to use pagination with client-side aggregation, which is **6.7x slower** than expected.
+The Datarails Finance OS API has some reliability quirks but is largely functional once the async patterns are understood. The **aggregation API works via async polling** (POST returns 202, poll GET for results) and successfully handles **212 out of 220 fields** as dimensions. A handful of fields with special characters (`&` in names) or specific computed fields (`DR_ACC_L1`, `DR_ACC_L2`) cause server-side errors.
 
 | Metric | Value |
 |--------|-------|
-| **Total Tests** | 10 |
-| **Pass Rate** | 60% |
-| **Aggregation API Success** | 0% |
-| **Data Extraction Time** | 10 minutes for 54K records |
+| **Aggregation API Working** | Yes (async polling pattern) |
+| **Fields Compatible** | 212/220 (96.4%) |
+| **Avg Aggregation Time** | ~5 seconds |
+| **Data Extraction Time** | 10 minutes for 54K records (pagination) |
 | **Effective Throughput** | 90 records/second |
 
 ---
 
-## Critical Issues
+## Aggregation API: Async Polling Pattern
 
-### 1. Aggregation API Completely Non-Functional
+### How It Works (Confirmed Feb 8, 2026)
 
-**Severity:** 🔴 CRITICAL
+The aggregation endpoint uses a **long-running task pattern**:
 
-The aggregation endpoint (`POST /tables/v1/{id}/aggregate`) fails 100% of the time with various error codes:
+1. **POST** `/tables/v1/{id}/aggregate` triggers the task
+2. Returns **202 Accepted** with a **`Location` header** containing the poll URL
+3. **GET** the Location URL to check status:
+   - **200** = results ready (response body contains data)
+   - **202** = still processing (keep polling)
 
-| Request Type | Status Code | Response |
-|--------------|-------------|----------|
-| Simple (1 dimension) | **202 Accepted** | Async processing (not supported) |
-| Complex (3 dimensions) | **500** | Internal server error |
-| KPI Table | **202 Accepted** | Null body |
+### Implementation
 
-**Evidence:**
-```
-❌ Simple Aggregation: 202 (1550ms) - async processing required (not supported)
-❌ Complex Aggregation: 500 (1538ms) - Internal server error in downstream service
-❌ KPI Aggregation: 202 (1347ms) - Null body
-```
-
-**Impact:**
-- Cannot perform server-side GROUP BY operations
-- Cannot get SUM/AVG/COUNT aggregates from API
-- Must fetch ALL raw data and aggregate client-side
-- 10-minute operations that should take 10 seconds
-
-**Workaround Required:**
 ```python
-# Instead of this (doesn't work):
-result = await client.aggregate(
-    table_id="TABLE_ID",
-    dimensions=["Account L1", "Month"],
-    metrics=[{"field": "Amount", "agg": "SUM"}]
-)
+async def aggregate_with_polling(table_id, dimensions, metrics, filters=None):
+    """Correct way to call the aggregation API."""
+    # Step 1: POST to trigger aggregation
+    resp = await client.post(
+        f"{base_url}/finance-os/api/tables/v1/{table_id}/aggregate",
+        headers=auth_headers,
+        json={"dimensions": dimensions, "metrics": metrics, "filters": filters or []},
+    )
 
-# Must do this (slow but works):
-all_data = await paginate_all_records(table_id="TABLE_ID")  # 54K records
-aggregated = defaultdict(float)
-for record in all_data:
-    key = (record["Account L1"], record["Month"])
-    aggregated[key] += record["Amount"]
+    if resp.status_code == 200:
+        return resp.json()  # Synchronous result (rare)
+
+    if resp.status_code == 202:
+        location = resp.headers["location"]
+        # Location is relative: /tables/v1/{id}/aggregate/{base64_payload}
+        # Needs /finance-os/api prefix for the poll URL
+        poll_url = f"{base_url}/finance-os/api{location}"
+
+        # Step 2: Poll for results
+        while True:
+            await asyncio.sleep(3)
+            poll_resp = await client.get(poll_url, headers=auth_headers)
+
+            if poll_resp.status_code == 200:
+                return poll_resp.json()  # Results ready!
+            elif poll_resp.status_code == 202:
+                continue  # Still processing
+            else:
+                raise Exception(f"Poll failed: {poll_resp.status_code}")
 ```
+
+### Key Details
+
+- **Location header is relative**: Starts with `/tables/v1/...`, needs `/finance-os/api` prefix
+- **Location payload is base64**: Contains the full downstream request config
+- **Typical timing**: ~5 seconds (1 poll at 3s interval)
+- **Max observed**: ~18 seconds (4 polls) for `Latest_In_Dim` boolean field
+- **Multi-dimension queries**: Work fine with compatible fields
+
+### Response Format
+
+```json
+{
+  "success": true,
+  "data": [
+    {"Scenario": "Actuals", "Amount": 5593528663.83},
+    {"Scenario": "Forecast", "Amount": 1088516730.44},
+    {"Amount": 6682045394.27},           // Total row (when include_totals=true)
+    {"col_keys": [], "row_keys": [...]}  // Metadata row
+  ],
+  "metadata": {...},
+  "error": null
+}
+```
+
+Note: The response includes extra rows at the end (totals row + metadata row).
 
 ---
 
-### 2. JWT Token Expiry Without Warning
+## Field Compatibility (Tested Feb 8, 2026)
 
-**Severity:** 🔴 CRITICAL
+### Working Fields: 212/220 (96.4%)
+
+All standard fields work including:
+- System fields: `Scenario`, `Reporting Date`, `System_Year`, `Fiscal Period`, etc.
+- Account fields: `DR_ACC_L0`, `DR_ACC_L_0.5`, `DR_ACC_L1.5`, `Account ID`, `Account Name`
+- Department fields: `Department L1`, `Department L2`, `Cost Center`
+- Numeric fields: `Amount`, `DEBIT`, `CREDIT`, `FX Rate`, etc.
+
+### Failed Fields: 8/220
+
+| Field | Failure Mode | Likely Cause |
+|-------|-------------|-------------|
+| `DR_ACC_L1` | 202 -> poll 500 | Server-side computation error |
+| `DR_ACC_L2` | 202 -> poll 500 | Server-side computation error |
+| `CF Grouping` | POST 500 | Server-side error |
+| `CF Grouping 2` | 202 -> poll 500 | Server-side error |
+| `Report_Field` | POST 500 | Server-side error |
+| `USER_ACC_P&L` | POST 500 | HTML entity `&amp;` in field name |
+| `P&L Accounts Filter` | POST 500 | HTML entity `&amp;` in field name |
+| `Quarter & Year` | POST 500 | HTML entity `&amp;` in field name |
+
+**Workaround for `DR_ACC_L1`/`DR_ACC_L2`**: Use `DR_ACC_L_0.5` or `DR_ACC_L1.5` as alternatives, or fetch raw data and group client-side for these specific fields.
+
+---
+
+## Remaining Issues
+
+### 1. JWT Token Expiry Without Warning
+
+**Severity:** 🟠 HIGH
 
 JWT tokens expire after exactly **5 minutes** with no refresh mechanism exposed. Long-running operations fail silently.
 
@@ -80,20 +137,17 @@ JWT tokens expire after exactly **5 minutes** with no refresh mechanism exposed.
 
 **Impact:**
 - Operations taking > 5 minutes will fail partway through
-- No automatic token refresh
 - Must manually refresh every 20K rows or 4 minutes
-- Lost work if not handled properly
 
-**Workaround Required:**
+**Workaround:**
 ```python
-# Must refresh token proactively
 if offset > 0 and offset % 20000 == 0:
     await auth.ensure_valid_token()
 ```
 
 ---
 
-### 3. Distinct Values Endpoint Fails
+### 2. Distinct Values Endpoint Fails
 
 **Severity:** 🟠 HIGH
 
@@ -107,16 +161,15 @@ Error: HTTP 409 error from downstream service
 
 **Impact:**
 - Cannot discover unique values for filters
-- Cannot build dynamic filter dropdowns
 - Must fetch sample data and extract unique values manually
 
 ---
 
-### 4. Extremely Slow Data Extraction
+### 3. Slow Paginated Data Extraction
 
-**Severity:** 🟠 HIGH
+**Severity:** 🟡 MEDIUM
 
-Due to aggregation API failures, we must paginate through ALL records:
+Due to 500-record page limits, large table extraction is slow:
 
 | Metric | Value |
 |--------|-------|
@@ -125,130 +178,83 @@ Due to aggregation API failures, we must paginate through ALL records:
 | Total Time | **10.1 minutes** |
 | Throughput | 90 records/second |
 
-**Breakdown:**
-- Average page fetch: ~5.4 seconds
-- Token refreshes: 4
-- 401 errors handled: 2
+**Note:** With working aggregation, many use cases no longer need full extraction.
 
-**Expected vs Actual:**
-| Operation | Expected | Actual | Overhead |
-|-----------|----------|--------|----------|
-| Simple aggregation | ~2 seconds | N/A (fails) | ∞ |
-| Full data extract | ~30 seconds | 604 seconds | **20x** |
-| Report generation | ~1 minute | 10+ minutes | **10x** |
+---
+
+### 4. HTML Entities in Field Names
+
+**Severity:** 🟡 MEDIUM
+
+Some field names contain HTML entities (`&amp;` instead of `&`):
+- `USER_ACC_P&L` stored as `USER_ACC_P&amp;L`
+- `P&L Accounts Filter` stored as `P&amp;L Accounts Filter`
+- `Quarter & Year` stored as `Quarter &amp; Year`
+
+These fields cause 500 errors in aggregation. Needs investigation on whether sending the HTML-encoded name works.
 
 ---
 
 ### 5. Inconsistent Error Responses
 
-**Severity:** 🟡 MEDIUM
+**Severity:** 🟢 LOW
 
-The API returns different error formats and status codes for similar failures:
+The API returns different error formats:
 
 | Endpoint | Error Format |
 |----------|-------------|
-| Aggregation | `{"success": false, "data": null, "error": {...}}` |
+| Aggregation 500 | `{"success": false, "data": null, "error": {...}}` |
 | 202 Accepted | `null` body |
-| 500 Error | Full error object |
-| 401 Token Expired | Sometimes empty body |
-
-**Impact:**
-- Complex error handling required
-- Must handle null responses, empty bodies, and various formats
-- Brittle parsing code
-
----
-
-### 6. No Async Polling Support
-
-**Severity:** 🟡 MEDIUM
-
-When aggregation returns `202 Accepted`, it indicates the server is processing asynchronously, but there's **no documented way to poll for results**.
-
-**What would be needed:**
-```python
-# This doesn't exist
-result = await client.aggregate(...)  # Returns 202
-poll_url = result.headers["Location"]
-while True:
-    status = await client.get(poll_url)
-    if status.complete:
-        return status.data
-    await asyncio.sleep(1)
-```
-
----
-
-## Moderate Issues
-
-### 7. No Batch/Bulk Operations
-
-**Severity:** 🟡 MEDIUM
-
-There's no way to fetch multiple pages in a single request. Must make 111 separate API calls for 54K records.
-
-**Impact:**
-- Network latency multiplied by page count
-- Connection overhead per request
-- Rate limiting concerns
-
----
-
-### 8. 500-Record Page Limit
-
-**Severity:** 🟢 LOW
-
-The maximum page size is 500 records. Larger page sizes would reduce total requests.
-
-**Impact:**
-- 111 requests instead of potentially 11 (with 5000 limit)
-- More network overhead
-- More token refresh cycles
-
----
-
-### 9. No Query Caching
-
-**Severity:** 🟢 LOW
-
-Repeated identical queries re-execute fully. No server-side caching evident.
-
-**Impact:**
-- Same slow performance on repeated operations
-- No benefit from warm-up queries
+| 401 Token Expired | JSON error object |
 
 ---
 
 ## Performance Benchmarks
 
-### Data Pagination Test
+### Aggregation API (Async Polling)
 
-```
-Test: Full Data Pagination (all records)
-Records: 54,390
-Time: 604.3 seconds (10.1 minutes)
-Rate: 90 records/second
-Token Refreshes: 4
-401 Errors Recovered: 2
-```
+| Query Type | Time | Polls |
+|-----------|------|-------|
+| Zero dimensions (SUM, COUNT) | ~4s | 1 |
+| Single dimension (Scenario) | ~4s | 1 |
+| Single dimension (Reporting Date) | ~4s | 1 |
+| Boolean dimension (Latest_In_Dim) | ~18s | 4 |
+| Multi-dimension (2 fields) | ~5s | 1 |
+| High-cardinality (Journal Number, 91K groups) | ~8s | 1 |
 
-### API Response Times
+### Data Pagination
 
-| Endpoint | Avg Response Time | Notes |
-|----------|-------------------|-------|
-| List Tables | 488ms | Works reliably |
-| Get Schema | 444ms | Works reliably |
-| Distinct Values | 1437ms | **FAILS** (409) |
-| Aggregation (simple) | 1550ms | **FAILS** (202) |
-| Aggregation (complex) | 1538ms | **FAILS** (500) |
-| Data (single page) | 3133ms | Works |
-| Data (concurrent 5) | 3728ms | Works |
+| Metric | Value |
+|--------|-------|
+| Average page fetch | ~5.4 seconds |
+| Token refreshes needed (54K rows) | 4 |
 
 ---
 
 ## Workarounds Implemented
 
-### 1. Client-Side Aggregation
+### 1. Async Polling for Aggregation (NEW - Feb 8, 2026)
+
+The MCP client now handles the 202 + Location header pattern automatically:
+
+```python
+async def _request_async_poll(self, endpoint, json_data, poll_interval=3.0, max_polls=20):
+    """POST with async polling for long-running tasks."""
+    response = await client.post(url, headers=headers, json=json_data)
+
+    if response.status_code == 202:
+        location = response.headers.get("location")
+        poll_url = f"{base_url}/finance-os/api{location}"
+
+        for _ in range(max_polls):
+            await asyncio.sleep(poll_interval)
+            poll_resp = await client.get(poll_url, headers=headers)
+            if poll_resp.status_code == 200:
+                return poll_resp.json()
+```
+
+### 2. Client-Side Aggregation (Fallback for DR_ACC_L1/L2)
+
 ```python
 def _aggregate_client_side(data, group_by, sum_field):
     aggregated = defaultdict(float)
@@ -258,98 +264,48 @@ def _aggregate_client_side(data, group_by, sum_field):
     return [dict(zip(group_by, k), **{sum_field: v}) for k, v in aggregated.items()]
 ```
 
-### 2. Paginated Data Fetch with Token Refresh
+### 3. Paginated Data Fetch with Token Refresh
+
 ```python
 async def fetch_all_data(table_id, filters, max_rows=100000):
     all_data = []
     offset = 0
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        while len(all_data) < max_rows:
-            # Refresh token every 20K rows
-            if offset > 0 and offset % 20000 == 0:
-                await auth.ensure_valid_token()
-
-            # Retry logic for transient failures
-            for attempt in range(3):
-                resp = await client.post(url, headers=auth.get_headers(), json={...})
-
-                if resp.status_code == 401:
-                    await auth.ensure_valid_token()
-                    continue
-
-                if resp.status_code == 502:
-                    await asyncio.sleep(2)
-                    continue
-
-                break
-
-            page = resp.json().get("data", [])
-            all_data.extend(page)
-
-            if len(page) < 500:
-                break
-            offset += 500
-
+    while len(all_data) < max_rows:
+        if offset > 0 and offset % 20000 == 0:
+            await auth.ensure_valid_token()
+        page = await fetch_page(table_id, filters, limit=500, offset=offset)
+        if not page:
+            break
+        all_data.extend(page)
+        offset += 500
     return all_data
-```
-
-### 3. Robust Error Handling
-```python
-def parse_response(result):
-    if result is None:
-        return []
-    if isinstance(result, str) and result.strip() in ('', 'null'):
-        return []
-    if isinstance(result, dict) and "error" in result:
-        return []
-    if isinstance(result, dict) and "data" in result:
-        return result["data"] if isinstance(result["data"], list) else []
-    return result if isinstance(result, list) else []
 ```
 
 ---
 
 ## Recommendations for Datarails Engineering
 
-### Priority 1: Fix Aggregation API
+### Priority 1: Fix DR_ACC_L1 / DR_ACC_L2 Aggregation
 
-The aggregation endpoint returning 202 or 500 makes the API nearly unusable for analytics. Either:
+These are the most commonly used account hierarchy fields but cause 500 errors during aggregation polling. This is likely a server-side computation or timeout issue.
 
-1. **Make it synchronous** - Return results directly for small datasets
-2. **Implement proper async polling** - Return a job ID and status endpoint
-3. **Increase timeout** - The current timeout seems too aggressive
+### Priority 2: Fix HTML Entity Encoding in Field Names
 
-### Priority 2: Increase Page Size
+Fields containing `&` are stored with `&amp;` encoding, which breaks aggregation. Either:
+1. Store raw `&` in field names
+2. Accept both `&` and `&amp;` in API requests
 
-Allow page sizes up to 5,000 or 10,000 records:
-- Would reduce requests from 111 to 11
-- Would dramatically improve extraction time
-- Standard practice for bulk data APIs
+### Priority 3: Increase Page Size Limit
 
-### Priority 3: Implement Batch Endpoints
+Allow page sizes up to 5,000 or 10,000 records for bulk extraction.
 
-Add endpoints for bulk operations:
-```
-POST /tables/v1/{id}/data/batch
-{
-  "requests": [
-    {"offset": 0, "limit": 5000},
-    {"offset": 5000, "limit": 5000},
-    ...
-  ]
-}
-```
-
-### Priority 4: Fix Distinct Values
+### Priority 4: Fix Distinct Values Endpoint
 
 The 409 error on distinct values endpoint should be investigated.
 
 ### Priority 5: Longer Token Expiry
 
-5-minute JWT expiry is too short for data operations. Recommend:
-- 30-minute expiry for API tokens
-- Or implement automatic token refresh endpoint
+5-minute JWT expiry is too short for data operations. Recommend 30-minute expiry.
 
 ---
 
@@ -358,21 +314,18 @@ The 409 error on distinct values endpoint should be investigated.
 ```
 Environment: app (Production)
 Base URL: https://app.datarails.com
-Financials Table: TABLE_ID (54,390 records)
-KPIs Table: 34298 (973 records)
-Test Date: 2026-02-05
-Test Duration: ~15 minutes
+Financials Table: TABLE_ID (54,390 records, 220+ fields)
+Test Dates: 2026-02-05 (initial), 2026-02-08 (aggregation retest)
 ```
 
 ---
 
-## Files Generated
+## Change Log
 
-| File | Description |
-|------|-------------|
-| `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` | This report |
-| `tmp/API_Diagnostic_Report_20260205_112322.txt` | Raw test output |
-| `mcp-server/scripts/api_diagnostic.py` | Diagnostic tool |
+| Date | Change |
+|------|--------|
+| 2026-02-05 | Initial report - aggregation marked as broken |
+| 2026-02-08 | **Major update**: Aggregation works via async polling (POST 202 + Location -> GET poll). 212/220 fields work. Updated client code. |
 
 ---
 

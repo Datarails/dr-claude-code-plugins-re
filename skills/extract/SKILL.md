@@ -62,17 +62,20 @@ If no profile exists for the target environment:
 | `--year <YYYY>` | Calendar year to extract | Current year |
 | `--env <env>` | Environment: dev, demo, testapp, app | Active |
 
-## CRITICAL: Data Extraction Approach
+## Data Extraction Approach
 
-**The aggregation API (`/aggregate`) often returns 500 errors or requires async polling.**
-
-**Working Solution**: Use pagination via `/data` endpoint with filters:
+This skill extracts **raw records** for Excel workbooks, so pagination is the primary method. However, aggregation can be used for summary sheets.
 
 ```
-PREFERRED: Paginate via get_records_by_filter with System_Year filter
+RAW DATA: Paginate via get_records_by_filter with System_Year filter
 - Fetch 500 rows per page
 - Re-authenticate every ~20K rows to avoid token expiry
-- Aggregate results client-side in Python
+- This is the correct approach for raw data extraction
+
+SUMMARY SHEETS: Use aggregation API (~5 seconds per query)
+- For P&L summary totals
+- For category breakdowns
+- Check profile.aggregation.field_alternatives for fields that fail
 ```
 
 ## Workflow
@@ -241,8 +244,8 @@ Small differences are normal due to:
 - Rounding in KPI calculations
 - Adjustments posted to P&L but not reflected in KPIs
 
-### Aggregation API returns 500
-This is a known issue. The script uses the pagination approach via `/data` endpoint instead.
+### Aggregation API returns 500 for a field
+Some fields fail per-client. Run `/dr-test` to discover which fields work. The script uses pagination for raw data extraction regardless.
 
 ### Wrong table or field names
 Edit the profile directly: `config/client-profiles/<env>.json`

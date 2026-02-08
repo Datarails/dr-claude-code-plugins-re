@@ -9,6 +9,7 @@ allowed-tools:
   - mcp__datarails-finance-os__get_field_distinct_values
   - mcp__datarails-finance-os__get_sample_records
   - mcp__datarails-finance-os__profile_categorical_fields
+  - mcp__datarails-finance-os__aggregate_table_data
   - Write
   - Read
   - AskUserQuestion
@@ -191,10 +192,55 @@ Map common KPIs:
 - LTV, LTV/CAC
 - Gross Profit
 
-### Phase 6: Save Profile
+### Phase 6: Aggregation Compatibility Discovery
 
-#### Step 15: Generate Profile JSON
-Create the profile structure:
+After discovering tables and fields, test which fields work with the aggregation API. This enables fast (~5s) queries for all downstream commands and skills.
+
+#### Step 15: Test Key Fields with Aggregation
+
+For each mapped field (account_l0, account_l1, account_l2, date, scenario, department_l1, cost_center), run a quick aggregation test:
+
+```
+Use: mcp__datarails-finance-os__aggregate_table_data
+Parameters:
+  table_id: <financials_table_id>
+  dimensions: ["<field_name>"]
+  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  filters: [
+    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false}
+  ]
+```
+
+Record PASS or FAIL for each field.
+
+#### Step 16: Discover Alternative Fields
+
+For failed fields (especially account hierarchy fields):
+- Look in the schema for similar fields (e.g., "DR_ACC_L1.5", "Account Category Alt")
+- Test alternatives with aggregation
+- If an alternative works, map it: e.g., `"account_l1_5": "DR_ACC_L1.5"`
+
+#### Step 17: Build Aggregation Hints
+
+Create the aggregation section for the profile:
+```json
+"aggregation": {
+  "supported": true,
+  "failed_fields": ["<actual_field_names_that_failed>"],
+  "field_alternatives": {
+    "account_l1": "account_l1_5",
+    "account_l2": "account_l1_5"
+  },
+  "tested_at": "<ISO 8601 timestamp>"
+}
+```
+
+If any new alternative fields were discovered, add them to `field_mappings` too.
+
+### Phase 7: Save Profile
+
+#### Step 18: Generate Profile JSON
+Create the profile structure, including the aggregation hints discovered in Phase 6:
 
 ```json
 {
@@ -223,6 +269,7 @@ Create the profile structure:
     "account_l0": "<field_name>",
     "account_l1": "<field_name>",
     "account_l2": "<field_name>",
+    "account_l1_5": "<field_name if discovered>",
     "kpi_name": "<field_name>",
     "kpi_value": "<field_name>",
     "quarter": "<field_name>"
@@ -233,6 +280,16 @@ Create the profile structure:
     "revenue": "<value>",
     "cogs": "<value>",
     "opex": "<value>"
+  },
+
+  "aggregation": {
+    "supported": true,
+    "failed_fields": ["<fields_that_returned_500>"],
+    "field_alternatives": {
+      "account_l1": "account_l1_5",
+      "account_l2": "account_l1_5"
+    },
+    "tested_at": "<ISO timestamp>"
   },
 
   "kpi_definitions": {
@@ -247,14 +304,14 @@ Create the profile structure:
 }
 ```
 
-#### Step 16: Write Profile
+#### Step 19: Write Profile
 ```
 Use: Write
 file_path: config/client-profiles/<env>.json
 content: <generated_profile>
 ```
 
-#### Step 17: Confirmation
+#### Step 20: Confirmation
 Display summary:
 ```
 Profile saved to config/client-profiles/<env>.json
@@ -265,8 +322,11 @@ Summary:
 - Fields mapped: <count>
 - Scenarios: <list>
 - Years available: <list>
+- Aggregation: <X>/<Y> fields supported
+- Alternatives: <list of alternatives discovered>
 
 You can now use /dr-extract --env <env> to extract financial data.
+For detailed aggregation testing, run /dr-test --env <env>.
 ```
 
 ## Example Interaction
