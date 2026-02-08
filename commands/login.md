@@ -4,51 +4,33 @@ description: Connect to Datarails - simple browser-based login (no terminal requ
 
 # Connect to Datarails
 
-Help the user connect to their Datarails account using browser-based authentication. This is the Cowork-friendly login flow - no terminal or CLI required.
+Help the user connect to their Datarails account using browser-based authentication.
 
-## Step 1: Check Current Status
+## What To Do Now
 
-First, check if already connected:
+Call the `check_auth_status` tool to see if the user is already connected:
 
 ```
 Use: mcp__datarails-finance-os__check_auth_status
 ```
 
-**If authenticated:** Tell the user they're already connected and ask what they'd like to do.
+**If authenticated:** Tell the user they're already connected, show the environment name, and suggest these commands:
+- `/datarails-finance-os:financial-summary` - Quick overview of your finances
+- `/datarails-finance-os:expense-analysis` - Analyze your expenses
+- `/datarails-finance-os:revenue-trends` - See revenue trends
+- `/datarails-finance-os:data-check` - Check data quality
 
-**If not authenticated:** Continue to Step 2.
+Then STOP. Do not call any other tools.
 
-## Step 2: Guide Browser Login
-
-Tell the user:
-
-> To connect your Datarails account, I need you to:
->
-> 1. **Open Datarails** in a new browser tab: https://app.datarails.com
-> 2. **Log in** with your credentials
-> 3. **Stay on that page** after logging in
->
-> Let me know when you're logged in and I'll help you complete the connection.
-
-## Step 3: Get Cookie Extraction Script
-
-When user confirms they're logged in:
-
-```
-Use: mcp__datarails-finance-os__get_cookie_extraction_script
-```
-
-This returns JavaScript code and instructions.
-
-## Step 4: Guide Cookie Extraction
+**If not authenticated:** Show the user these instructions and then STOP. Do NOT call any other tools after this - wait for the user to reply.
 
 Tell the user:
 
-> Great! Now I need to securely connect to your session. Here's how:
+> You're not connected to Datarails yet. Here's how to connect:
 >
-> 1. On the Datarails page, **press F12** (or right-click → Inspect) to open Developer Tools
-> 2. Click the **Console** tab
-> 3. **Paste this code** and press Enter:
+> **1. Log into Datarails** in a new browser tab at https://app.datarails.com
+>
+> **2. Extract your session cookies** - once logged in, press F12 to open Developer Tools, click the Console tab, and paste this code:
 >
 > ```javascript
 > (function() {
@@ -59,56 +41,36 @@ Tell the user:
 >   }, {});
 >   console.log('Session ID:', cookies.sessionid);
 >   console.log('CSRF Token:', cookies.csrftoken);
->   return { sessionid: cookies.sessionid, csrftoken: cookies.csrftoken };
 > })();
 > ```
 >
-> 4. **Copy the two values** that appear (Session ID and CSRF Token)
-> 5. **Paste them here** and I'll complete the connection
+> **3. Copy and paste both values here** (the Session ID and CSRF Token that appear in the console).
 
-## Step 5: Store Credentials
+IMPORTANT: After showing these instructions, STOP and wait for the user to reply with their cookie values. Do NOT call any more tools until the user provides their session_id and csrf_token.
 
-When user provides the session_id and csrf_token values:
+## When The User Provides Cookie Values
+
+When the user replies with their session_id and csrf_token values, store them:
 
 ```
 Use: mcp__datarails-finance-os__set_auth_cookies
 Parameters:
-  session_id: <the sessionid value user provided>
-  csrf_token: <the csrftoken value user provided>
+  session_id: <the sessionid value>
+  csrf_token: <the csrftoken value>
 ```
 
-## Step 6: Verify Connection
-
-After storing cookies:
+Then verify the connection:
 
 ```
 Use: mcp__datarails-finance-os__check_auth_status
 ```
 
-**If successful:**
+If successful, tell the user they're connected and suggest the commands listed above.
 
-> You're now connected to Datarails! Your session will stay active for several days.
->
-> Here's what you can do:
-> - `/datarails-finance-os:financial-summary` - Get a quick overview of your finances
-> - `/datarails-finance-os:expense-analysis` - Analyze your expenses
-> - `/datarails-finance-os:revenue-trends` - See revenue trends
-> - `/datarails-finance-os:data-check` - Check data quality
->
-> What would you like to explore?
-
-**If failed:** Ask user to try again, making sure they copied the correct values.
+If failed, ask the user to double-check they copied the correct values and try again.
 
 ## Troubleshooting
 
-**"sessionid is undefined"**
-- User may not be fully logged in
-- Ask them to refresh the Datarails page and try again
+If the user says "sessionid is undefined": they may not be fully logged in. Ask them to refresh the Datarails page and try the JavaScript again.
 
-**"cookies.sessionid is empty"**
-- Browser may be blocking cookies
-- Ask user to check they're on the correct domain (app.datarails.com)
-
-**Connection expires**
-- Session cookies last days/weeks
-- If expired, just run `/datarails-finance-os:login` again
+If the user says "cookies.sessionid is empty": browser may be blocking cookies. Ask them to check they're on app.datarails.com (not a different subdomain).
