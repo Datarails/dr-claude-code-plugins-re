@@ -72,17 +72,24 @@ If no profile exists for the target environment:
 }
 ```
 
-## CRITICAL: Data Extraction Approach
+## Data Extraction Approach: Aggregation-First
 
-**The aggregation API (`/aggregate`) often returns 500 errors or requires async polling.**
+**The aggregation API works via async polling (~5 seconds per query).** Some fields may fail per-client; the profile tracks which fields work and provides alternatives.
 
-**Working Solution**: Use pagination via `/data` endpoint with filters:
+### Strategy
+1. **Try aggregation first** - fast (~5s), complete totals
+2. **Check profile for alternatives** - if a field fails, use `aggregation.field_alternatives` mapping
+3. **Fall back to pagination** - only for Raw Data sheet or if aggregation is marked unsupported
 
 ```
-PREFERRED: Paginate via get_records_by_filter with System_Year filter
+PREFERRED: Aggregation API via client.aggregate() or aggregate_table_data MCP tool
+- ~5 seconds per query, returns complete grouped totals
+- Check profile.aggregation.field_alternatives for failed fields
+- Multiple queries can run in parallel via asyncio.gather()
+
+FALLBACK: Pagination via get_records_by_filter (only for raw data or unsupported fields)
 - Fetch 500 rows per page
 - Re-authenticate every ~20K rows to avoid token expiry (5 min JWT)
-- Aggregate results client-side in Python
 ```
 
 ## Workflow
@@ -101,6 +108,7 @@ Read: config/client-profiles/<env>.json
 
 If profile exists:
   - Load table IDs and field mappings
+  - Load aggregation hints (aggregation.field_alternatives, aggregation.failed_fields)
   - Continue to extraction
 
 If profile does NOT exist:
@@ -108,37 +116,37 @@ If profile does NOT exist:
   - Stop execution
 ```
 
-### Phase 2: Data Extraction
+### Phase 2: Data Extraction (Aggregation-First)
 
-#### Step 3: Fetch P&L Data (Paginated)
+#### Step 3: Fetch P&L Data via Aggregation
 ```python
-# Fetch ALL records using pagination (aggregation API unreliable)
-all_data = []
-offset = 0
-while True:
-    # Refresh token every 20K rows
-    if offset % 20000 == 0:
-        await auth.ensure_valid_token()
+# Use profile's field_alternatives if a field is known to fail
+agg_hints = profile.get("aggregation", {})
+account_field = fields["account_l1"]
+if account_field in agg_hints.get("failed_fields", []):
+    alt_key = agg_hints.get("field_alternatives", {}).get("account_l1")
+    if alt_key:
+        account_field = fields.get(alt_key, account_field)
 
-    page = await fetch_page(offset=offset, limit=500)
-    if not page:
-        break
-    all_data.extend(page)
-    offset += 500
+# Run multiple aggregation queries in parallel (~5s total)
+monthly_task = client.aggregate(table_id, [date_field, account_field], ...)
+vendor_task = client.aggregate(table_id, ["Vendor / Customer"], ...)
+cc_task = client.aggregate(table_id, [cost_center_field, account_field], ...)
+
+monthly, vendors, cost_centers = await asyncio.gather(monthly_task, vendor_task, cc_task)
 ```
 
 #### Step 4: Fetch KPI Data
 ```
-Similar pagination approach for KPI table
+Use aggregation for KPIs, fall back to pagination if needed
 ```
 
-#### Step 5: Client-Side Aggregation
+#### Step 5: Fall Back to Pagination (only if aggregation fails)
 ```python
-# Since server aggregation fails, aggregate in Python
-aggregated = defaultdict(float)
-for record in all_data:
-    key = (record["Account L1"], record["Month"])
-    aggregated[key] += record["Amount"]
+# Only if aggregation is marked unsupported in profile or returns errors
+if not agg_hints.get("supported", True):
+    raw_data = await fetch_all_paginated(table_id, filters, max_rows=100000)
+    aggregated = aggregate_client_side(raw_data, group_by, sum_field)
 ```
 
 ### Phase 3: Intelligence Calculation
@@ -250,16 +258,15 @@ The workbook automatically detects and surfaces:
 - **Financials Table** - P&L data (Revenue, COGS, OpEx by month/account/cost center)
 - **KPIs Table** - ARR, Churn, LTV, CAC, Revenue by quarter
 
-### Pagination & Performance
-- Fetches ALL records using pagination (500/page)
-- Auto-refreshes JWT token every 20K rows
+### Data Access & Performance
+- **Primary:** Aggregation API (~5s per query, runs in parallel)
+- Uses profile `aggregation.field_alternatives` for fields that fail
+- **Fallback:** Pagination (500/page) with auto JWT refresh every 20K rows
 - Implements retry logic for API errors
-- Client-side aggregation (server aggregation API unreliable)
 
 ### Processing Time
-- Small datasets (< 10K rows): ~2 minutes
-- Medium datasets (10-50K rows): ~5 minutes
-- Large datasets (50K+ rows): ~10 minutes
+- **With aggregation (most cases):** ~30 seconds total
+- **With pagination fallback:** ~10 minutes for 50K+ rows
 
 ## Why This Matters
 
@@ -289,8 +296,9 @@ This workbook answers the **Top 10 Business Questions**:
 - Run `/dr-auth --env app` first
 
 **Takes too long**
-- Normal for large datasets (50K+ records = ~10 min)
-- Aggregation API is broken, must fetch all raw data
+- With aggregation: should complete in ~30 seconds
+- If falling back to pagination: 50K+ records = ~10 min
+- Run `/dr-test` to check which fields support aggregation
 
 **Missing data in sheets**
 - Check if profile has correct field mappings
@@ -346,8 +354,7 @@ uv --directory mcp-server run python scripts/intelligence_workbook.py --year 202
 
 ### Expected Runtime
 
-- **Small datasets** (< 10K rows): ~2 minutes
-- **Medium datasets** (10-50K rows): ~5 minutes
-- **Large datasets** (50K+ rows): ~10 minutes
+- **With aggregation (typical):** ~30 seconds
+- **With pagination fallback:** ~10 minutes for 50K+ rows
 
 The script outputs progress as it runs, so the user can see it's working.

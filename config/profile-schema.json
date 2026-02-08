@@ -118,6 +118,31 @@
       },
       "additionalProperties": true
     },
+    "aggregation": {
+      "type": "object",
+      "description": "Per-client aggregation API compatibility info discovered by /dr-learn or /dr-test",
+      "properties": {
+        "supported": {
+          "type": "boolean",
+          "description": "Whether the aggregation API works for this environment"
+        },
+        "failed_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Actual field names that cause 500 errors in aggregation"
+        },
+        "field_alternatives": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Mapping from failed semantic field to working alternative. E.g. account_l1 -> account_l1_5"
+        },
+        "tested_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When aggregation compatibility was last tested"
+        }
+      }
+    },
     "last_updated": {
       "type": "string",
       "format": "date-time",

@@ -1,10 +1,10 @@
 ---
-description: Get a quick summary of your financial data - revenue, expenses, and key metrics
+description: Get a quick summary of your financial data - revenue, expenses, and key metrics using real aggregated totals
 ---
 
 # Financial Summary
 
-Generate a quick overview of the user's financial data. Perfect for a morning check-in or preparing for a meeting.
+Generate a quick overview of the user's financial data with real aggregated totals. Perfect for a morning check-in or preparing for a meeting.
 
 ## Step 1: Verify Connection
 
@@ -24,32 +24,55 @@ Look for tables that contain:
 - Financial/P&L data (usually named "Financials", "P&L", "Income Statement")
 - KPI metrics (usually named "KPIs", "Metrics", "Dashboard")
 
-## Step 3: Get Table Overview
+## Step 3: Understand the Structure
 
-For the main financials table found:
+Get the table schema to discover field names:
 
 ```
-Use: mcp__datarails-finance-os__profile_table_summary
+Use: mcp__datarails-finance-os__get_table_schema
 Parameters:
   table_id: <financials_table_id>
 ```
 
-This gives row counts, column info, and data quality metrics.
+Identify key fields:
+- **Amount field** (e.g., "Amount")
+- **Account hierarchy field** (e.g., "DR_ACC_L0", "DR_ACC_L1" or similar)
+- **Scenario field** (e.g., "Scenario")
+- **Date field** (e.g., "Reporting Date")
 
-## Step 4: Fetch Sample Data
+## Step 4: Get Real Financial Totals via Aggregation
 
-Get a sample to understand the data structure:
+Use the aggregation API to get complete, accurate totals (not estimates from samples):
 
 ```
-Use: mcp__datarails-finance-os__get_sample_records
+Use: mcp__datarails-finance-os__aggregate_table_data
 Parameters:
   table_id: <financials_table_id>
-  n: 20
+  dimensions: ["<account_l1_field>"]
+  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  filters: [
+    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false}
+  ]
 ```
 
-## Step 5: Get Key Metrics
+This returns real totals grouped by account category in ~5 seconds.
 
-If a KPI table exists, fetch sample KPI data:
+## Step 5: Get Monthly Trend Data
+
+```
+Use: mcp__datarails-finance-os__aggregate_table_data
+Parameters:
+  table_id: <financials_table_id>
+  dimensions: ["<date_field>", "<account_l1_field>"]
+  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  filters: [
+    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false}
+  ]
+```
+
+## Step 6: Get Key KPI Metrics (if available)
+
+If a KPI table exists:
 
 ```
 Use: mcp__datarails-finance-os__get_sample_records
@@ -58,27 +81,40 @@ Parameters:
   n: 20
 ```
 
-## Step 6: Present Summary
+## Step 7: Present Summary
 
-Create a friendly summary for the user:
+Create a friendly summary with real numbers:
 
 > ## Your Financial Snapshot
 >
-> **Data Available:**
-> - [X] records in your financials table
-> - Covering dates from [earliest] to [latest]
-> - [Y] different accounts tracked
+> **Real Totals (Actuals):**
+> - Revenue: $[real_total]
+> - Cost of Goods Sold: $[real_total]
+> - Operating Expenses: $[real_total]
+> - Gross Profit: $[calculated]
+> - Gross Margin: [calculated]%
 >
-> **At a Glance:**
-> Based on your recent data:
-> - Revenue categories: [list top 3]
-> - Expense categories: [list top 3]
+> **Monthly Trend:**
+> - [X] months of data available
+> - Most recent month: [month] - Revenue $[amount]
+> - Revenue direction: [Growing/Stable/Declining]
+>
+> **Data Quality:**
 > - Data quality: [Good/Fair/Needs attention]
 >
 > **Want to dig deeper?**
 > - `/datarails-finance-os:expense-analysis` - Detailed expense breakdown
 > - `/datarails-finance-os:revenue-trends` - Revenue trends over time
+> - `/datarails-finance-os:budget-comparison` - Compare to budget
 > - `/datarails-finance-os:data-check` - Full data quality report
+
+## Handling Aggregation Failures
+
+If the aggregation call returns an error for a specific field:
+1. Try using a different account hierarchy field (e.g., "DR_ACC_L1.5" instead of "DR_ACC_L1")
+2. If all aggregation fails, fall back to `get_sample_records` and note that totals are estimated:
+
+> **Note:** These are estimates based on a data sample. For complete totals, the aggregation API needs to be tested with `/datarails-finance-os:test-api`.
 
 ## Handling Missing Data
 
@@ -91,6 +127,7 @@ If no financials table found:
 
 ## Tips for Users
 
-- This command gives a quick overview - for detailed analysis, use the specific commands
+- This command shows real aggregated totals, not estimates from samples
 - Data refreshes when you run the command - always shows current state
+- Results typically arrive in about 5 seconds
 - If something looks wrong, try `/datarails-finance-os:data-check` to investigate

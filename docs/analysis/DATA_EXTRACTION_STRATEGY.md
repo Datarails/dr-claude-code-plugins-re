@@ -1,10 +1,68 @@
-# Data Extraction Strategy: Caching & Incremental Updates
+# Data Extraction Strategy: Two-Tier Access Model
 **Discovery Date:** February 4, 2026
-**Status:** Records are FIXED and STABLE
+**Updated:** February 8, 2026 - Added Aggregation API (Tier 1)
+**Status:** Records are FIXED and STABLE; Aggregation API WORKS via async polling
 
 ---
 
-## Critical Discovery
+## Two-Tier Data Access Model
+
+### Tier 1: Aggregation API (Fast - ~5 seconds)
+
+**Discovered Feb 8, 2026:** The aggregation API works via async polling (POST 202 + Location header, poll GET for results).
+
+**Use for:** Summaries, totals, grouped data, financial reports, dashboards
+**Speed:** ~5 seconds per query
+**Capacity:** No row limit - returns complete aggregated results
+**Limitation:** Some fields fail per-client (server 500). The client profile tracks which fields work.
+
+```python
+# The client.aggregate() method handles async polling automatically
+result = await client.aggregate(
+    table_id=financials_table,
+    dimensions=["Reporting Date", "DR_ACC_L1.5"],  # Use profile's field_alternatives
+    metrics=[{"field": "Amount", "agg": "SUM"}],
+    filters=[{"name": "Scenario", "values": ["Actuals"], "is_excluded": False}]
+)
+# Returns complete grouped totals in ~5 seconds
+```
+
+**Profile-driven field selection:**
+```python
+profile = load_profile(env)
+agg_hints = profile.get("aggregation", {})
+account_field = fields["account_l1"]
+
+# If this field is known to fail, use the alternative
+if account_field in agg_hints.get("failed_fields", []):
+    alt = agg_hints.get("field_alternatives", {}).get("account_l1")
+    if alt:
+        account_field = fields[alt]
+```
+
+### Tier 2: Pagination (Slow - ~10 minutes for 50K+ rows)
+
+**Use for:** Raw data extraction, full exports, Excel pivot data, or when aggregation fails
+
+### Decision Matrix
+
+| Need | Tier | Method | Time |
+|------|------|--------|------|
+| Revenue total | 1 | Aggregation | ~5s |
+| Monthly P&L summary | 1 | Aggregation | ~5s |
+| Department breakdown | 1 | Aggregation | ~5s |
+| Budget vs Actual comparison | 1 | Aggregation x2 | ~10s |
+| Full raw data for Excel pivot | 2 | Pagination | ~10min |
+| Field that fails aggregation | 2 | Pagination + client-side agg | ~10min |
+| Detailed transaction-level report | 2 | Pagination | ~10min |
+
+### Running Tests
+
+Run `/dr-test` to discover which fields support aggregation in your environment. Results are saved to the client profile's `aggregation` section.
+
+---
+
+## Critical Discovery (Feb 4, 2026)
 
 **Records are not dynamic - they are FIXED and STABLE.**
 
@@ -247,12 +305,14 @@ Annual savings:
 
 ## What Changed
 
-| Aspect | Before | After |
-|--------|--------|-------|
-| Extraction strategy | Full refetch each time | Cache + incremental |
-| Frequency needed | Every analysis | Once daily |
-| Time per report | 5 minutes | Instant |
-| API calls | 109 per run | 1-2 per run |
-| Annual API cost | High | Low |
+| Aspect | Before (pre-Feb 8) | After (Feb 8+) |
+|--------|---------------------|-----------------|
+| Summaries/totals | Pagination (~10 min) | Aggregation (~5s) |
+| Extraction strategy | Full refetch each time | Aggregation-first + cache |
+| Field compatibility | Assumed all broken | Profile-driven per-client |
+| Frequency needed | Every analysis | Aggregation: real-time; Raw: cache daily |
+| Time per summary | 5-10 minutes | ~5 seconds |
+| Time per full extract | 5-10 minutes | 5-10 minutes (unchanged) |
+| API calls for summary | 109 per run | 1-2 per run |
 
-**Bottom line:** Records being FIXED unlocks major efficiency gains through caching and incremental updates.
+**Bottom line:** Aggregation API working is a **120x speedup** for summaries and totals. Records being FIXED unlocks additional gains through caching for raw data.

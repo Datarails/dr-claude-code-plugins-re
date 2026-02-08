@@ -21,10 +21,11 @@
   ],
   "mcpServers": {
     "datarails-finance-os": {
-      "command": "uv",
+      "command": "/Users/stasg/.local/bin/uv",
       "args": ["--directory", "${CLAUDE_PLUGIN_ROOT}/mcp-server", "run", "datarails-mcp", "serve"],
       "env": {
-        "DATARAILS_CONFIG_DIR": "${CLAUDE_PLUGIN_ROOT}/config"
+        "DATARAILS_CONFIG_DIR": "${CLAUDE_PLUGIN_ROOT}/config",
+        "PATH": "/Users/stasg/.local/bin:/usr/local/bin:/usr/bin:/bin"
       }
     }
   },
@@ -34,11 +35,13 @@
     "commands/expense-analysis.md",
     "commands/revenue-trends.md",
     "commands/budget-comparison.md",
+    "commands/test-api.md",
     "commands/data-check.md",
     "commands/explore-tables.md"
   ],
   "skills": [
     "skills/auth",
+    "skills/test",
     "skills/tables",
     "skills/profile",
     "skills/anomalies",

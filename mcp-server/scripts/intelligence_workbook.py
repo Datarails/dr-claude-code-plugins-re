@@ -98,6 +98,12 @@ class IntelligenceWorkbook:
         self.fields = self.profile["field_mappings"]
         self.accounts = self.profile.get("account_hierarchy", {})
 
+        # Aggregation hints from profile (discovered by /dr-test or /dr-learn)
+        self.agg_hints = self.profile.get("aggregation", {})
+        self.agg_supported = self.agg_hints.get("supported", True)
+        self.agg_failed_fields = set(self.agg_hints.get("failed_fields", []))
+        self.agg_alternatives = self.agg_hints.get("field_alternatives", {})
+
         # Data containers
         self.pnl_data = []
         self.kpi_data = []
@@ -109,6 +115,26 @@ class IntelligenceWorkbook:
         # Create workbook
         self.wb = Workbook()
         self.wb.remove(self.wb.active)
+
+    def _resolve_field(self, semantic_name: str) -> str:
+        """Resolve a semantic field name, using aggregation alternatives if the field is known to fail.
+
+        Args:
+            semantic_name: Semantic name like 'account_l1', 'account_l2', etc.
+
+        Returns:
+            The actual field name to use, substituting alternatives for failed fields.
+        """
+        actual_field = self.fields.get(semantic_name, "")
+
+        # If this actual field is known to fail in aggregation, try the alternative
+        if actual_field in self.agg_failed_fields:
+            alt_semantic = self.agg_alternatives.get(semantic_name)
+            if alt_semantic and alt_semantic in self.fields:
+                alt_field = self.fields[alt_semantic]
+                return alt_field
+
+        return actual_field
 
     def _load_profile(self, profile_path: str, env: str) -> dict:
         """Load client profile."""
@@ -160,7 +186,11 @@ class IntelligenceWorkbook:
             cell.number_format = '0.0%'
 
     async def fetch_all_data(self):
-        """Fetch all required data from Datarails."""
+        """Fetch all required data from Datarails.
+
+        Uses aggregation-first strategy with parallel queries when possible.
+        Falls back to pagination only when aggregation is marked unsupported in profile.
+        """
         print("\n1️⃣  FETCHING DATA FROM DATARAILS...")
 
         # Check authentication first
@@ -173,17 +203,34 @@ class IntelligenceWorkbook:
             print("    ⚠ Failed to get valid token. Please re-authenticate.")
             return
 
-        # Fetch P&L data with aggregation
-        await self._fetch_pnl_aggregated()
+        if self.agg_supported:
+            print("    ℹ Using aggregation API (profile: aggregation supported)")
+            if self.agg_failed_fields:
+                print(f"    ℹ Known failed fields: {', '.join(sorted(self.agg_failed_fields))}")
+            if self.agg_alternatives:
+                print(f"    ℹ Using alternatives: {self.agg_alternatives}")
 
-        # Fetch KPI data
-        await self._fetch_kpi_data()
+            # Run independent aggregation queries in parallel for ~5s total
+            results = await asyncio.gather(
+                self._fetch_pnl_aggregated(),
+                self._fetch_kpi_data(),
+                self._fetch_vendor_data(),
+                self._fetch_cost_center_data(),
+                return_exceptions=True,
+            )
 
-        # Fetch vendor data
-        await self._fetch_vendor_data()
-
-        # Fetch cost center data
-        await self._fetch_cost_center_data()
+            # Log any exceptions from parallel tasks
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    task_names = ["P&L", "KPI", "Vendor", "Cost Center"]
+                    print(f"    ⚠ {task_names[i]} fetch failed: {result}")
+        else:
+            print("    ℹ Aggregation marked unsupported in profile, using pagination fallback")
+            # Sequential fetch with pagination (slow path)
+            await self._fetch_pnl_aggregated()
+            await self._fetch_kpi_data()
+            await self._fetch_vendor_data()
+            await self._fetch_cost_center_data()
 
         print(f"    ✓ All data fetched successfully")
 
@@ -374,8 +421,18 @@ class IntelligenceWorkbook:
         return result
 
     async def _fetch_pnl_aggregated(self):
-        """Fetch P&L data using aggregation API with fallback."""
+        """Fetch P&L data using aggregation API with profile-driven field alternatives."""
         print("  📊 Fetching P&L data...")
+
+        # Resolve fields - use alternatives for known-failed fields
+        account_l1_field = self._resolve_field("account_l1")
+        account_l2_field = self._resolve_field("account_l2")
+        date_field = self.fields.get("date", "Reporting Date")
+
+        if account_l1_field != self.fields.get("account_l1"):
+            print(f"    ℹ Using alternative field '{account_l1_field}' for account_l1")
+        if account_l2_field != self.fields.get("account_l2"):
+            print(f"    ℹ Using alternative field '{account_l2_field}' for account_l2")
 
         filters = [
             {"name": self.fields["scenario"], "values": ["Actuals"], "is_excluded": False},
@@ -384,10 +441,10 @@ class IntelligenceWorkbook:
         ]
 
         try:
-            # First try the aggregation API
+            # Try aggregation first with resolved fields
             result_str = await self.client.aggregate(
                 table_id=self.financials_table,
-                dimensions=[self.fields["date"], self.fields["account_l1"]],
+                dimensions=[date_field, account_l1_field],
                 metrics=[{"field": self.fields["amount"], "agg": "SUM"}],
                 filters=filters
             )
@@ -396,49 +453,48 @@ class IntelligenceWorkbook:
 
             # If aggregation returned no data, use PAGINATED raw data with client-side aggregation
             if not data:
-                print("    ℹ Aggregation API unavailable, using paginated raw data fallback...")
+                print("    ℹ Aggregation returned no data, using paginated raw data fallback...")
                 print("    ⏳ Fetching ALL records (this may take a few minutes)...")
                 raw_data = await self._fetch_raw_data_paginated(
                     table_id=self.financials_table,
                     filters=filters,
-                    max_rows=100000  # Fetch all records, up to 100K
+                    max_rows=100000
                 )
                 print(f"    ✓ Fetched {len(raw_data):,} raw records")
 
                 if raw_data:
-                    # Store raw data for other sheets
                     self.pnl_data = raw_data
-
                     data = self._aggregate_client_side(
                         raw_data,
-                        [self.fields["date"], self.fields["account_l1"]],
+                        [date_field, account_l1_field],
                         self.fields["amount"]
                     )
                     print(f"    ✓ Client-side aggregation: {len(data)} grouped records")
 
             self.aggregated_data["monthly_by_account"] = data
+            # Store which account field was actually used (for downstream sheets)
+            self.aggregated_data["_account_l1_field_used"] = account_l1_field
             self.timestamps["pnl_fetched"] = datetime.now().isoformat()
             print(f"    ✓ Fetched {len(data)} monthly account records")
 
-            # L2 Account breakdown - use raw data if we have it already
+            # L2 Account breakdown
             if self.pnl_data:
-                # Use already-fetched raw data for L2 aggregation
                 data_l2 = self._aggregate_client_side(
                     self.pnl_data,
-                    [self.fields["account_l1"], self.fields["account_l2"]],
+                    [account_l1_field, account_l2_field],
                     self.fields["amount"]
                 )
             else:
-                # Try aggregation for L2
                 result_l2 = await self.client.aggregate(
                     table_id=self.financials_table,
-                    dimensions=[self.fields["account_l1"], self.fields["account_l2"]],
+                    dimensions=[account_l1_field, account_l2_field],
                     metrics=[{"field": self.fields["amount"], "agg": "SUM"}],
                     filters=filters
                 )
                 data_l2 = self._parse_api_response(result_l2)
 
             self.aggregated_data["account_l2"] = data_l2
+            self.aggregated_data["_account_l2_field_used"] = account_l2_field
             print(f"    ✓ Fetched {len(data_l2)} L2 account records")
 
         except Exception as e:
@@ -535,6 +591,8 @@ class IntelligenceWorkbook:
         """Fetch cost center data."""
         print("  🏗️ Fetching cost center data...")
 
+        account_l1_field = self._resolve_field("account_l1")
+
         filters = [
             {"name": self.fields["scenario"], "values": ["Actuals"], "is_excluded": False},
             {"name": self.fields["account_l0"], "values": [self.accounts["pnl_filter"]], "is_excluded": False},
@@ -544,7 +602,7 @@ class IntelligenceWorkbook:
         try:
             result = await self.client.aggregate(
                 table_id=self.financials_table,
-                dimensions=[self.fields.get("cost_center", "Cost Center"), self.fields["account_l1"]],
+                dimensions=[self.fields.get("cost_center", "Cost Center"), account_l1_field],
                 metrics=[{"field": self.fields["amount"], "agg": "SUM"}],
                 filters=filters
             )
@@ -556,7 +614,7 @@ class IntelligenceWorkbook:
                 print("    ℹ Using already-fetched P&L data for cost centers...")
                 data = self._aggregate_client_side(
                     self.pnl_data,
-                    [self.fields.get("cost_center", "Cost Center"), self.fields["account_l1"]],
+                    [self.fields.get("cost_center", "Cost Center"), account_l1_field],
                     self.fields["amount"]
                 )
 
@@ -623,12 +681,21 @@ class IntelligenceWorkbook:
                 pass
         return ""
 
+    def _get_account_l1_field(self) -> str:
+        """Get the actual account L1 field name used in aggregated data."""
+        return self.aggregated_data.get("_account_l1_field_used", self._resolve_field("account_l1"))
+
+    def _get_account_l2_field(self) -> str:
+        """Get the actual account L2 field name used in aggregated data."""
+        return self.aggregated_data.get("_account_l2_field_used", self._resolve_field("account_l2"))
+
     def _calculate_totals(self) -> Dict[str, float]:
         """Calculate total amounts by account type."""
         totals = defaultdict(float)
+        account_field = self._get_account_l1_field()
 
         for record in self.aggregated_data.get("monthly_by_account", []):
-            account = record.get(self.fields["account_l1"], "Unknown")
+            account = record.get(account_field, "Unknown")
 
             try:
                 amount = float(record.get(self.fields["amount"], 0) or 0)
@@ -640,7 +707,7 @@ class IntelligenceWorkbook:
 
         # Also use cost center data to get more complete totals
         for record in self.aggregated_data.get("cost_center", []):
-            account = record.get(self.fields["account_l1"], "Unknown")
+            account = record.get(account_field, "Unknown")
             try:
                 amount = float(record.get(self.fields["amount"], 0) or 0)
             except (ValueError, TypeError):
@@ -694,10 +761,11 @@ class IntelligenceWorkbook:
     def _check_mom_variance(self):
         """Check month-over-month variances."""
         monthly = defaultdict(lambda: defaultdict(float))
+        account_field = self._get_account_l1_field()
 
         for record in self.aggregated_data.get("monthly_by_account", []):
             date = record.get(self.fields["date"], "")[:7]  # YYYY-MM
-            account = record.get(self.fields["account_l1"], "Unknown")
+            account = record.get(account_field, "Unknown")
             amount = float(record.get(self.fields["amount"], 0))
 
             if date.startswith(str(self.year)):
@@ -833,10 +901,11 @@ class IntelligenceWorkbook:
     def _detect_trend_anomalies(self):
         """Detect anomalies in monthly trends."""
         monthly = defaultdict(lambda: defaultdict(float))
+        account_field = self._get_account_l1_field()
 
         for record in self.aggregated_data.get("monthly_by_account", []):
             date = record.get(self.fields["date"], "")[:7]
-            account = record.get(self.fields["account_l1"], "Unknown")
+            account = record.get(account_field, "Unknown")
             amount = float(record.get(self.fields["amount"], 0))
 
             if date.startswith(str(self.year)):
@@ -989,12 +1058,14 @@ class IntelligenceWorkbook:
         l2_data = self.aggregated_data.get("account_l2", [])
         totals = self._calculate_totals()
         total_expense = totals.get("total_expense", 1)
+        account_l1_field = self._get_account_l1_field()
+        account_l2_field = self._get_account_l2_field()
 
         # Aggregate by L2
         l2_totals = []
         for record in l2_data:
-            l1 = record.get(self.fields["account_l1"], "Unknown")
-            l2 = record.get(self.fields["account_l2"], "Unknown")
+            l1 = record.get(account_l1_field, "Unknown")
+            l2 = record.get(account_l2_field, "Unknown")
             amount = float(record.get(self.fields["amount"], 0))
 
             # Skip revenue
@@ -1048,12 +1119,12 @@ class IntelligenceWorkbook:
         self._format_subheader_cell(ws[f'A{row}'])
 
         cc_data = self.aggregated_data.get("cost_center", [])
-        cc_totals = defaultdict(float)
+        cc_totals_map = defaultdict(float)
 
         for record in cc_data:
             cc = record.get(self.fields.get("cost_center", "Cost Center"), "No Cost Center")
             amount = float(record.get(self.fields["amount"], 0))
-            cc_totals[cc] += amount
+            cc_totals_map[cc] += amount
 
         row += 1
         headers = ["Cost Center", "Total Spend", "% of Total", "Status"]
@@ -1061,7 +1132,7 @@ class IntelligenceWorkbook:
             self._format_header_cell(ws.cell(row, col))
             ws.cell(row, col).value = header
 
-        sorted_cc = sorted(cc_totals.items(), key=lambda x: abs(x[1]), reverse=True)
+        sorted_cc = sorted(cc_totals_map.items(), key=lambda x: abs(x[1]), reverse=True)
 
         for cc, amount in sorted_cc[:15]:
             row += 1
@@ -1096,10 +1167,11 @@ class IntelligenceWorkbook:
 
         # Calculate monthly data
         monthly = defaultdict(lambda: defaultdict(float))
+        account_field = self._get_account_l1_field()
 
         for record in self.aggregated_data.get("monthly_by_account", []):
             date = record.get(self.fields["date"], "")[:7]
-            account = record.get(self.fields["account_l1"], "Unknown")
+            account = record.get(account_field, "Unknown")
             amount = float(record.get(self.fields["amount"], 0))
 
             if date.startswith(str(self.year)):
@@ -1165,10 +1237,11 @@ class IntelligenceWorkbook:
 
         # Calculate monthly data
         monthly = defaultdict(lambda: defaultdict(float))
+        account_field = self._get_account_l1_field()
 
         for record in self.aggregated_data.get("monthly_by_account", []):
             date = record.get(self.fields["date"], "")[:7]
-            account = record.get(self.fields["account_l1"], "Unknown")
+            account = record.get(account_field, "Unknown")
             amount = float(record.get(self.fields["amount"], 0))
             monthly[account][date] += amount
 
@@ -1548,12 +1621,13 @@ class IntelligenceWorkbook:
         ws['A1'].fill = PatternFill(start_color=self.HEADER_COLOR, end_color=self.HEADER_COLOR, fill_type="solid")
 
         cc_data = self.aggregated_data.get("cost_center", [])
+        account_field = self._get_account_l1_field()
 
         # Pivot by cost center and account
         cc_pivot = defaultdict(lambda: defaultdict(float))
         for record in cc_data:
             cc = record.get(self.fields.get("cost_center", "Cost Center"), "No Cost Center")
-            account = record.get(self.fields["account_l1"], "Unknown")
+            account = record.get(account_field, "Unknown")
             amount = float(record.get(self.fields["amount"], 0))
             cc_pivot[cc][account] += amount
 
@@ -1625,11 +1699,12 @@ class IntelligenceWorkbook:
             ws.cell(row, col).value = header
 
         # Combine all data
+        account_field = self._get_account_l1_field()
         # Monthly by account data
         for record in self.aggregated_data.get("monthly_by_account", []):
             row += 1
             date = record.get(self.fields["date"], "")
-            account_l1 = record.get(self.fields["account_l1"], "")
+            account_l1 = record.get(account_field, "")
             amount = float(record.get(self.fields["amount"], 0))
 
             ws.cell(row, 1).value = date

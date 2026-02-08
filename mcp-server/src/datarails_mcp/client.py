@@ -12,6 +12,7 @@ Endpoints:
   - /metrics/v1/ - List metrics
 """
 
+import asyncio
 import json
 from typing import Any
 
@@ -40,6 +41,20 @@ class DatarailsClient:
         if self._client and not self._client.is_closed:
             await self._client.aclose()
 
+    async def _ensure_auth(self) -> dict[str, Any] | None:
+        """Check auth and return error dict if not authenticated, None if OK."""
+        if not self.auth.is_authenticated():
+            if isinstance(self.auth, BrowserAuth):
+                return self.auth.needs_auth_response()
+            return {"error": "Authentication required. Set DATARAILS_SESSION_ID and DATARAILS_CSRF_TOKEN env vars."}
+
+        if not await self.auth.ensure_valid_token():
+            if isinstance(self.auth, BrowserAuth):
+                return self.auth.needs_auth_response()
+            return {"error": "Failed to obtain access token. Session may have expired."}
+
+        return None
+
     async def _request(
         self,
         method: str,
@@ -48,17 +63,9 @@ class DatarailsClient:
         json_data: dict | None = None,
     ) -> dict[str, Any]:
         """Make an authenticated API request."""
-        # Check if we have session/credentials
-        if not self.auth.is_authenticated():
-            if isinstance(self.auth, BrowserAuth):
-                return self.auth.needs_auth_response()
-            return {"error": "Authentication required. Set DATARAILS_SESSION_ID and DATARAILS_CSRF_TOKEN env vars."}
-
-        # Ensure we have a valid JWT token (auto-refreshes if needed)
-        if not await self.auth.ensure_valid_token():
-            if isinstance(self.auth, BrowserAuth):
-                return self.auth.needs_auth_response()
-            return {"error": "Failed to obtain access token. Session may have expired."}
+        auth_error = await self._ensure_auth()
+        if auth_error:
+            return auth_error
 
         client = await self._get_client()
         # Correct API path: /finance-os/api (not /api/v1)
@@ -87,6 +94,101 @@ class DatarailsClient:
                 }
 
             return response.json()
+
+        except httpx.TimeoutException:
+            return {"error": "Request timed out. Please try again."}
+        except httpx.RequestError as e:
+            return {"error": f"Request failed: {str(e)}"}
+        except json.JSONDecodeError:
+            return {"error": "Invalid response from server"}
+
+    async def _request_async_poll(
+        self,
+        endpoint: str,
+        json_data: dict,
+        poll_interval: float = 3.0,
+        max_polls: int = 20,
+    ) -> dict[str, Any]:
+        """POST request that handles async 202 + Location polling pattern.
+
+        The Finance OS aggregation API uses a long-running task pattern:
+        1. POST returns 202 Accepted with a Location header
+        2. GET the Location URL to poll for results
+        3. Returns 200 when done, 202 if still processing
+        """
+        auth_error = await self._ensure_auth()
+        if auth_error:
+            return auth_error
+
+        client = await self._get_client()
+        url = f"{self.base_url}/finance-os/api{endpoint}"
+
+        try:
+            response = await client.post(
+                url,
+                headers=self.auth.get_headers(),
+                json=json_data,
+            )
+
+            if response.status_code == 401:
+                if isinstance(self.auth, BrowserAuth):
+                    self.auth.clear_cookies()
+                    return self.auth.needs_auth_response()
+                return {"error": "Authentication expired. Please re-authenticate."}
+
+            if response.status_code == 200:
+                return response.json()
+
+            if response.status_code >= 400:
+                return {
+                    "error": f"API error: {response.status_code}",
+                    "details": response.text,
+                }
+
+            if response.status_code == 202:
+                location = response.headers.get("location")
+                if not location:
+                    return {"error": "Aggregation returned 202 but no Location header"}
+
+                # Location is relative (e.g., /tables/v1/...), needs /finance-os/api prefix
+                if location.startswith("/tables/"):
+                    poll_url = f"{self.base_url}/finance-os/api{location}"
+                elif location.startswith("/finance-os/"):
+                    poll_url = f"{self.base_url}{location}"
+                elif location.startswith("http"):
+                    poll_url = location
+                else:
+                    poll_url = f"{self.base_url}/finance-os/api{location}"
+
+                for _ in range(max_polls):
+                    await asyncio.sleep(poll_interval)
+
+                    # Refresh token if needed before each poll
+                    await self.auth.ensure_valid_token()
+
+                    poll_resp = await client.get(
+                        poll_url,
+                        headers=self.auth.get_headers(),
+                    )
+
+                    if poll_resp.status_code == 200:
+                        return poll_resp.json()
+                    elif poll_resp.status_code == 202:
+                        continue
+                    elif poll_resp.status_code == 401:
+                        # Token expired during polling, refresh and retry
+                        if not await self.auth.ensure_valid_token():
+                            return {"error": "Authentication expired during polling."}
+                        continue
+                    else:
+                        return {
+                            "error": f"Aggregation poll failed: {poll_resp.status_code}",
+                            "details": poll_resp.text,
+                        }
+
+                return {"error": "Aggregation timed out after polling"}
+
+            return {"error": f"Unexpected status: {response.status_code}"}
 
         except httpx.TimeoutException:
             return {"error": "Request timed out. Please try again."}
@@ -200,8 +302,7 @@ class DatarailsClient:
                 {"field": field, "agg": "COUNT"},
             ])
 
-        result = await self._request(
-            "POST",
+        result = await self._request_async_poll(
             f"/tables/v1/{table_id}/aggregate",
             json_data={"dimensions": [], "metrics": metrics},
         )
@@ -276,8 +377,7 @@ class DatarailsClient:
                     {"field": field, "agg": "COUNT"},
                 ])
 
-            agg_result = await self._request(
-                "POST",
+            agg_result = await self._request_async_poll(
                 f"/tables/v1/{table_id}/aggregate",
                 json_data={"dimensions": [], "metrics": metrics},
             )
@@ -389,13 +489,16 @@ class DatarailsClient:
     ) -> str:
         """Aggregate table data with grouping dimensions and metrics. NO ROW LIMIT.
 
+        Uses async polling: POST returns 202 + Location header, then poll GET
+        until 200 with results.
+
         Args:
             table_id: The ID of the table to aggregate
             dimensions: List of fields to group by
             metrics: List of metric definitions with field and aggregation type
             filters: Optional list of filter objects
         """
-        request_body = {
+        request_body: dict[str, Any] = {
             "dimensions": dimensions,
             "metrics": metrics,
         }
@@ -403,8 +506,7 @@ class DatarailsClient:
         if filters:
             request_body["filters"] = filters
 
-        result = await self._request(
-            "POST",
+        result = await self._request_async_poll(
             f"/tables/v1/{table_id}/aggregate",
             json_data=request_body,
         )

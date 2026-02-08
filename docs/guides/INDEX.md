@@ -1,14 +1,22 @@
-# Complete File Index - Datarails API Explorer
+# Complete File Index - Datarails Finance OS Plugin
 
-## 🚀 START HERE
+## START HERE
 
-### For Immediate Use
-1. **DO_THIS_NOW.txt** ← READ THIS FIRST
-   - Quick 3-step fix for token error
+### New to the Plugin?
+1. **[GETTING_STARTED.md](GETTING_STARTED.md)** - READ THIS FIRST
+   - Connect to Datarails in 2 minutes
+   - Pull your first financial snapshot
+   - Run expense, revenue, and budget analysis
+   - Generate a full FP&A Intelligence Workbook
+   - Covers both Cowork and Claude Code tracks
+   - **Time: ~15 minutes to first results**
+
+### For Notebook / API Explorer Users
+1. **DO_THIS_NOW.txt** - Quick 3-step fix for token error
    - Takes 3 minutes
    - Get the notebook working NOW
 
-2. **README_NOTEBOOK_SETUP.md** ← COMPREHENSIVE GUIDE
+2. **README_NOTEBOOK_SETUP.md** - Comprehensive notebook guide
    - Complete setup instructions
    - File guide
    - Performance expectations
@@ -139,27 +147,32 @@ Project Root/
 
 ---
 
-## 🎯 RECOMMENDED READING ORDER
+## RECOMMENDED READING ORDER
 
-### If You Just Want It Working (5 min)
+### If You're New to the Plugin (15 min)
+1. **[GETTING_STARTED.md](GETTING_STARTED.md)** (connect, explore, analyze)
+2. Done! Follow the guide's "What's Next" section for more.
+
+### If You Just Want the Notebook Working (5 min)
 1. DO_THIS_NOW.txt
 2. Run notebook
 3. Done!
 
 ### If You Want to Understand It (30 min)
-1. DO_THIS_NOW.txt (fix the error)
-2. README_NOTEBOOK_SETUP.md (overview)
+1. [GETTING_STARTED.md](GETTING_STARTED.md) (plugin overview)
+2. README_NOTEBOOK_SETUP.md (notebook setup)
 3. NOTEBOOK_GUIDE.md (how each test works)
 4. Run notebook tests 1-9
 
 ### If You Want Deep Knowledge (1-2 hours)
-1. DO_THIS_NOW.txt (fix the error)
+1. [GETTING_STARTED.md](GETTING_STARTED.md) (plugin overview)
 2. README_NOTEBOOK_SETUP.md (complete setup)
 3. DYNAMIC_JWT_GUIDE.md (understand tokens)
 4. NOTEBOOK_TROUBLESHOOTING.md (all details)
-5. DATARAILS_API_DIAGNOSTIC_REPORT.md (API findings)
-6. Run all notebook tests
-7. Review findings
+5. COMPREHENSIVE_FPA_REPORT_GUIDE.md (FP&A reports)
+6. DATARAILS_API_DIAGNOSTIC_REPORT.md (API findings)
+7. Run all notebook tests
+8. Review findings
 
 ---
 

@@ -1,10 +1,10 @@
 ---
-description: Compare actual results to budget - see where you're over or under plan
+description: Compare actual results to budget - see where you're over or under plan using complete aggregated data
 ---
 
 # Budget vs Actual Comparison
 
-Compare your actual financial results against budget to identify variances and understand performance.
+Compare your actual financial results against budget using real aggregated totals to identify variances and understand performance.
 
 ## Step 1: Verify Connection
 
@@ -22,60 +22,79 @@ Use: mcp__datarails-finance-os__list_finance_tables
 
 Identify the financials table that contains both Actuals and Budget scenarios.
 
-## Step 3: Check Available Scenarios
+## Step 3: Understand the Structure
 
 ```
-Use: mcp__datarails-finance-os__get_field_distinct_values
+Use: mcp__datarails-finance-os__get_table_schema
 Parameters:
   table_id: <financials_table_id>
-  field_name: "Scenario"
-  limit: 20
 ```
 
-Look for: Actuals, Budget, Forecast, Plan, etc.
+Identify key fields: Scenario, Amount, Account hierarchy, Date.
 
-## Step 4: Fetch Actuals Data
+## Step 4: Get Actuals Totals via Aggregation
 
 ```
-Use: mcp__datarails-finance-os__get_records_by_filter
+Use: mcp__datarails-finance-os__aggregate_table_data
 Parameters:
   table_id: <financials_table_id>
-  filters: {"Scenario": "Actuals"}
-  limit: 500
+  dimensions: ["<account_l1_field>"]
+  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  filters: [
+    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false}
+  ]
 ```
 
-## Step 5: Fetch Budget Data
+## Step 5: Get Budget Totals via Aggregation
 
 ```
-Use: mcp__datarails-finance-os__get_records_by_filter
+Use: mcp__datarails-finance-os__aggregate_table_data
 Parameters:
   table_id: <financials_table_id>
-  filters: {"Scenario": "Budget"}
-  limit: 500
+  dimensions: ["<account_l1_field>"]
+  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  filters: [
+    {"name": "<scenario_field>", "values": ["Budget"], "is_excluded": false}
+  ]
 ```
 
-## Step 6: Analyze Variances
+Both calls complete in ~5 seconds each, giving complete totals for both scenarios.
+
+## Step 6: Get Monthly Breakdown (Optional Detail)
+
+For a month-by-month comparison:
+
+```
+Use: mcp__datarails-finance-os__aggregate_table_data
+Parameters:
+  table_id: <financials_table_id>
+  dimensions: ["<date_field>", "<account_l1_field>"]
+  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  filters: [
+    {"name": "<scenario_field>", "values": ["Actuals", "Budget"], "is_excluded": false}
+  ]
+```
+
+Note: You may need to split this into two calls (one for Actuals, one for Budget) and merge the results.
+
+## Step 7: Analyze Variances
 
 Compare actuals to budget by:
 - Account category
-- Department/Cost Center (if available)
-- Time period
+- Calculate dollar variance (Actual - Budget)
+- Calculate percentage variance ((Actual - Budget) / Budget * 100)
 
-Calculate:
-- Dollar variance (Actual - Budget)
-- Percentage variance ((Actual - Budget) / Budget * 100)
+## Step 8: Present Comparison
 
-## Step 7: Present Comparison
-
-Create a clear variance report:
+Create a clear variance report with real totals:
 
 > ## Budget vs Actual Analysis
 >
 > ### Summary
-> - **Period:** [time range]
+> - **Period:** [time range covered]
 > - **Overall status:** [Over/Under/On budget]
 >
-> ### High-Level Comparison
+> ### High-Level Comparison (Complete Totals)
 >
 > | Category | Actual | Budget | Variance | % Var |
 > |----------|--------|--------|----------|-------|
@@ -127,24 +146,37 @@ Flag variances that matter:
 > - Or should I just show you the Actuals breakdown?
 
 **If Budget data is incomplete:**
-> Budget data exists but doesn't cover all periods/accounts that Actuals covers.
+> Budget data exists but doesn't cover all categories that Actuals covers.
 >
 > I can:
-> - Compare only the overlapping data
+> - Compare only the overlapping categories
 > - Show you where budget data is missing
+
+## Handling Aggregation Failures
+
+If aggregation fails for a specific field:
+1. Try a different account hierarchy field
+2. If all aggregation fails, fall back to `get_records_by_filter` (500-row limit per scenario) and note the comparison is based on partial data
 
 ## Department-Level Analysis
 
-If cost center/department data is available, offer:
+If the user wants department-level variances, run additional aggregation:
 
-> I can also break this down by department. Would you like to see:
-> - Which departments are over/under budget?
-> - A specific department's performance?
+```
+Use: mcp__datarails-finance-os__aggregate_table_data
+Parameters:
+  table_id: <financials_table_id>
+  dimensions: ["<department_field>", "<account_l1_field>"]
+  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  filters: [
+    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false}
+  ]
+```
 
 ## Follow-up Questions
 
 After the analysis, offer:
 - "Why is [category] over budget?"
-- "Show me the details for [specific line item]"
-- "How does this compare to last month/quarter?"
+- "Show me the monthly trend for the largest variance"
 - "Which department is driving the variance?"
+- "Compare against Forecast instead of Budget?"
