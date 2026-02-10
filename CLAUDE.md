@@ -231,22 +231,22 @@ datarails-plugin/
 | `/dr-audit` | SOX compliance | PDF + Excel |
 | `/dr-departments` | Department analytics | Excel + PowerPoint |
 
-### Cowork Commands (No CLI Required)
+### Cowork (Free Text + Guided Workflows)
 
-Simple commands for non-technical users in Claude Cowork:
+In Claude Cowork, users interact via free text - the AI sees all MCP tools and uses them directly. The `get_workflow_guide` MCP tool provides structured guidance for common tasks:
 
-| Command | Description |
-|---------|-------------|
-| `/datarails-finance-os:login` | Browser-based authentication |
-| `/datarails-finance-os:financial-summary` | Quick financial overview (real aggregated totals) |
-| `/datarails-finance-os:expense-analysis` | Expense breakdown with complete totals |
-| `/datarails-finance-os:revenue-trends` | Revenue patterns over time |
-| `/datarails-finance-os:budget-comparison` | Actual vs budget variance analysis |
-| `/datarails-finance-os:test-api` | Test API field compatibility and performance |
-| `/datarails-finance-os:data-check` | Data quality assessment |
-| `/datarails-finance-os:explore-tables` | Discover available data |
+| Workflow | Description |
+|----------|-------------|
+| `getting-started` | Authenticate and explore data |
+| `financial-summary` | Revenue, expenses, and profit overview |
+| `expense-analysis` | Expense breakdown with complete totals |
+| `revenue-trends` | Revenue patterns over time |
+| `budget-comparison` | Actual vs budget variance analysis |
+| `data-quality` | Data quality assessment |
+| `explore-data` | Discover available data |
+| `api-test` | Test API field compatibility |
 
-These commands use only MCP tools (no Bash) and provide guided workflows suitable for finance teams.
+Users can say things like "show me my financial summary" or "what can you do?" and the AI will call the appropriate tools, optionally using `get_workflow_guide` for step-by-step guidance.
 
 ---
 

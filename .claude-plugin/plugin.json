@@ -1,13 +1,13 @@
 {
   "name": "datarails-finance-os",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Datarails Finance OS integration for Claude Code and Cowork - analyze financial data, detect anomalies, and generate insights. Works with browser-based authentication (no CLI required for Cowork users).",
   "author": {
     "name": "Datarails",
     "email": "support@datarails.com"
   },
   "homepage": "https://datarails.com",
-  "repository": "https://github.com/Datarails/dr-claude-code-plugins",
+  "repository": "https://github.com/Datarails/dr-claude-code-plugins-re",
   "license": "MIT",
   "keywords": [
     "datarails",
@@ -28,16 +28,6 @@
       }
     }
   },
-  "commands": [
-    "commands/login.md",
-    "commands/financial-summary.md",
-    "commands/expense-analysis.md",
-    "commands/revenue-trends.md",
-    "commands/budget-comparison.md",
-    "commands/test-api.md",
-    "commands/data-check.md",
-    "commands/explore-tables.md"
-  ],
   "skills": [
     "skills/auth",
     "skills/test",

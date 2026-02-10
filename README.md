@@ -2,34 +2,59 @@
 
 Analyze financial data, detect anomalies, and query Finance OS tables directly from Claude Code or Claude Cowork.
 
-## Claude Cowork Support (NEW!)
+## For Cowork Users (Finance Team)
 
-This plugin works with both **Claude Code** (for developers) and **Claude Cowork** (for finance teams).
+**No terminal or coding experience required.**
 
-### For Cowork Users (No Terminal Required)
+### Install
 
-Simple commands designed for non-technical users:
+1. Download the installer for your OS:
+   - **Mac:** [`install-datarails-plugin.command`](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest/download/install-datarails-plugin.command)
+   - **Windows:** [`install-datarails-plugin.bat`](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest/download/install-datarails-plugin.bat)
+2. Double-click the downloaded file
+3. Restart Claude Desktop
 
-| Command | What It Does |
-|---------|--------------|
-| `/datarails-finance-os:login` | Connect to Datarails via browser (no CLI needed) |
-| `/datarails-finance-os:financial-summary` | Quick overview of your finances |
-| `/datarails-finance-os:expense-analysis` | Analyze where money is going |
-| `/datarails-finance-os:revenue-trends` | See revenue patterns over time |
-| `/datarails-finance-os:budget-comparison` | Compare actual vs budget |
-| `/datarails-finance-os:data-check` | Check for data quality issues |
-| `/datarails-finance-os:explore-tables` | Discover available data |
+That's it! Open a Cowork conversation and ask: **"What can you do with Datarails?"**
 
-**Getting Started with Cowork:**
-1. Install the plugin from [claude.com/plugins](https://claude.com/plugins)
-2. Run `/datarails-finance-os:login` and follow the prompts
-3. Start exploring your data!
+### Update
 
-New to the plugin? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)** for a hands-on walkthrough (~15 minutes).
+Double-click the same installer file again. It downloads the latest version automatically.
 
-### For Claude Code Users
+### Prerequisites
 
-Full-featured skills with CLI support - see [Skills](#skills) section below.
+- [Claude Desktop](https://claude.ai/desktop) with Cowork enabled
+- [uv](https://astral.sh/uv) (Python package manager - the installer will warn you if it's missing)
+- A Datarails account (be logged in via your browser)
+
+---
+
+## For Claude Code Users (Developers)
+
+### Quick Start
+
+```bash
+# 1. Clone the plugin
+git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
+cd dr-claude-code-plugins-re
+
+# 2. Run the setup wizard
+python setup.py
+```
+
+Or manually:
+
+```bash
+# 2. Authenticate (be logged into Datarails in browser first)
+cd mcp-server && uv run datarails-mcp auth && cd ..
+
+# 3. Start Claude Code
+claude
+
+# 4. Test
+/dr-tables
+```
+
+New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)** for a hands-on walkthrough (~15 minutes).
 
 ---
 
@@ -45,7 +70,7 @@ Full-featured skills with CLI support - see [Skills](#skills) section below.
 - **Data Extraction** - Export validated financial data to Excel
 
 ### Financial Analysis Suite
-- **Intelligence Workbook** - Comprehensive FP&A analysis with auto-insights (NEW!)
+- **Intelligence Workbook** - Comprehensive FP&A analysis with auto-insights
 - **Anomaly Detection** - Data quality monitoring with severity scoring
 - **Trend Analysis** - P&L trends, KPI analysis, growth metrics
 - **Executive Insights** - Professional PowerPoint presentations with visualizations
@@ -54,42 +79,6 @@ Full-featured skills with CLI support - see [Skills](#skills) section below.
 - **Forecast Analysis** - Multi-scenario (Actuals/Budget/Forecast) variance analysis
 - **Compliance Auditing** - SOX compliance control testing and audit reports
 - **Department Analytics** - Departmental P&L and performance analysis
-
-## Quick Start
-
-> New here? The **[Getting Started Guide](docs/guides/GETTING_STARTED.md)** walks you through your first 15 minutes, from authentication to your first intelligence report.
-
-**Option 1: Setup Wizard (Recommended)**
-
-```bash
-# 1. Clone the plugin
-git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
-cd dr-claude-code-plugins-re
-
-# 2. Run the setup wizard
-python setup.py
-```
-
-The wizard will guide you through prerequisites, authentication, and testing.
-
-**Option 2: Manual Setup**
-
-```bash
-# 1. Clone the plugin
-git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
-cd dr-claude-code-plugins-re
-
-# 2. Authenticate (be logged into Datarails in browser first)
-cd mcp-server && uv run datarails-mcp auth && cd ..
-
-# 3. Start Claude Code
-claude
-
-# 4. Test
-/dr-tables
-```
-
-Skills are pre-configured - no additional setup needed!
 
 ## Skills
 
@@ -103,7 +92,7 @@ Skills are pre-configured - no additional setup needed!
 | `/dr-query` | Query and filter records |
 | `/dr-extract` | Extract financial data to Excel |
 
-### Financial Analysis Agents
+### Financial Analysis
 | Skill | Description | Output |
 |-------|-------------|--------|
 | `/dr-intelligence` | **Most powerful** - FP&A intelligence workbook with auto-insights | 10-sheet Excel |
@@ -115,24 +104,14 @@ Skills are pre-configured - no additional setup needed!
 | `/dr-audit` | SOX compliance audit reporting | PDF + Excel |
 | `/dr-departments` | Department P&L analysis | Excel + PowerPoint |
 
-### /dr-intelligence (NEW - Most Powerful!)
+### /dr-intelligence (Most Powerful)
 
 Generate comprehensive FP&A intelligence workbooks with auto-detected insights.
 
 ```
 /dr-intelligence --year 2025                    # Full intelligence workbook
 /dr-intelligence --year 2025 --env app          # From production
-/dr-intelligence --year 2025 --output report.xlsx
 ```
-
-**What makes it different:**
-| Traditional Report | Intelligence Workbook |
-|-------------------|----------------------|
-| Shows data | Answers questions |
-| Lists numbers | Explains "why" |
-| Static tables | Highlights anomalies |
-| Manual analysis | Insights auto-surfaced |
-| Data dump | Recommendations included |
 
 **10 Sheets Generated:**
 1. Insights Dashboard - Top 5 findings with severity
@@ -146,290 +125,48 @@ Generate comprehensive FP&A intelligence workbooks with auto-detected insights.
 9. Cost Center P&L - Department detail
 10. Raw Data - Pivot-ready for analysis
 
-### /dr-auth
-
-Authenticate with Datarails Finance OS. Supports multiple environments.
-
-```
-/dr-auth                    # Authenticate to active environment
-/dr-auth --env app          # Authenticate to production
-/dr-auth --list             # List all environments & auth status
-/dr-auth --switch app       # Switch active environment
-/dr-auth --logout dev       # Clear credentials for dev
-```
-
-### /dr-tables
-
-Discover and explore Finance OS tables.
-
-```
-/dr-tables                          # List all tables
-/dr-tables 11442                    # Show table schema
-/dr-tables 11442 --field account    # Show distinct values
-/dr-tables --env app                # List tables in production
-```
-
-### /dr-profile
-
-Profile table fields for statistics and patterns.
-
-```
-/dr-profile 11442                   # Full profile
-/dr-profile 11442 --numeric         # Numeric fields only
-/dr-profile 11442 --categorical     # Categorical fields only
-/dr-profile 11442 --field amount    # Specific field
-```
-
-### /dr-anomalies
-
-Automated anomaly detection.
-
-```
-/dr-anomalies 11442                      # Full scan
-/dr-anomalies 11442 --severity critical  # Critical only
-/dr-anomalies 11442 --type outliers      # Specific type
-```
-
-### /dr-query
-
-Query table records with filters.
-
-```
-/dr-query 11442 --sample                          # Random sample
-/dr-query 11442 amount > 100000                   # Filter records
-/dr-query 11442 department = "Sales" --limit 50   # With limit
-```
-
-### /dr-learn
-
-Discover table structure and create a client profile. Run this once per environment to enable `/dr-extract` and `/dr-intelligence`.
-
-```
-/dr-learn                   # Discover tables in active environment
-/dr-learn --env app         # Discover in production
-/dr-learn --force           # Overwrite existing profile
-```
-
-Creates a profile at `config/client-profiles/<env>.json` with:
-- Table IDs and field mappings
-- Account hierarchy names
-- KPI definitions
-- Any discovered business rules or data notes
-
-### /dr-extract
-
-Extract validated financial data to Excel workbooks.
-
-```
-/dr-extract --year 2025                    # Extract current year
-/dr-extract --year 2025 --env app          # From production
-/dr-extract --year 2025 --scenario Budget  # Budget data
-/dr-extract --year 2025 --output report.xlsx
-```
-
-Requires a client profile (run `/dr-learn` first). Generates Excel with:
-- P&L by month
-- KPIs by quarter
-- Validation checks
-
-## Financial Agents Suite
-
-A complete suite of specialized financial analysis agents for executive reporting, compliance, and business intelligence.
-
-### Quick Examples
-
-**Generate comprehensive intelligence workbook** (NEW!):
-```
-/dr-intelligence --year 2025 --env app
-```
-Generates 10-sheet Excel with auto-detected insights, recommendations, and professional formatting.
-
-**Check data quality**:
-```
-/dr-anomalies-report --env app
-```
-Generates Excel report with critical, high, medium, and low priority findings.
-
-**Generate quarterly insights**:
-```
-/dr-insights --year 2025 --quarter Q4
-```
-Generates professional PowerPoint presentation (7 slides) + Excel data book with trends, KPIs, and recommendations.
-
-**Validate P&L vs KPI consistency**:
-```
-/dr-reconcile --year 2025
-```
-Validates consistency between P&L and KPI tables, identifies variance exceptions.
-
-**Executive KPI dashboard**:
-```
-/dr-dashboard --env app
-```
-Real-time executive dashboard in Excel and one-page PowerPoint summary.
-
-**Budget vs actual variance analysis**:
-```
-/dr-forecast-variance --year 2025 --scenarios Actuals,Budget,Forecast
-```
-Multi-scenario variance analysis comparing actual, budget, and forecast.
-
-**SOX compliance audit**:
-```
-/dr-audit --year 2025 --quarter Q4
-```
-Generates professional PDF audit report + Excel evidence package.
-
-**Department performance analysis**:
-```
-/dr-departments --year 2025
-```
-Department P&L analysis with Excel + PowerPoint outputs.
-
 ## Multi-Environment Support
-
-The plugin supports simultaneous authentication to multiple Datarails environments:
 
 | Environment | URL | Description |
 |-------------|-----|-------------|
-| `dev` | dev.datarails.com | Development (default) |
+| `dev` | dev.datarails.com | Development |
 | `demo` | demo.datarails.com | Demo |
 | `testapp` | testapp.datarails.com | Test App |
 | `app` | app.datarails.com | Production |
 
-### Authenticate to Multiple Environments
-
-```bash
-cd mcp-server
-uv run datarails-mcp auth --env dev
-uv run datarails-mcp auth --env app
-uv run datarails-mcp auth --list
-```
-
-### Query Different Environments
+All skills support the `--env` flag:
 
 ```
 /dr-tables --env app               # Production tables
-/dr-profile 11442 --env dev        # Profile in dev
-/dr-query 11442 --sample --env app # Sample from production
+/dr-intelligence --year 2025 --env app  # Intelligence from production
 ```
 
-### Add Custom Environments
+## Publishing Updates (for maintainers)
 
-Edit `config/environments.json`:
+```bash
+# 1. Make changes, commit
+git add . && git commit -m "feat: your changes"
 
-```json
-{
-  "environments": {
-    "custom-client": {
-      "base_url": "https://custom-client.datarails.com",
-      "auth_url": "https://custom-client-auth.datarails.com",
-      "display_name": "Custom Client"
-    }
-  }
-}
+# 2. Tag and push
+git tag v1.3.0
+git push origin main --tags
+
+# 3. GitHub Actions auto-builds the release
+# Colleagues double-click their installer to get the update
 ```
-
-## Plugin Structure
-
-```
-dr-claude-code-plugins/
-├── .claude-plugin/
-│   └── plugin.json              # Plugin manifest (required)
-├── skills/                      # Skill definitions (official location)
-│   ├── auth/SKILL.md
-│   ├── intelligence/SKILL.md    # FP&A Intelligence Workbook
-│   ├── extract/SKILL.md
-│   ├── insights/SKILL.md
-│   └── ... (15 skills total)
-├── .claude/
-│   └── skills/                  # Symlinks for standalone mode
-│       ├── dr-auth -> ../../skills/auth
-│       ├── dr-intelligence -> ../../skills/intelligence
-│       └── ...
-├── mcp-server/                  # Bundled MCP server
-│   ├── src/datarails_mcp/
-│   │   ├── client.py            # API client
-│   │   ├── auth.py              # Authentication
-│   │   ├── report_utils.py      # Report formatting
-│   │   ├── excel_builder.py     # Excel generation
-│   │   └── ...
-│   ├── scripts/
-│   │   ├── intelligence_workbook.py  # Intelligence generator
-│   │   ├── api_diagnostic.py         # API testing tool
-│   │   ├── extract_financials.py
-│   │   └── ...
-│   └── pyproject.toml
-├── config/
-│   ├── environments.json        # Configurable environments
-│   ├── profile-schema.json      # Client profile schema
-│   └── client-profiles/         # Client-specific configs (not committed)
-├── docs/
-│   ├── analysis/
-│   │   ├── FINANCE_OS_API_ISSUES_REPORT.md  # API issues documentation
-│   │   └── ...
-│   └── guides/
-├── tmp/                         # Output files location (not committed)
-├── CLAUDE.md                    # Claude Code instructions
-├── SETUP.md                     # Detailed setup guide
-└── README.md                    # This file
-```
-
-## Known API Limitations
-
-The Finance OS API has documented limitations (see `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md`):
-
-| Issue | Impact | Workaround |
-|-------|--------|------------|
-| Aggregation API fails | Returns 500/502/202 | Client-side aggregation |
-| JWT expires in 5 min | Long operations fail | Auto-refresh every 20K rows |
-| 500 record page limit | Slow extraction | Pagination implemented |
-| Distinct values fails | Returns 409 | Sample data extraction |
-
-**Performance:** Extracting 54K records takes ~10 minutes due to these limitations.
-
-## Data Limits
-
-The plugin enforces sensible limits to prevent data overload:
-
-| Operation | Max Rows |
-|-----------|----------|
-| Sample records | 20 |
-| Filtered query | 500 |
-| Custom query | 1,000 |
-| Paginated extraction | 100,000 |
-
-For larger datasets, use the profiling tools which work via aggregation.
 
 ## Troubleshooting
 
 See [SETUP.md](SETUP.md#troubleshooting-authentication) for detailed troubleshooting.
 
-### Quick Fixes
-
 | Problem | Solution |
 |---------|----------|
 | Skills not showing | Restart Claude Code; skills are in `skills/` directory |
 | "Not authenticated" | Run `cd mcp-server && uv run datarails-mcp auth` |
-| "Session expired" | Re-authenticate with `datarails-mcp auth` |
 | Wrong environment | Use `--env` flag or `datarails-mcp auth --switch <env>` |
 | Slow extraction | Normal - API requires pagination (~90 rec/sec) |
 | "No profile found" | Run `/dr-learn --env <env>` first |
-
-## Diagnostic Tools
-
-Test API connectivity and performance:
-
-```bash
-# Run API diagnostic
-uv --directory mcp-server run python scripts/api_diagnostic.py --env app
-```
-
-Generates report at `tmp/API_Diagnostic_Report_*.txt` with:
-- Endpoint test results
-- Response times
-- Error analysis
-- Recommendations
+| Installer can't find Cowork dir | Open Claude Desktop with Cowork first, then re-run |
 
 ## License
 
@@ -437,5 +174,5 @@ MIT License - see LICENSE file.
 
 ## Support
 
-- GitHub Issues: https://github.com/Datarails/dr-claude-code-plugins/issues
+- GitHub Issues: https://github.com/Datarails/dr-claude-code-plugins-re/issues
 - Datarails Support: support@datarails.com

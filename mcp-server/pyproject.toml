@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "datarails-finance-os-mcp"
 version = "0.2.0"
 description = "MCP server for Datarails Finance OS integration with Claude (bundled plugin version)"
-readme = "README.md"
+readme = {text = "Datarails Finance OS MCP Server", content-type = "text/plain"}
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "Datarails" }]

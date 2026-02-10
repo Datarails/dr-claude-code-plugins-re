@@ -480,6 +480,31 @@ class DatarailsClient:
 
     # Aggregation Tools
 
+    async def aggregate_raw(
+        self,
+        table_id: str,
+        dimensions: list[str],
+        metrics: list[dict],
+        filters: list[dict] | None = None,
+    ) -> dict[str, Any]:
+        """Aggregate table data, returning raw dict result for inspection.
+
+        Used by server-side retry logic. Returns the raw API response dict
+        so the caller can check for errors and retry with alternative fields.
+        """
+        request_body: dict[str, Any] = {
+            "dimensions": dimensions,
+            "metrics": metrics,
+        }
+
+        if filters:
+            request_body["filters"] = filters
+
+        return await self._request_async_poll(
+            f"/tables/v1/{table_id}/aggregate",
+            json_data=request_body,
+        )
+
     async def aggregate(
         self,
         table_id: str,
@@ -498,16 +523,5 @@ class DatarailsClient:
             metrics: List of metric definitions with field and aggregation type
             filters: Optional list of filter objects
         """
-        request_body: dict[str, Any] = {
-            "dimensions": dimensions,
-            "metrics": metrics,
-        }
-
-        if filters:
-            request_body["filters"] = filters
-
-        result = await self._request_async_poll(
-            f"/tables/v1/{table_id}/aggregate",
-            json_data=request_body,
-        )
+        result = await self.aggregate_raw(table_id, dimensions, metrics, filters)
         return self._format_response(result)

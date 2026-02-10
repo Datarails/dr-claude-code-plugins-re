@@ -32,3 +32,5 @@ tmp/*
 config/client-profiles/*.json
 !config/client-profiles/.gitkeep
 /mcp-server/tmp
+mcp-server.zip
+mcp-server/.venv/
