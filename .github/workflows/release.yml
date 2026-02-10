@@ -1,0 +1,71 @@
+name: Release Plugin
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Build plugin zip
+        run: |
+          ZIP_NAME="datarails-finance-os-${{ steps.version.outputs.tag }}.zip"
+
+          zip -r "$ZIP_NAME" . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "tmp/*" \
+            -x "config/client-profiles/*.json" \
+            -x "*.pyc" \
+            -x "__pycache__/*" \
+            -x "mcp-server/.venv/*" \
+            -x "mcp-server/tmp/*" \
+            -x "mcp-server.zip" \
+            -x ".DS_Store" \
+            -x "*.egg-info/*" \
+            -x "dist/*" \
+            -x "build/*" \
+            -x ".env" \
+            -x ".env.local" \
+            -x "*.local"
+
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.ZIP_NAME }}
+            install-datarails-plugin.command
+            install-datarails-plugin.bat
+          body: |
+            ## Datarails Finance OS Plugin ${{ steps.version.outputs.tag }}
+
+            ### Install (first time)
+            1. Download `install-datarails-plugin.command` (Mac) or `install-datarails-plugin.bat` (Windows) below
+            2. Double-click the downloaded file
+            3. Restart Claude Desktop
+            4. Open a Cowork conversation and ask: "What can you do with Datarails?"
+
+            ### Update (already installed)
+            1. Double-click the same installer file you downloaded before
+            2. Restart Claude Desktop
+
+            The installer automatically downloads the latest plugin version, installs it, and configures the MCP server.
+
+            ### Requirements
+            - [Claude Desktop](https://claude.ai/desktop) with Cowork enabled
+            - [uv](https://astral.sh/uv) (Python package manager - needed for the MCP server)
+          generate_release_notes: true

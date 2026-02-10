@@ -5,10 +5,10 @@
       "id": "datarails-finance-os",
       "name": "Datarails Finance OS",
       "description": "Analyze financial data, detect anomalies, and query Finance OS tables directly from Claude Code",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "author": "Datarails",
       "homepage": "https://datarails.com",
-      "repository": "https://github.com/Datarails/dr-claude-code-plugins",
+      "repository": "https://github.com/Datarails/dr-claude-code-plugins-re",
       "license": "MIT",
       "categories": [
         "finance",
