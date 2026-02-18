@@ -103,6 +103,7 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 | `/dr-forecast-variance` | Budget vs actual variance analysis | Excel + PowerPoint |
 | `/dr-audit` | SOX compliance audit reporting | PDF + Excel |
 | `/dr-departments` | Department P&L analysis | Excel + PowerPoint |
+| `/dr-get-formula` | Generate Excel with DR.GET formulas | Excel workbook |
 
 ### /dr-intelligence (Most Powerful)
 
