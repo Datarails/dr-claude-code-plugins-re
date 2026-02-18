@@ -44,7 +44,8 @@
     "skills/dashboard",
     "skills/forecast-variance",
     "skills/audit",
-    "skills/departments"
+    "skills/departments",
+    "skills/get-formula"
   ],
   "agents": [
     "agents/finance-analyst.md"

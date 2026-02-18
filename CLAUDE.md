@@ -163,7 +163,7 @@ datarails-plugin/
 │   ├── auth/SKILL.md
 │   ├── intelligence/SKILL.md    # Most powerful skill
 │   ├── extract/SKILL.md
-│   └── ... (15 skills total)
+│   └── ... (16 skills total)
 │
 ├── .claude/
 │   └── skills/                  # Symlinks for standalone mode
@@ -230,6 +230,7 @@ datarails-plugin/
 | `/dr-forecast-variance` | Variance analysis | Excel + PowerPoint |
 | `/dr-audit` | SOX compliance | PDF + Excel |
 | `/dr-departments` | Department analytics | Excel + PowerPoint |
+| `/dr-get-formula` | Generate Excel with DR.GET formulas | Excel workbook |
 
 ### Cowork (Free Text + Guided Workflows)
 
