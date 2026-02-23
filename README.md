@@ -45,7 +45,7 @@ Or manually:
 
 ```bash
 # 2. Authenticate (be logged into Datarails in browser first)
-cd mcp-server && uv run datarails-mcp auth && cd ..
+uvx datarails-finance-os-mcp auth
 
 # 3. Start Claude Code
 claude
@@ -163,7 +163,7 @@ See [SETUP.md](SETUP.md#troubleshooting-authentication) for detailed troubleshoo
 | Problem | Solution |
 |---------|----------|
 | Skills not showing | Restart Claude Code; skills are in `skills/` directory |
-| "Not authenticated" | Run `cd mcp-server && uv run datarails-mcp auth` |
+| "Not authenticated" | Run `uvx datarails-finance-os-mcp auth` |
 | Wrong environment | Use `--env` flag or `datarails-mcp auth --switch <env>` |
 | Slow extraction | Normal - API requires pagination (~90 rec/sec) |
 | "No profile found" | Run `/dr-learn --env <env>` first |

@@ -19,7 +19,7 @@ This error occurs when the API request fails, typically because the **authentica
    ```bash
    python3 << 'EOF'
    import sys
-   sys.path.insert(0, "/Users/stasg/DataRails-dev/dr-claude-code-plugins-re/mcp-server/src")
+   sys.path.insert(0, "/Users/stasg/DataRails-dev/dr-claude-code-plugins-re/src (in dr-datarails-mcp-re repo)")
    import asyncio
    from datarails_mcp.auth import get_auth
 

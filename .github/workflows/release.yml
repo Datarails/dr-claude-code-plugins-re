@@ -30,9 +30,6 @@ jobs:
             -x "config/client-profiles/*.json" \
             -x "*.pyc" \
             -x "__pycache__/*" \
-            -x "mcp-server/.venv/*" \
-            -x "mcp-server/tmp/*" \
-            -x "mcp-server.zip" \
             -x ".DS_Store" \
             -x "*.egg-info/*" \
             -x "dist/*" \

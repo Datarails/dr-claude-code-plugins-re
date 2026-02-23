@@ -129,12 +129,11 @@ powershell -ExecutionPolicy Bypass -Command ^
 "Write-Host '';" ^
 "Write-Host 'Checking MCP server configuration...' -ForegroundColor Cyan;" ^
 "" ^
-"$mcpDir = (Join-Path $pluginDest 'mcp-server') -replace '\\', '/';" ^
 "$configDir = (Join-Path $pluginDest 'config') -replace '\\', '/';" ^
 "" ^
 "$mcpEntry = @{" ^
-"    command = 'uv';" ^
-"    args = @('--directory', $mcpDir, 'run', 'datarails-mcp', 'serve');" ^
+"    command = 'uvx';" ^
+"    args = @('datarails-finance-os-mcp[all]', 'serve');" ^
 "    env = @{ DATARAILS_CONFIG_DIR = $configDir }" ^
 "};" ^
 "" ^

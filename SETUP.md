@@ -71,8 +71,7 @@ Make sure you're logged in and can see the Datarails dashboard.
 ### 2.2 Run Authentication
 
 ```bash
-cd mcp-server
-uv run datarails-mcp auth
+uvx datarails-finance-os-mcp auth
 ```
 
 The CLI will extract cookies from your browser automatically.
@@ -262,16 +261,14 @@ The plugin supports multiple Datarails environments:
 ### Authenticate to Multiple Environments
 
 ```bash
-cd mcp-server
-
 # Auth to dev (default)
-uv run datarails-mcp auth
+uvx datarails-finance-os-mcp auth
 
 # Auth to production
-uv run datarails-mcp auth --env app
+uvx datarails-finance-os-mcp auth --env app
 
 # List all authenticated environments
-uv run datarails-mcp auth --list
+uvx datarails-finance-os-mcp auth --list
 ```
 
 ### Query Different Environments
@@ -309,11 +306,10 @@ This is normal behavior, not a bug. See `docs/analysis/FINANCE_OS_API_ISSUES_REP
 If you encounter issues, run the API diagnostic:
 
 ```bash
-cd mcp-server
-uv run python scripts/api_diagnostic.py --env app
+uvx datarails-finance-os-mcp status --all
 ```
 
-This tests all API endpoints and generates a report at `tmp/API_Diagnostic_Report_*.txt`.
+Or use the `/dr-test` skill for a comprehensive API diagnostic.
 
 ---
 
@@ -323,13 +319,11 @@ If you encounter problems:
 
 1. **Check authentication status:**
    ```bash
-   cd mcp-server && uv run datarails-mcp status --all
+   uvx datarails-finance-os-mcp status --all
    ```
 
 2. **Run API diagnostic:**
-   ```bash
-   cd mcp-server && uv run python scripts/api_diagnostic.py --env app
-   ```
+   Use the `/dr-test` skill in Claude Code.
 
 3. **Common issues:**
    - Skills not showing: Restart Claude Code
@@ -351,7 +345,7 @@ If you encounter problems:
 # Setup (one-time)
 git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
 cd dr-claude-code-plugins-re
-cd mcp-server && uv run datarails-mcp auth && cd ..
+uvx datarails-finance-os-mcp auth
 
 # Daily use
 cd dr-claude-code-plugins-re

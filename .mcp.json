@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "datarails-finance-os": {
-      "command": "uv",
-      "args": ["--directory", "./mcp-server", "run", "datarails-mcp", "serve"],
+      "command": "uvx",
+      "args": ["datarails-finance-os-mcp[all]", "serve"],
       "env": {
         "DATARAILS_CONFIG_DIR": "./config"
       }
