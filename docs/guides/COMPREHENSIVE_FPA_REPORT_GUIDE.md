@@ -6,18 +6,17 @@
 
 ## Quick Start (60 Seconds)
 
-### Generate a Report in 3 Steps
+### Generate a Report in 2 Steps
 
-```bash
-# Step 1: Navigate to project root
-cd /Users/stasg/DataRails-dev/dr-claude-code-plugins-re
-
-# Step 2: Run the report generator
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025 --env app
-
-# Step 3: Find your report
-# Reports are saved to: tmp/Comprehensive_FPA_Report_2025_YYYYMMDD_HHMMSS.xlsx
 ```
+# Step 1: In Claude Code, run the intelligence skill
+/dr-intelligence --year 2025 --env app
+
+# Step 2: Find your report
+# Reports are saved to: tmp/FPA_Intelligence_Workbook_2025_YYYYMMDD.xlsx
+```
+
+Or ask Claude directly: "Generate an FP&A intelligence workbook for 2025"
 
 ---
 
@@ -62,39 +61,24 @@ Financial Expenses       $X,XXX.XX    $X,XXX   ... $X,XXX
 
 ---
 
-## Usage Commands
+## Usage
 
-### Basic Report (Current Year)
-```bash
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025
+### Via Claude Code Skill (Recommended)
+```
+/dr-intelligence --year 2025                    # Default environment
+/dr-intelligence --year 2025 --env app          # Production
 ```
 
-### Specify Environment
-```bash
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025 --env app
+### Via Free Text (Cowork or Claude Code)
+```
+Generate an FP&A intelligence workbook for 2025 from production data
 ```
 
-### Custom Output Location
+### Via MCP Server Script (Advanced)
+If running the script directly from the MCP server repo:
 ```bash
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py \
-  --year 2025 \
-  --output /tmp/My_FPA_Report.xlsx
-```
-
-### With Explicit Profile
-```bash
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py \
-  --year 2025 \
-  --profile config/client-profiles/app.json
-```
-
-### Full Command Reference
-```bash
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py \
-  --year 2025 \                    # Year to analyze
-  --env app \                      # Environment (dev, demo, testapp, app)
-  --profile config/client-profiles/app.json \  # Profile path (optional)
-  --output tmp/Report_Custom.xlsx  # Output file path (optional)
+cd /path/to/dr-datarails-mcp-re
+uv run python scripts/comprehensive_fpna_report.py --year 2025 --env app
 ```
 
 ---
@@ -237,21 +221,21 @@ tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx  (7.5 KB - full dataset)
 ## Troubleshooting
 
 ### "Not authenticated" Error
-```bash
+```
 # Solution: Authenticate first
 /dr-auth --env app
 
 # Then try again
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025
+/dr-intelligence --year 2025 --env app
 ```
 
 ### "No profile found" Error
-```bash
+```
 # Solution: Create profile first
 /dr-learn --env app
 
 # Then generate report
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025
+/dr-intelligence --year 2025 --env app
 ```
 
 ### Report is empty or has few records
@@ -325,7 +309,7 @@ ls -la /path/to/custom/output.xlsx
 
 | Item | Location |
 |------|----------|
-| **Report Generator** | `scripts/ (in dr-datarails-mcp-re repo) comprehensive_fpna_report.py` |
+| **Report Generator** | `scripts/comprehensive_fpna_report.py (in dr-datarails-mcp-re repo)` |
 | **Generated Reports** | `tmp/Comprehensive_FPA_Report_*.xlsx` |
 | **Client Profile** | `config/client-profiles/app.json` |
 | **Documentation** | `docs/analysis/FPA_IMPLEMENTATION_SUMMARY.md` |

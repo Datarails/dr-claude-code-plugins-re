@@ -87,13 +87,13 @@ Browser Cookie Authentication
 • Found cookies in Chrome
 ✓ Found session in Chrome!
 ✓ Credentials saved for environment: dev
-• Run 'datarails-mcp status' to verify
+• Run 'uvx datarails-finance-os-mcp status' to verify
 ```
 
 ### 2.3 Verify Authentication
 
 ```bash
-uv run datarails-mcp status
+uvx datarails-finance-os-mcp status
 ```
 
 **Expected output:**
@@ -114,11 +114,11 @@ Datarails MCP Status
 | "No Datarails session found" | Make sure you're logged into Datarails in your browser |
 | "Browser may be locked" | Close your browser and try again |
 | "Cookie decryption failed" | Grant keychain access when prompted (macOS) |
-| Wrong environment | Use `--env` flag: `uv run datarails-mcp auth --env app` |
+| Wrong environment | Use `--env` flag: `uvx datarails-finance-os-mcp auth --env app` |
 
 **Manual authentication (if automatic fails):**
 ```bash
-uv run datarails-mcp auth --manual
+uvx datarails-finance-os-mcp auth --manual
 ```
 Then copy cookies from browser DevTools (F12 → Application → Cookies).
 
@@ -282,22 +282,24 @@ In Claude Code:
 
 ---
 
-## Known API Limitations
+## API Performance
 
-The Finance OS API has documented limitations that affect performance:
+The Finance OS API has a two-tier data access model:
 
-| Issue | Impact | What You'll See |
-|-------|--------|-----------------|
-| Aggregation API broken | Must fetch all raw data | Longer extraction times |
-| JWT expires in 5 min | Token refresh required | "Refreshing token..." messages |
-| 500 record page limit | Many API calls needed | ~90 records/second |
+| Approach | Speed | Use Case |
+|----------|-------|----------|
+| Aggregation API (Tier 1) | ~5 seconds | Summaries, totals, grouped data |
+| Pagination (Tier 2) | ~10 minutes (50K+ rows) | Raw data extraction, full exports |
 
-**Expected times:**
-- Small datasets (< 10K): ~2 minutes
-- Medium datasets (10-50K): ~5 minutes
-- Large datasets (50K+): ~10 minutes
+Most skills use the aggregation API for fast results. Only `/dr-extract` with raw data needs pagination.
 
-This is normal behavior, not a bug. See `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` for details.
+| Known Limitation | Impact | Workaround |
+|------------------|--------|------------|
+| JWT expires in 5 min | Token refresh required | Auto-refreshed by MCP server |
+| 500 record page limit | Many API calls for raw data | Pagination handled automatically |
+| Some fields fail in aggregation | Per-client 500 errors | Profile tracks alternatives (`/dr-test`) |
+
+See `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` for details.
 
 ---
 
@@ -333,7 +335,7 @@ If you encounter problems:
 
 4. **Report the issue** with:
    - Error message
-   - Output of `datarails-mcp status`
+   - Output of `uvx datarails-finance-os-mcp status`
    - Output of API diagnostic
    - Steps to reproduce
 

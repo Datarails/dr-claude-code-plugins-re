@@ -164,7 +164,7 @@ See [SETUP.md](SETUP.md#troubleshooting-authentication) for detailed troubleshoo
 |---------|----------|
 | Skills not showing | Restart Claude Code; skills are in `skills/` directory |
 | "Not authenticated" | Run `uvx datarails-finance-os-mcp auth` |
-| Wrong environment | Use `--env` flag or `datarails-mcp auth --switch <env>` |
+| Wrong environment | Use `--env` flag: `/dr-auth --switch <env>` |
 | Slow extraction | Normal - API requires pagination (~90 rec/sec) |
 | "No profile found" | Run `/dr-learn --env <env>` first |
 | Installer can't find Cowork dir | Open Claude Desktop with Cowork first, then re-run |

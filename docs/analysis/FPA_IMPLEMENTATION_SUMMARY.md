@@ -41,7 +41,7 @@ Launched professional analysis using existing skills:
 ### Phase 3: Custom Script Development ✅
 
 Created new comprehensive report generator script:
-- **File**: `scripts/ (in dr-datarails-mcp-re repo) comprehensive_fpna_report.py`
+- **File**: `scripts/comprehensive_fpna_report.py (in dr-datarails-mcp-re repo)`
 - **Lines of Code**: ~600
 - **Features**:
   - Async data fetching from Datarails API
@@ -261,22 +261,20 @@ Financial Expenses (22.6% of records, $105K)
 
 ### Generate the Report
 
+The report scripts live in the MCP server repo (`dr-datarails-mcp-re`) and are exposed as MCP tools.
+
+**Via Claude Code skill (recommended):**
+```
+/dr-intelligence --year 2025 --env app
+```
+
+**Via MCP tool directly:**
+The `generate_intelligence_workbook` MCP tool wraps the script and handles all configuration automatically.
+
+**Via script directly (from MCP server repo):**
 ```bash
-# Basic usage (generates for current year)
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025
-
-# Specific environment
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025 --env app
-
-# Custom output path
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py \
-  --year 2025 \
-  --output tmp/FPA_2025_Custom.xlsx
-
-# With explicit profile path
-uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py \
-  --year 2025 \
-  --profile config/client-profiles/app.json
+cd /path/to/dr-datarails-mcp-re
+uv run python scripts/comprehensive_fpna_report.py --year 2025 --env app
 ```
 
 ### Expected Output
@@ -323,7 +321,7 @@ Sheets included:
 
 ### Core Script
 ```
-scripts/ (in dr-datarails-mcp-re repo) comprehensive_fpna_report.py
+scripts/comprehensive_fpna_report.py (in dr-datarails-mcp-re repo)
 ```
 
 ### Generated Reports

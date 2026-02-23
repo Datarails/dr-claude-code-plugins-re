@@ -197,25 +197,11 @@ datarails-plugin/                   # This repo (plugin distribution)
 
 ### MCP Server (Separate Repo)
 
-The MCP server lives in a separate repo: `datarails-mcp`
+The MCP server lives in a separate repo: [`dr-datarails-mcp-re`](https://github.com/Datarails/dr-datarails-mcp-re)
 
-```
-datarails-mcp/                      # Separate repo
-├── src/datarails_mcp/           # MCP server source
-│   ├── server.py                # MCP tool definitions (17 tools)
-│   ├── client.py                # Datarails API client
-│   ├── auth.py                  # Authentication
-│   └── ...
-├── scripts/                     # Report generation scripts
-│   ├── intelligence_workbook.py # FP&A intelligence generator
-│   ├── extract_financials.py    # Data extraction
-│   └── ...
-├── config/                      # Environment + profile config
-├── pyproject.toml               # Published as datarails-finance-os-mcp
-└── README.md
-```
+Published as `datarails-finance-os-mcp` on PyPI. The plugin references it via `uvx datarails-finance-os-mcp[all] serve` in `.claude-plugin/plugin.json`.
 
-The plugin references the MCP server via `uvx datarails-finance-os-mcp[all] serve`.
+The MCP server provides 18 tools including `aggregate_table_data`, `get_records_by_filter`, `generate_intelligence_workbook`, `extract_financials`, and more.
 
 ---
 
@@ -510,9 +496,9 @@ cd ../datarails-mcp && pip install -e ".[dev,reports]"
 ### Usage
 
 ```bash
-datarails-mcp auth           # Authenticate
-datarails-mcp status --all   # Check all environments
-datarails-mcp serve          # Start MCP server
+uvx datarails-finance-os-mcp auth           # Authenticate
+uvx datarails-finance-os-mcp status --all   # Check all environments
+uvx datarails-finance-os-mcp serve          # Start MCP server
 ```
 
 ---
@@ -532,7 +518,7 @@ datarails-mcp serve          # Start MCP server
 ### "Not authenticated" error
 1. Make sure you're logged into Datarails in your browser
 2. Run `/dr-auth` to extract cookies
-3. Check status: `datarails-mcp status`
+3. Check status: `uvx datarails-finance-os-mcp status`
 
 ### Browser cookie extraction fails
 1. Try closing the browser first (some browsers lock the cookie database)
