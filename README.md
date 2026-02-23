@@ -1,84 +1,48 @@
-# Datarails Finance OS Plugin for Claude Code & Cowork
+# Datarails Finance OS Plugin for Claude
 
-Analyze financial data, detect anomalies, and query Finance OS tables directly from Claude Code or Claude Cowork.
+Analyze financial data, detect anomalies, and generate insights directly from Claude.
 
-## For Cowork Users (Finance Team)
+## Install
 
-**No terminal or coding experience required.**
+### Cowork (Claude Desktop)
 
-### Install
+1. Open Claude Desktop → Browse plugins → **Personal** tab
+2. Click **+** → **Add marketplace from GitHub**
+3. Enter: `Datarails/dr-claude-code-plugins-re`
+4. Install the **Datarails Finance OS** plugin
+5. Open a Cowork conversation and ask: **"What can you do with Datarails?"**
 
-1. Download the installer for your OS:
-   - **Mac:** [`install-datarails-plugin.command`](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest/download/install-datarails-plugin.command)
-   - **Windows:** [`install-datarails-plugin.bat`](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest/download/install-datarails-plugin.bat)
-2. Double-click the downloaded file
-3. Restart Claude Desktop
+> **Private repo?** If the repo isn't public yet, use **Upload plugin** instead and upload the ZIP from the [latest release](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest).
 
-That's it! Open a Cowork conversation and ask: **"What can you do with Datarails?"**
-
-### Update
-
-Double-click the same installer file again. It downloads the latest version automatically.
-
-### Prerequisites
-
-- [Claude Desktop](https://claude.ai/desktop) with Cowork enabled
-- [uv](https://astral.sh/uv) (Python package manager - the installer will warn you if it's missing)
-- A Datarails account (be logged in via your browser)
-
----
-
-## For Claude Code Users (Developers)
-
-### Quick Start
+### Claude Code
 
 ```bash
-# 1. Clone the plugin
+# Clone the plugin repo
 git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
 cd dr-claude-code-plugins-re
 
-# 2. Run the setup wizard
-python setup.py
+# Start Claude Code
+claude
 ```
 
-Or manually:
+Skills are automatically available from the `skills/` directory.
 
-```bash
-# 2. Authenticate (be logged into Datarails in browser first)
-uvx datarails-finance-os-mcp auth
+---
 
-# 3. Start Claude Code
-claude
+## Getting Started
 
-# 4. Test
-/dr-tables
+Once installed, authenticate and explore:
+
+```
+/dr-auth --env app                     # Connect to your Datarails environment
+/dr-tables                             # List available tables
+/dr-learn --env app                    # Create client profile (first time)
+/dr-intelligence --year 2025 --env app # Generate FP&A intelligence workbook
 ```
 
 New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)** for a hands-on walkthrough (~15 minutes).
 
 ---
-
-## Features
-
-### Data Access & Exploration
-- **Multi-Account Support** - Connect to dev, demo, testapp, and production environments
-- **Easy Authentication** - Browser cookie extraction for seamless login
-- **Table Discovery** - List and explore all Finance OS tables
-- **Data Profiling** - Numeric and categorical field analysis
-- **Anomaly Detection** - Automated data quality checks
-- **Data Queries** - Filter, sample, and query records
-- **Data Extraction** - Export validated financial data to Excel
-
-### Financial Analysis Suite
-- **Intelligence Workbook** - Comprehensive FP&A analysis with auto-insights
-- **Anomaly Detection** - Data quality monitoring with severity scoring
-- **Trend Analysis** - P&L trends, KPI analysis, growth metrics
-- **Executive Insights** - Professional PowerPoint presentations with visualizations
-- **Data Reconciliation** - P&L vs KPI consistency validation
-- **Executive Dashboard** - Real-time KPI monitoring
-- **Forecast Analysis** - Multi-scenario (Actuals/Budget/Forecast) variance analysis
-- **Compliance Auditing** - SOX compliance control testing and audit reports
-- **Department Analytics** - Departmental P&L and performance analysis
 
 ## Skills
 
@@ -107,8 +71,6 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 
 ### /dr-intelligence (Most Powerful)
 
-Generate comprehensive FP&A intelligence workbooks with auto-detected insights.
-
 ```
 /dr-intelligence --year 2025                    # Full intelligence workbook
 /dr-intelligence --year 2025 --env app          # From production
@@ -126,6 +88,8 @@ Generate comprehensive FP&A intelligence workbooks with auto-detected insights.
 9. Cost Center P&L - Department detail
 10. Raw Data - Pivot-ready for analysis
 
+---
+
 ## Multi-Environment Support
 
 | Environment | URL | Description |
@@ -142,32 +106,40 @@ All skills support the `--env` flag:
 /dr-intelligence --year 2025 --env app  # Intelligence from production
 ```
 
-## Publishing Updates (for maintainers)
-
-```bash
-# 1. Make changes, commit
-git add . && git commit -m "feat: your changes"
-
-# 2. Tag and push
-git tag v1.3.0
-git push origin main --tags
-
-# 3. GitHub Actions auto-builds the release
-# Colleagues double-click their installer to get the update
-```
+---
 
 ## Troubleshooting
 
-See [SETUP.md](SETUP.md#troubleshooting-authentication) for detailed troubleshooting.
-
 | Problem | Solution |
 |---------|----------|
-| Skills not showing | Restart Claude Code; skills are in `skills/` directory |
-| "Not authenticated" | Run `uvx datarails-finance-os-mcp auth` |
-| Wrong environment | Use `--env` flag: `/dr-auth --switch <env>` |
-| Slow extraction | Normal - API requires pagination (~90 rec/sec) |
+| "Not authenticated" | Run `/dr-auth --env app` |
+| Wrong environment | Use `--env` flag or `/dr-auth --switch <env>` |
 | "No profile found" | Run `/dr-learn --env <env>` first |
-| Installer can't find Cowork dir | Open Claude Desktop with Cowork first, then re-run |
+| Skills not showing | Restart Claude Desktop / Claude Code |
+| Slow extraction | Normal for raw data (~90 rec/sec). Summaries use aggregation (~5s) |
+
+See [SETUP.md](SETUP.md) for detailed setup and troubleshooting.
+
+---
+
+## For Maintainers
+
+### Publishing Updates
+
+```bash
+git tag v1.4.0
+git push origin main --tags
+# GitHub Actions builds the release ZIP automatically
+```
+
+### Building Cowork ZIP Manually
+
+```bash
+./build-cowork-zip.sh
+# Upload via Cowork → Browse plugins → Upload plugin
+```
+
+---
 
 ## License
 
