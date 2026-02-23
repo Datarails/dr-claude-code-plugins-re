@@ -11,10 +11,7 @@
   "plugins": [
     {
       "name": "datarails-finance-os",
-      "source": {
-        "source": "github",
-        "repo": "Datarails/dr-claude-code-plugins-re"
-      },
+      "source": ".",
       "description": "Financial analysis, reporting, and DR.GET formula generation for Datarails Finance OS",
       "version": "1.3.0",
       "author": {
