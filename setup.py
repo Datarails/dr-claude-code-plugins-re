@@ -192,8 +192,7 @@ def setup_skills(plugin_dir):
 
 def check_authentication(plugin_dir):
     """Check if user is authenticated with Datarails."""
-    mcp_dir = plugin_dir / "mcp-server"
-    success, output, _ = run_command(f"cd {mcp_dir} && uv run datarails-mcp status --json")
+    success, output, _ = run_command("uvx datarails-finance-os-mcp status --json")
 
     if success and output:
         try:
@@ -210,15 +209,13 @@ def check_authentication(plugin_dir):
 
 def run_authentication(plugin_dir, env="dev"):
     """Run the authentication flow."""
-    mcp_dir = plugin_dir / "mcp-server"
-
     print_info(f"Authenticating to {env} environment...")
     print_info("Make sure you're logged into Datarails in your browser!")
     print()
 
     # Run auth command interactively
     result = subprocess.run(
-        f"cd {mcp_dir} && uv run datarails-mcp auth --env {env}",
+        f"uvx datarails-finance-os-mcp auth --env {env}",
         shell=True
     )
 
@@ -226,18 +223,10 @@ def run_authentication(plugin_dir, env="dev"):
 
 def test_connection(plugin_dir):
     """Test the connection by listing tables."""
-    mcp_dir = plugin_dir / "mcp-server"
     print_info("Testing connection by listing tables...")
 
     success, output, error = run_command(
-        f"cd {mcp_dir} && uv run python -c \"import asyncio; from datarails_mcp import get_auth, DatarailsClient; "
-        f"async def test(): "
-        f"  auth = get_auth(); "
-        f"  if not auth.is_authenticated(): return False; "
-        f"  client = DatarailsClient(auth); "
-        f"  result = await client.list_tables(); "
-        f"  return 'error' not in result.lower(); "
-        f"print(asyncio.run(test()))\""
+        "uvx datarails-finance-os-mcp status --json"
     )
 
     if success and "True" in output:

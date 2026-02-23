@@ -23,7 +23,7 @@ Help the user authenticate with Datarails Finance OS using the CLI.
 Run this Bash command to check authentication status:
 
 ```bash
-cd mcp-server && uv run datarails-mcp status
+uvx datarails-finance-os-mcp status
 ```
 
 Or use the MCP tool: `mcp__datarails-finance-os__check_auth_status`
@@ -35,17 +35,17 @@ Or use the MCP tool: `mcp__datarails-finance-os__check_auth_status`
 2. **Run the CLI auth command** - it will automatically extract cookies from the browser:
 
 ```bash
-cd mcp-server && uv run datarails-mcp auth
+uvx datarails-finance-os-mcp auth
 ```
 
 For a specific environment:
 ```bash
-cd mcp-server && uv run datarails-mcp auth --env app
+uvx datarails-finance-os-mcp auth --env app
 ```
 
 3. **Verify it worked:**
 ```bash
-cd mcp-server && uv run datarails-mcp status
+uvx datarails-finance-os-mcp status
 ```
 
 ### Step 3: If Already Authenticated
@@ -63,56 +63,54 @@ Confirm the connection is active and show which environment is connected.
 
 ## CLI Commands
 
-All commands should be run from the plugin directory:
-
 ```bash
 # Check status
-cd mcp-server && uv run datarails-mcp status
+uvx datarails-finance-os-mcp status
 
 # Authenticate (auto-extracts from browser)
-cd mcp-server && uv run datarails-mcp auth
+uvx datarails-finance-os-mcp auth
 
 # Authenticate to specific environment
-cd mcp-server && uv run datarails-mcp auth --env app
-cd mcp-server && uv run datarails-mcp auth --env dev
-cd mcp-server && uv run datarails-mcp auth --env demo
+uvx datarails-finance-os-mcp auth --env app
+uvx datarails-finance-os-mcp auth --env dev
+uvx datarails-finance-os-mcp auth --env demo
 
 # List all environments and auth status
-cd mcp-server && uv run datarails-mcp auth --list
+uvx datarails-finance-os-mcp auth --list
 
 # Switch active environment
-cd mcp-server && uv run datarails-mcp auth --switch app
+uvx datarails-finance-os-mcp auth --switch app
 
 # Logout from environment
-cd mcp-server && uv run datarails-mcp auth --logout dev
+uvx datarails-finance-os-mcp auth --logout dev
 
 # Logout from all
-cd mcp-server && uv run datarails-mcp auth --logout-all
+uvx datarails-finance-os-mcp auth --logout-all
 
 # Manual entry (only if automatic fails)
-cd mcp-server && uv run datarails-mcp auth --manual
+uvx datarails-finance-os-mcp auth --manual
 ```
 
 ## Example Interactions
 
 **User: "/dr-auth"**
-1. Run `cd mcp-server && uv run datarails-mcp status`
+1. Run `uvx datarails-finance-os-mcp status`
 2. If authenticated: "You're connected to Datarails (dev)"
-3. If not: Ask user to log into Datarails in browser, then run `cd mcp-server && uv run datarails-mcp auth`
+3. If not: Ask user to log into Datarails in browser, then run `uvx datarails-finance-os-mcp auth`
 
 **User: "/dr-auth --list"**
-Run: `cd mcp-server && uv run datarails-mcp auth --list`
+Run: `uvx datarails-finance-os-mcp auth --list`
 
 **User: "/dr-auth --env app"**
 1. Ask user to log into https://app.datarails.com in browser
-2. Run: `cd mcp-server && uv run datarails-mcp auth --env app`
-3. Verify: `cd mcp-server && uv run datarails-mcp status`
+2. Run: `uvx datarails-finance-os-mcp auth --env app`
+3. Verify: `uvx datarails-finance-os-mcp status`
 
 **User: "/dr-auth --switch app"**
-Run: `cd mcp-server && uv run datarails-mcp auth --switch app`
+Run: `uvx datarails-finance-os-mcp auth --switch app`
 
 **User: "/dr-auth --logout dev"**
-Run: `cd mcp-server && uv run datarails-mcp auth --logout dev`
+Run: `uvx datarails-finance-os-mcp auth --logout dev`
 
 ## Troubleshooting
 
@@ -125,6 +123,6 @@ Run: `cd mcp-server && uv run datarails-mcp auth --logout dev`
 
 **If automatic extraction fails**, use manual mode:
 ```bash
-cd mcp-server && uv run datarails-mcp auth --manual
+uvx datarails-finance-os-mcp auth --manual
 ```
-Then user copies cookies from DevTools (F12 → Application → Cookies).
+Then user copies cookies from DevTools (F12 > Application > Cookies).

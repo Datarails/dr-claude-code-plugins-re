@@ -169,9 +169,6 @@ fi
 echo ""
 echo -e "${BLUE}Checking MCP server configuration...${NC}"
 
-# Determine the MCP server directory path
-MCP_DIR="$PLUGIN_DEST/mcp-server"
-
 if [ -f "$CLAUDE_CONFIG" ]; then
     # Check if datarails-finance-os MCP server is already configured
     if python3 -c "
@@ -183,8 +180,7 @@ if '$PLUGIN_NAME' in servers:
     sys.exit(0)
 sys.exit(1)
 " 2>/dev/null; then
-        echo "MCP server already configured - updating path"
-        # Update the directory path in case it changed
+        echo "MCP server already configured - updating"
         python3 -c "
 import json
 config_path = '$CLAUDE_CONFIG'
@@ -192,8 +188,8 @@ with open(config_path) as f:
     config = json.load(f)
 config.setdefault('mcpServers', {})
 config['mcpServers']['$PLUGIN_NAME'] = {
-    'command': 'uv',
-    'args': ['--directory', '$MCP_DIR', 'run', 'datarails-mcp', 'serve'],
+    'command': 'uvx',
+    'args': ['datarails-finance-os-mcp[all]', 'serve'],
     'env': {
         'DATARAILS_CONFIG_DIR': '$PLUGIN_DEST/config'
     }
@@ -201,7 +197,7 @@ config['mcpServers']['$PLUGIN_NAME'] = {
 with open(config_path, 'w') as f:
     json.dump(config, f, indent=2)
 " 2>/dev/null
-        echo -e "${GREEN}MCP server path updated${NC}"
+        echo -e "${GREEN}MCP server config updated${NC}"
     else
         echo "Adding MCP server to config..."
         python3 -c "
@@ -211,8 +207,8 @@ with open(config_path) as f:
     config = json.load(f)
 config.setdefault('mcpServers', {})
 config['mcpServers']['$PLUGIN_NAME'] = {
-    'command': 'uv',
-    'args': ['--directory', '$MCP_DIR', 'run', 'datarails-mcp', 'serve'],
+    'command': 'uvx',
+    'args': ['datarails-finance-os-mcp[all]', 'serve'],
     'env': {
         'DATARAILS_CONFIG_DIR': '$PLUGIN_DEST/config'
     }

@@ -41,7 +41,7 @@ Launched professional analysis using existing skills:
 ### Phase 3: Custom Script Development ✅
 
 Created new comprehensive report generator script:
-- **File**: `mcp-server/scripts/comprehensive_fpna_report.py`
+- **File**: `scripts/ (in dr-datarails-mcp-re repo) comprehensive_fpna_report.py`
 - **Lines of Code**: ~600
 - **Features**:
   - Async data fetching from Datarails API
@@ -53,7 +53,7 @@ Created new comprehensive report generator script:
 ### Phase 4: Report Generation ✅
 
 Successfully generated initial comprehensive report:
-- **Output**: `mcp-server/tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx`
+- **Output**: `tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx`
 - **File Size**: 7.5 KB
 - **Sheets Generated**: 4 core sheets (extensible to 10+)
 - **Data Records**: 6 P&L records, 6 KPI records (sample for testing)
@@ -263,18 +263,18 @@ Financial Expenses (22.6% of records, $105K)
 
 ```bash
 # Basic usage (generates for current year)
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py --year 2025
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025
 
 # Specific environment
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py --year 2025 --env app
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025 --env app
 
 # Custom output path
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py \
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py \
   --year 2025 \
   --output tmp/FPA_2025_Custom.xlsx
 
 # With explicit profile path
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py \
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py \
   --year 2025 \
   --profile config/client-profiles/app.json
 ```
@@ -299,13 +299,13 @@ uv --directory mcp-server run python scripts/comprehensive_fpna_report.py \
   Creating Reconciliation...
 
 3️⃣  SAVING REPORT...
-    ✓ Saved: mcp-server/tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx
+    ✓ Saved: tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx
 
 ================================================================================
 ✅ COMPREHENSIVE FP&A REPORT GENERATED
 ================================================================================
 
-Report: mcp-server/tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx
+Report: tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx
 Year: 2025
 P&L Records: 54,390
 KPI Records: 2,156
@@ -323,12 +323,12 @@ Sheets included:
 
 ### Core Script
 ```
-mcp-server/scripts/comprehensive_fpna_report.py
+scripts/ (in dr-datarails-mcp-re repo) comprehensive_fpna_report.py
 ```
 
 ### Generated Reports
 ```
-mcp-server/tmp/Comprehensive_FPA_Report_2025_YYYYMMDD_HHMMSS.xlsx
+tmp/Comprehensive_FPA_Report_2025_YYYYMMDD_HHMMSS.xlsx
 ```
 
 ### Configuration

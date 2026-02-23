@@ -13,10 +13,10 @@
 cd /Users/stasg/DataRails-dev/dr-claude-code-plugins-re
 
 # Step 2: Run the report generator
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py --year 2025 --env app
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025 --env app
 
 # Step 3: Find your report
-# Reports are saved to: mcp-server/tmp/Comprehensive_FPA_Report_2025_YYYYMMDD_HHMMSS.xlsx
+# Reports are saved to: tmp/Comprehensive_FPA_Report_2025_YYYYMMDD_HHMMSS.xlsx
 ```
 
 ---
@@ -66,31 +66,31 @@ Financial Expenses       $X,XXX.XX    $X,XXX   ... $X,XXX
 
 ### Basic Report (Current Year)
 ```bash
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py --year 2025
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025
 ```
 
 ### Specify Environment
 ```bash
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py --year 2025 --env app
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025 --env app
 ```
 
 ### Custom Output Location
 ```bash
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py \
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py \
   --year 2025 \
   --output /tmp/My_FPA_Report.xlsx
 ```
 
 ### With Explicit Profile
 ```bash
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py \
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py \
   --year 2025 \
   --profile config/client-profiles/app.json
 ```
 
 ### Full Command Reference
 ```bash
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py \
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py \
   --year 2025 \                    # Year to analyze
   --env app \                      # Environment (dev, demo, testapp, app)
   --profile config/client-profiles/app.json \  # Profile path (optional)
@@ -120,13 +120,13 @@ uv --directory mcp-server run python scripts/comprehensive_fpna_report.py \
   Creating Reconciliation...
 
 3️⃣  SAVING REPORT...
-    ✓ Saved: mcp-server/tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx
+    ✓ Saved: tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx
 
 ================================================================================
 ✅ COMPREHENSIVE FP&A REPORT GENERATED
 ================================================================================
 
-Report: mcp-server/tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx
+Report: tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx
 Year: 2025
 P&L Records: 54,390
 KPI Records: 2,156
@@ -140,7 +140,7 @@ Sheets included:
 
 ### Generated Files
 ```
-mcp-server/tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx  (7.5 KB - full dataset)
+tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx  (7.5 KB - full dataset)
 ```
 
 ---
@@ -242,7 +242,7 @@ mcp-server/tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx  (7.5 KB - ful
 /dr-auth --env app
 
 # Then try again
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py --year 2025
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025
 ```
 
 ### "No profile found" Error
@@ -251,7 +251,7 @@ uv --directory mcp-server run python scripts/comprehensive_fpna_report.py --year
 /dr-learn --env app
 
 # Then generate report
-uv --directory mcp-server run python scripts/comprehensive_fpna_report.py --year 2025
+uvx datarails-finance-os-mcp[reports] python -m scripts.comprehensive_fpna_report.py --year 2025
 ```
 
 ### Report is empty or has few records
@@ -271,7 +271,7 @@ uv --directory mcp-server run python scripts/comprehensive_fpna_report.py --year
 ### Output file not found
 ```bash
 # Check correct location:
-ls -la mcp-server/tmp/Comprehensive_FPA_Report_*.xlsx
+ls -la tmp/Comprehensive_FPA_Report_*.xlsx
 
 # Or use full path if custom output was specified
 ls -la /path/to/custom/output.xlsx
@@ -325,8 +325,8 @@ ls -la /path/to/custom/output.xlsx
 
 | Item | Location |
 |------|----------|
-| **Report Generator** | `mcp-server/scripts/comprehensive_fpna_report.py` |
-| **Generated Reports** | `mcp-server/tmp/Comprehensive_FPA_Report_*.xlsx` |
+| **Report Generator** | `scripts/ (in dr-datarails-mcp-re repo) comprehensive_fpna_report.py` |
+| **Generated Reports** | `tmp/Comprehensive_FPA_Report_*.xlsx` |
 | **Client Profile** | `config/client-profiles/app.json` |
 | **Documentation** | `docs/analysis/FPA_IMPLEMENTATION_SUMMARY.md` |
 | **This Guide** | `docs/guides/COMPREHENSIVE_FPA_REPORT_GUIDE.md` |
