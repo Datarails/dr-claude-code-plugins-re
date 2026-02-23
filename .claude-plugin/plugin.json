@@ -28,6 +28,26 @@
       }
     }
   },
-  "skills": "./skills/",
-  "commands": "./commands/"
+  "skills": [
+    "skills/auth",
+    "skills/test",
+    "skills/tables",
+    "skills/profile",
+    "skills/anomalies",
+    "skills/query",
+    "skills/extract",
+    "skills/learn",
+    "skills/intelligence",
+    "skills/anomalies-report",
+    "skills/insights",
+    "skills/reconciliation",
+    "skills/dashboard",
+    "skills/forecast-variance",
+    "skills/audit",
+    "skills/departments",
+    "skills/get-formula"
+  ],
+  "agents": [
+    "agents/finance-analyst.md"
+  ]
 }
