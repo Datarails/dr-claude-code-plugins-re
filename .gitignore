@@ -30,6 +30,7 @@ tmp/*
 
 # Client-specific profiles (created by /dr-learn)
 config/client-profiles/*.json
+config/client-profiles/*.backup
 !config/client-profiles/.gitkeep
 
 # Build artifacts

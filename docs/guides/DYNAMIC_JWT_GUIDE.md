@@ -112,7 +112,7 @@ print(f"✓ CONFIG generated with fresh JWT")
 ```python
 CONFIG = {
     "jwt_token": "eyJ0eXAi...",  # ← Hard-coded, expires in 5 min
-    "csrf_token": "REDACTED...",  # ← Fixed value
+    "csrf_token": "YOUR_CSRF_TOKEN",  # ← Get from browser
 }
 ```
 

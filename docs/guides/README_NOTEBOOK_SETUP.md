@@ -28,8 +28,8 @@ This outputs:
 CONFIG = {
     "base_url": "https://app.datarails.com",
     "jwt_token": "eyJ0eXAi...",
-    "csrf_token": "REDACTED...",
-    "table_id": "TABLE_ID",
+    "csrf_token": "YOUR_CSRF_TOKEN",
+    "table_id": "YOUR_TABLE_ID",
 }
 ```
 

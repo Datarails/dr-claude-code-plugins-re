@@ -75,8 +75,8 @@ jupyter notebook DATARAILS_API_EXPLORER.ipynb
 CONFIG = {
     "base_url": "https://app.datarails.com",
     "jwt_token": "eyJ0eXAi...",  # Valid ~5 minutes
-    "csrf_token": "REDACTED...",
-    "table_id": "TABLE_ID"
+    "csrf_token": "YOUR_CSRF_TOKEN",
+    "table_id": "YOUR_TABLE_ID"
 }
 ```
 
