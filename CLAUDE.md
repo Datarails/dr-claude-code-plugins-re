@@ -147,14 +147,14 @@ Run `/dr-test` to discover field compatibility and update the profile automatica
 ```
 datarails-plugin/                   # This repo (plugin distribution)
 ├── .claude-plugin/
-│   └── plugin.json              # Plugin manifest (MCP server via uvx)
+│   └── plugin.json              # Plugin manifest
 │
 ├── commands/                    # Cowork-friendly commands (no CLI)
 │   ├── login.md                 # Browser-based authentication
-│   ├── financial-summary.md     # Quick financial overview (aggregation)
-│   ├── expense-analysis.md      # Expense breakdown (aggregation)
-│   ├── revenue-trends.md        # Revenue patterns (aggregation)
-│   ├── budget-comparison.md     # Actual vs budget (aggregation)
+│   ├── financial-summary.md     # Quick financial overview
+│   ├── expense-analysis.md      # Expense breakdown
+│   ├── revenue-trends.md        # Revenue patterns
+│   ├── budget-comparison.md     # Actual vs budget
 │   ├── test-api.md              # API field compatibility test
 │   ├── data-check.md            # Data quality check
 │   └── explore-tables.md        # Discover data
@@ -163,15 +163,10 @@ datarails-plugin/                   # This repo (plugin distribution)
 │   ├── auth/SKILL.md
 │   ├── intelligence/SKILL.md    # Most powerful skill
 │   ├── extract/SKILL.md
-│   └── ... (16 skills total)
+│   └── ... (17 skills total)
 │
 ├── agents/                      # Agent definitions
 │   └── finance-analyst.md
-│
-├── .claude/
-│   └── skills/                  # Symlinks for standalone mode
-│       ├── dr-auth -> ../../skills/auth
-│       └── ...
 │
 ├── config/
 │   ├── environments.json        # Available Datarails environments
@@ -181,17 +176,16 @@ datarails-plugin/                   # This repo (plugin distribution)
 │
 ├── docs/
 │   ├── analysis/                # System analysis & strategy
-│   │   └── FINANCE_OS_API_ISSUES_REPORT.md
 │   ├── guides/                  # Operational documentation
 │   └── notebooks/               # Jupyter notebooks
 │
 ├── tmp/                         # Generated outputs (not committed)
 │
-├── marketplace.json             # Claude Code marketplace listing
-├── build-cowork-zip.sh          # Cowork ZIP build script
+├── marketplace.json             # Marketplace listing for Cowork
+├── build-cowork-zip.sh          # Build ZIP for manual upload
 ├── CLAUDE.md                    # This file
-├── README.md                    # Project overview
-├── SETUP.md                     # Setup instructions
+├── README.md                    # Installation & overview
+├── SETUP.md                     # Detailed setup guide
 └── .gitignore
 ```
 
@@ -199,9 +193,9 @@ datarails-plugin/                   # This repo (plugin distribution)
 
 The MCP server lives in a separate repo: [`dr-datarails-mcp-re`](https://github.com/Datarails/dr-datarails-mcp-re)
 
-Published as `datarails-finance-os-mcp` on PyPI. The plugin references it via `uvx datarails-finance-os-mcp[all] serve` in `.claude-plugin/plugin.json`.
-
 The MCP server provides 18 tools including `aggregate_table_data`, `get_records_by_filter`, `generate_intelligence_workbook`, `extract_financials`, and more.
+
+**Note:** The MCP server is transitioning to remote hosting. The `plugin.json` MCP server configuration will be updated to point to the hosted endpoint when available.
 
 ---
 
@@ -478,28 +472,9 @@ After adding a custom environment:
 
 ## MCP Server
 
-The MCP server is a **separate package** (`datarails-finance-os-mcp`) in its own repo.
+The MCP server is a **separate package** in its own repo: [`dr-datarails-mcp-re`](https://github.com/Datarails/dr-datarails-mcp-re)
 
-### Installation
-
-```bash
-# Via uvx (no install needed, used by plugin.json)
-uvx datarails-finance-os-mcp serve
-
-# Or install globally
-pip install datarails-finance-os-mcp[all]
-
-# For development (clone the datarails-mcp repo)
-cd ../datarails-mcp && pip install -e ".[dev,reports]"
-```
-
-### Usage
-
-```bash
-uvx datarails-finance-os-mcp auth           # Authenticate
-uvx datarails-finance-os-mcp status --all   # Check all environments
-uvx datarails-finance-os-mcp serve          # Start MCP server
-```
+The MCP server is transitioning to remote hosting. End users do not need to install or manage it directly - the plugin handles MCP server connectivity through `plugin.json`.
 
 ---
 
@@ -518,7 +493,7 @@ uvx datarails-finance-os-mcp serve          # Start MCP server
 ### "Not authenticated" error
 1. Make sure you're logged into Datarails in your browser
 2. Run `/dr-auth` to extract cookies
-3. Check status: `uvx datarails-finance-os-mcp status`
+3. Check status: `/dr-auth --list`
 
 ### Browser cookie extraction fails
 1. Try closing the browser first (some browsers lock the cookie database)
@@ -559,17 +534,14 @@ Some fields fail in aggregation on a per-client basis:
 
 ### Adding New Skills
 
-Create a new skill in `skills/<skill-name>/SKILL.md` (official plugin location):
+Create a new skill in `skills/<skill-name>/SKILL.md`:
 ```
 skills/
 └── new-skill/
     └── SKILL.md
 ```
 
-Then create a symlink in `.claude/skills/` for standalone mode:
-```bash
-cd .claude/skills && ln -sf ../../skills/new-skill dr-new-skill
-```
+Then register it in `.claude-plugin/plugin.json` under the `skills` array.
 
 **Required SKILL.md sections:**
 - Frontmatter (name, description, allowed-tools, argument-hint)
@@ -602,20 +574,13 @@ All new files should be committed to git when they're ready for team use.
 
 ## Distribution
 
-### Claude Code Marketplace
-```bash
-/plugin marketplace add Datarails/dr-claude-code-plugins-re
-/plugin install datarails-finance-os
-```
+### Cowork (Claude Desktop)
+Install via Browse plugins → **Add marketplace from GitHub** → `Datarails/dr-claude-code-plugins-re`
 
-### Cowork ZIP
-```bash
-./build-cowork-zip.sh
-# Upload the ZIP via Cowork UI
-```
+Or upload a ZIP: `./build-cowork-zip.sh` → Browse plugins → **Upload plugin**
 
-### MCP Server (Separate Repo)
-The MCP server is published as `datarails-finance-os-mcp` on PyPI from the `datarails-mcp` repo.
+### Claude Code
+Clone the repo and run `claude` from the plugin directory. Skills are automatically available.
 
 ---
 
@@ -625,7 +590,6 @@ The MCP server is published as `datarails-finance-os-mcp` on PyPI from the `data
 - All system documentation goes in `docs/` (committed)
 - All generated outputs go in `tmp/` (not committed)
 - Keep CLAUDE.md free of specific table IDs, field names, and client business logic
-- Use markdown files in `docs/analysis/` for system documentation
 - Use client profiles for environment-specific configuration
-- MCP server code lives in the separate `datarails-mcp` repo
+- MCP server code lives in the separate [`dr-datarails-mcp-re`](https://github.com/Datarails/dr-datarails-mcp-re) repo
 - **Read `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` before building new features**
