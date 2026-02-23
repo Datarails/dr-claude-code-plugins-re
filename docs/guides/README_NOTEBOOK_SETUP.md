@@ -19,7 +19,7 @@ A complete **interactive Jupyter notebook** for exploring the Datarails Finance 
 
 ### Step 1: Generate Fresh Credentials
 ```bash
-python3 /Users/stasg/DataRails-dev/dr-claude-code-plugins-re/GET_DYNAMIC_JWT.py
+python3 GET_DYNAMIC_JWT.py
 ```
 
 This outputs:
