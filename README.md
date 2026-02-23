@@ -14,18 +14,43 @@ Analyze financial data, detect anomalies, and generate insights directly from Cl
 
 > **Private repo?** If the repo isn't public yet, use **Upload plugin** instead and upload the ZIP from the [latest release](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest).
 
-### Claude Code
+### Claude Code (Terminal)
+
+**Option A: Install from GitHub (Recommended)**
+
+Open Claude Code in any project and run:
+```
+/plugin marketplace add Datarails/dr-claude-code-plugins-re
+/plugin install datarails-finance-os
+```
+
+This installs the plugin globally — skills are available from any project.
+
+**Option B: Load from local directory (Development)**
 
 ```bash
-# Clone the plugin repo
+git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
+claude --plugin-dir ./dr-claude-code-plugins-re
+```
+
+This loads the plugin for the current session only — useful for development and testing.
+
+**Option C: Run from the plugin directory**
+
+```bash
 git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
 cd dr-claude-code-plugins-re
-
-# Start Claude Code
 claude
 ```
 
-Skills are automatically available from the `skills/` directory.
+Skills are auto-discovered from the `skills/` directory when running inside the repo.
+
+**Managing the plugin:**
+```
+/plugin                    # View installed plugins, enable/disable
+/plugin update             # Update to latest version
+/plugin uninstall          # Remove the plugin
+```
 
 ---
 
