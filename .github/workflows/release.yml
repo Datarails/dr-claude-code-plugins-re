@@ -43,26 +43,27 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            ${{ env.ZIP_NAME }}
-            install-datarails-plugin.command
-            install-datarails-plugin.bat
+          files: ${{ env.ZIP_NAME }}
           body: |
             ## Datarails Finance OS Plugin ${{ steps.version.outputs.tag }}
 
-            ### Install (first time)
-            1. Download `install-datarails-plugin.command` (Mac) or `install-datarails-plugin.bat` (Windows) below
-            2. Double-click the downloaded file
+            ### Install via Cowork (Claude Desktop)
+            1. Browse plugins → Personal → **+** → **Add marketplace from GitHub**
+            2. Enter: `Datarails/dr-claude-code-plugins-re`
+            3. Install **Datarails Finance OS**
+            4. Restart Claude Desktop
+
+            ### Install via ZIP Upload
+            1. Download `${{ env.ZIP_NAME }}` below
+            2. Browse plugins → Personal → **+** → **Upload plugin**
             3. Restart Claude Desktop
-            4. Open a Cowork conversation and ask: "What can you do with Datarails?"
 
-            ### Update (already installed)
-            1. Double-click the same installer file you downloaded before
-            2. Restart Claude Desktop
+            ### Install via Claude Code
+            ```bash
+            git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
+            cd dr-claude-code-plugins-re && claude
+            ```
 
-            The installer automatically downloads the latest plugin version, installs it, and configures the MCP server.
-
-            ### Requirements
-            - [Claude Desktop](https://claude.ai/desktop) with Cowork enabled
-            - [uv](https://astral.sh/uv) (Python package manager - needed for the MCP server)
+            ### Getting Started
+            Open a conversation and ask: **"What can you do with Datarails?"**
           generate_release_notes: true

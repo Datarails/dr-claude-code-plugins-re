@@ -1,372 +1,160 @@
 # Datarails Finance OS Plugin - Setup Guide
 
-This guide will help you set up and test the Datarails Finance OS plugin for Claude Code.
+## Cowork Setup (Claude Desktop)
 
-## Quick Setup (Recommended)
+### Option 1: Marketplace (Recommended)
 
-Run the interactive setup wizard:
+1. Open Claude Desktop → Browse plugins → **Personal** tab
+2. Click **+** → **Add marketplace from GitHub**
+3. Enter: `Datarails/dr-claude-code-plugins-re`
+4. Install the **Datarails Finance OS** plugin
+5. Restart Claude Desktop
 
-```bash
-git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
-cd dr-claude-code-plugins-re
-python setup.py
+### Option 2: Upload ZIP
+
+1. Download the plugin ZIP from the [latest release](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest)
+2. Open Claude Desktop → Browse plugins → **Personal** tab
+3. Click **+** → **Upload plugin**
+4. Select the downloaded ZIP
+5. Restart Claude Desktop
+
+### After Installation
+
+Open a Cowork conversation and try:
+
+```
+What can you do with Datarails?
 ```
 
-The wizard will:
-1. Check prerequisites (Python, uv, Claude Code)
-2. Verify skills are configured
-3. Guide you through authentication
-4. Test the connection with data access skills
-5. Test Financial Agents (anomaly detection, insights, dashboards)
-6. Show next steps
+Or jump straight in:
 
----
-
-## Manual Setup
-
-If you prefer manual setup, follow the steps below.
-
-## Prerequisites
-
-Before starting, ensure you have:
-
-- [ ] **Claude Code** installed ([install guide](https://docs.anthropic.com/claude-code))
-- [ ] **Python 3.10+** installed
-- [ ] **uv** package manager installed
-- [ ] **Datarails account** with access to Finance OS
-
-### Install uv (if not installed)
-
-```bash
-# macOS/Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Verify installation
-uv --version
+```
+Show me a financial summary for 2025
 ```
 
 ---
 
-## Step 1: Clone the Plugin
+## Claude Code Setup
+
+### Prerequisites
+
+- [Claude Code](https://docs.anthropic.com/claude-code) installed
+- A Datarails account with access to Finance OS
+
+### Step 1: Clone the Plugin
 
 ```bash
 git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
 cd dr-claude-code-plugins-re
 ```
 
-Skills are pre-configured in `skills/` directory - no additional setup needed.
+### Step 2: Start Claude Code
+
+```bash
+claude
+```
+
+Skills are automatically available from the `skills/` directory.
+
+### Step 3: Authenticate
+
+In Claude Code:
+
+```
+/dr-auth --env app
+```
+
+Make sure you're logged into Datarails in your browser first. The CLI extracts cookies automatically.
+
+### Step 4: Create Client Profile (First Time)
+
+```
+/dr-learn --env app
+```
+
+This discovers your table structure and creates `config/client-profiles/app.json`.
+
+### Step 5: Test
+
+```
+/dr-tables                             # List tables
+/dr-query <table_id> --sample          # Get sample data
+/dr-intelligence --year 2025 --env app # Generate intelligence workbook
+```
 
 ---
 
-## Step 2: Authenticate with Datarails
+## Authentication
 
-### 2.1 Log into Datarails in Your Browser
+### How It Works
 
-Open your browser and log into Datarails:
-- **Development**: https://dev.datarails.com
-- **Production**: https://app.datarails.com
+1. **Log into Datarails** in your browser (Chrome, Firefox, Safari, Edge, Brave)
+2. **Run `/dr-auth`** - extracts session cookies from your browser automatically
+3. **Credentials stored** securely in your system keyring (per environment)
+4. **JWT auto-refresh** - tokens refresh automatically (5-min expiry handled transparently)
 
-Make sure you're logged in and can see the Datarails dashboard.
+### Multi-Environment
 
-### 2.2 Run Authentication
-
-```bash
-uvx datarails-finance-os-mcp auth
 ```
-
-The CLI will extract cookies from your browser automatically.
-
-**Expected output:**
-```
-• Environment: Development (https://dev.datarails.com)
-
-Browser Cookie Authentication
-========================================
-• Looking for Datarails session in your browser...
-• Checking Chrome...
-• Found cookies in Chrome
-✓ Found session in Chrome!
-✓ Credentials saved for environment: dev
-• Run 'uvx datarails-finance-os-mcp status' to verify
-```
-
-### 2.3 Verify Authentication
-
-```bash
-uvx datarails-finance-os-mcp status
-```
-
-**Expected output:**
-```
-Datarails MCP Status
-========================================
-
-✓ Authenticated
-• Environment: Development
-• URL: https://dev.datarails.com
-✓ Keyring available (credentials stored securely)
+/dr-auth --env app          # Authenticate to production
+/dr-auth --env dev          # Authenticate to development
+/dr-auth --list             # See all connections
+/dr-auth --switch app       # Switch active environment
 ```
 
 ### Troubleshooting Authentication
 
 | Problem | Solution |
 |---------|----------|
-| "No Datarails session found" | Make sure you're logged into Datarails in your browser |
-| "Browser may be locked" | Close your browser and try again |
+| "No Datarails session found" | Log into Datarails in your browser first |
+| "Browser may be locked" | Close the browser and retry |
 | "Cookie decryption failed" | Grant keychain access when prompted (macOS) |
-| Wrong environment | Use `--env` flag: `uvx datarails-finance-os-mcp auth --env app` |
-
-**Manual authentication (if automatic fails):**
-```bash
-uvx datarails-finance-os-mcp auth --manual
-```
-Then copy cookies from browser DevTools (F12 → Application → Cookies).
+| Wrong environment | Use `--env` flag: `/dr-auth --env app` |
+| Manual auth needed | Run `/dr-auth --manual` and paste cookies from DevTools |
 
 ---
 
-## Step 3: Create Client Profile
+## Available Skills
 
-Before using extraction skills, create a client profile:
-
-```bash
-# Start Claude Code
-claude
-
-# In Claude Code, run:
-/dr-learn --env app
-```
-
-This discovers your table structure and creates `config/client-profiles/app.json`.
-
----
-
-## Step 4: Start Claude Code
-
-```bash
-# Make sure you're in the plugin directory
-cd /path/to/dr-claude-code-plugins-re
-
-# Start Claude Code
-claude
-```
-
----
-
-## Step 5: Test the Plugin
-
-### Test 1: Check Authentication
-
-Type in Claude Code:
-```
-Check if I'm authenticated with Datarails
-```
-
-**Expected:** Claude confirms you're authenticated to the dev environment.
-
-### Test 2: List Tables
-
-```
-/dr-tables
-```
-
-**Expected:** A list of Finance OS tables with IDs and names.
-
-### Test 3: View Table Schema
-
-```
-/dr-tables 11442
-```
-
-(Replace `11442` with an actual table ID from the list)
-
-**Expected:** Table schema with columns, types, and metadata.
-
-### Test 4: Profile a Table
-
-```
-/dr-profile 11442
-```
-
-**Expected:** Statistics for numeric and categorical fields.
-
-### Test 5: Query Data
-
-```
-/dr-query 11442 --sample
-```
-
-**Expected:** Sample records from the table (up to 20 rows).
-
-### Test 6: Generate Intelligence Workbook (NEW!)
-
-```
-/dr-intelligence --year 2025 --env app
-```
-
-**Expected:** 10-sheet Excel workbook with auto-generated insights.
-**Note:** This takes ~10 minutes due to API limitations (see below).
-
----
-
-## Step 6: Test Financial Agents
-
-After authentication, test the Financial Agents Suite:
-
-```bash
-cd /path/to/dr-claude-code-plugins-re
-claude
-
-# In Claude Code, try:
-/dr-anomalies-report --env app
-/dr-insights --year 2025 --quarter Q4
-/dr-dashboard --env app
-/dr-intelligence --year 2025 --env app
-```
-
-These agents provide professional financial analysis with Excel and PowerPoint outputs.
-
----
-
-## Available Commands
-
-| Command | Description |
-|---------|-------------|
+| Skill | Description |
+|-------|-------------|
 | `/dr-auth` | Authenticate with Datarails |
 | `/dr-auth --list` | List all environments and auth status |
-| `/dr-auth --env app` | Authenticate to production |
-| `/dr-auth --switch app` | Switch active environment |
+| `/dr-learn --env app` | Create client profile |
+| `/dr-test --env app` | Test API field compatibility |
 | `/dr-tables` | List all Finance OS tables |
 | `/dr-tables <id>` | View schema for a specific table |
 | `/dr-profile <id>` | Profile table statistics |
 | `/dr-anomalies <id>` | Detect data anomalies |
 | `/dr-query <id> --sample` | Get sample records |
-| `/dr-query <id> <filter>` | Query with filters |
-| `/dr-learn --env app` | Create client profile |
-| `/dr-extract --year 2025` | Extract financial data |
-| `/dr-intelligence --year 2025` | **Generate FP&A intelligence workbook** |
-
----
-
-## Multi-Environment Testing
-
-The plugin supports multiple Datarails environments:
-
-| Environment | URL | Use Case |
-|-------------|-----|----------|
-| `dev` | dev.datarails.com | Development (default) |
-| `demo` | demo.datarails.com | Demo |
-| `testapp` | testapp.datarails.com | Test App |
-| `app` | app.datarails.com | Production |
-
-### Authenticate to Multiple Environments
-
-```bash
-# Auth to dev (default)
-uvx datarails-finance-os-mcp auth
-
-# Auth to production
-uvx datarails-finance-os-mcp auth --env app
-
-# List all authenticated environments
-uvx datarails-finance-os-mcp auth --list
-```
-
-### Query Different Environments
-
-In Claude Code:
-```
-/dr-tables --env app
-/dr-profile 11442 --env dev
-/dr-intelligence --year 2025 --env app
-```
+| `/dr-extract --year 2025` | Extract financial data to Excel |
+| `/dr-intelligence --year 2025` | Generate FP&A intelligence workbook |
+| `/dr-insights --year 2025` | Executive insights with PowerPoint |
+| `/dr-reconcile --year 2025` | P&L vs KPI validation |
+| `/dr-dashboard` | Executive KPI dashboard |
+| `/dr-forecast-variance --year 2025` | Budget vs actual variance |
+| `/dr-audit --year 2025` | SOX compliance audit |
+| `/dr-departments --year 2025` | Department P&L analysis |
+| `/dr-get-formula` | Generate Excel with DR.GET formulas |
 
 ---
 
 ## API Performance
 
-The Finance OS API has a two-tier data access model:
-
 | Approach | Speed | Use Case |
 |----------|-------|----------|
-| Aggregation API (Tier 1) | ~5 seconds | Summaries, totals, grouped data |
-| Pagination (Tier 2) | ~10 minutes (50K+ rows) | Raw data extraction, full exports |
+| Aggregation API | ~5 seconds | Summaries, totals, grouped data |
+| Pagination | ~10 minutes (50K+ rows) | Raw data extraction, full exports |
 
 Most skills use the aggregation API for fast results. Only `/dr-extract` with raw data needs pagination.
-
-| Known Limitation | Impact | Workaround |
-|------------------|--------|------------|
-| JWT expires in 5 min | Token refresh required | Auto-refreshed by MCP server |
-| 500 record page limit | Many API calls for raw data | Pagination handled automatically |
-| Some fields fail in aggregation | Per-client 500 errors | Profile tracks alternatives (`/dr-test`) |
-
-See `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` for details.
-
----
-
-## Diagnostic Tools
-
-If you encounter issues, run the API diagnostic:
-
-```bash
-uvx datarails-finance-os-mcp status --all
-```
-
-Or use the `/dr-test` skill for a comprehensive API diagnostic.
 
 ---
 
 ## Reporting Issues
 
-If you encounter problems:
+1. Run `/dr-test` in Claude Code for a comprehensive API diagnostic
+2. Check authentication: `/dr-auth --list`
+3. Report with error message and steps to reproduce
 
-1. **Check authentication status:**
-   ```bash
-   uvx datarails-finance-os-mcp status --all
-   ```
-
-2. **Run API diagnostic:**
-   Use the `/dr-test` skill in Claude Code.
-
-3. **Common issues:**
-   - Skills not showing: Restart Claude Code
-   - Auth fails: Make sure you're logged into Datarails in browser
-   - Tools not working: Check MCP server is running
-   - Slow extraction: Normal due to API limitations
-
-4. **Report the issue** with:
-   - Error message
-   - Output of `uvx datarails-finance-os-mcp status`
-   - Output of API diagnostic
-   - Steps to reproduce
-
----
-
-## Quick Reference
-
-```bash
-# Setup (one-time)
-git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
-cd dr-claude-code-plugins-re
-uvx datarails-finance-os-mcp auth
-
-# Daily use
-cd dr-claude-code-plugins-re
-claude
-
-# In Claude Code
-/dr-tables                           # List tables
-/dr-learn --env app                  # Create profile (first time)
-/dr-intelligence --year 2025         # Generate intelligence workbook
-/dr-extract --year 2025              # Extract financial data
-```
-
----
-
-## Best Practices
-
-1. **Always authenticate first** - Run `/dr-auth` or check status
-2. **Create profile before extraction** - Run `/dr-learn --env app` once
-3. **Use `/dr-intelligence` for comprehensive analysis** - Most powerful skill
-4. **Expect longer times for large datasets** - API limitations
-5. **Check `docs/analysis/` for system documentation** - Understand limitations
-6. **Output goes to `tmp/`** - Check there for generated files
+- GitHub Issues: https://github.com/Datarails/dr-claude-code-plugins-re/issues
+- Datarails Support: support@datarails.com
