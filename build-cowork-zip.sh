@@ -6,7 +6,7 @@
 
 set -e
 
-VERSION="${1:-1.3.0}"
+VERSION="${1:-2.0.0}"
 OUTPUT="datarails-finance-os-cowork-plugin.zip"
 STAGING_DIR="datarails-finance-os-cowork-plugin"
 
