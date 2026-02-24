@@ -575,12 +575,19 @@ All new files should be committed to git when they're ready for team use.
 ## Distribution
 
 ### Cowork (Claude Desktop)
-Install via Browse plugins → **Add marketplace from GitHub** → `Datarails/dr-claude-code-plugins-re`
+**Recommended:** Upload ZIP: `./build-cowork-zip.sh` → Browse plugins → **Upload plugin**
 
-Or upload a ZIP: `./build-cowork-zip.sh` → Browse plugins → **Upload plugin**
+The marketplace install (`Add marketplace from GitHub`) has a [known SSH bug](https://github.com/anthropics/claude-code/issues/26588) in the Cowork VM. Use ZIP upload until Anthropic fixes this.
 
 ### Claude Code
-Clone the repo and run `claude` from the plugin directory. Skills are automatically available.
+**From GitHub (global install):**
+```
+/plugin marketplace add https://github.com/Datarails/dr-claude-code-plugins-re.git
+/plugin install datarails-finance-os@datarails-marketplace
+```
+Use the full HTTPS URL — the shorthand `owner/repo` format may fail due to SSH.
+
+**From local directory:** Clone the repo and run `claude` from the plugin directory. Skills are automatically available.
 
 ---
 

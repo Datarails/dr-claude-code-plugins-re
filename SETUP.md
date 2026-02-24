@@ -2,7 +2,15 @@
 
 ## Cowork Setup (Claude Desktop)
 
-### Option 1: Marketplace (Recommended)
+### Option 1: Upload ZIP (Recommended)
+
+1. Download the plugin ZIP from the [latest release](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest)
+2. Open Claude Desktop → Cowork → Browse plugins → **Personal** tab
+3. Click **+** → **Upload plugin**
+4. Select the downloaded ZIP
+5. Restart Claude Desktop
+
+### Option 2: Marketplace (GitHub)
 
 1. Open Claude Desktop → Browse plugins → **Personal** tab
 2. Click **+** → **Add marketplace from GitHub**
@@ -10,13 +18,7 @@
 4. Install the **Datarails Finance OS** plugin
 5. Restart Claude Desktop
 
-### Option 2: Upload ZIP
-
-1. Download the plugin ZIP from the [latest release](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest)
-2. Open Claude Desktop → Browse plugins → **Personal** tab
-3. Click **+** → **Upload plugin**
-4. Select the downloaded ZIP
-5. Restart Claude Desktop
+> **Known issue:** The marketplace install may fail with "Host key verification failed" due to a [known Claude Desktop bug](https://github.com/anthropics/claude-code/issues/26588) where the VM uses SSH instead of HTTPS. Use Option 1 (ZIP upload) if this happens.
 
 ### After Installation
 
