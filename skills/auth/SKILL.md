@@ -1,128 +1,103 @@
 ---
 name: dr-auth
-description: Authenticate with Datarails Finance OS. Supports multi-account authentication to dev, demo, testapp, and app environments.
+description: Authenticate with Datarails Finance OS using OAuth 2.0. Opens your browser for secure login.
 user-invocable: true
 allowed-tools:
-  - Bash
-  - mcp__datarails-finance-os__check_auth_status
-argument-hint: "[--env dev|demo|testapp|app] [--list] [--switch <env>] [--logout <env>]"
+  - mcp__datarails-finance-os__authenticate
+  - mcp__datarails-finance-os__auth_status
+  - mcp__datarails-finance-os__disable
+argument-hint: "[--env prod|dev|test] [--disable]"
 ---
 
 # Datarails Authentication
 
-Help the user authenticate with Datarails Finance OS using the CLI.
+Help the user authenticate with Datarails Finance OS using OAuth 2.0 + PKCE.
 
-## IMPORTANT: Use the CLI for Authentication
+## How It Works
 
-**ALWAYS use the `datarails-mcp` CLI command for authentication.** The CLI automatically extracts cookies from the user's browser - no manual JavaScript or copy/paste needed.
+Authentication uses **OAuth 2.0 Authorization Code + PKCE**:
+1. A browser window opens automatically for you to log in
+2. After login, tokens are securely stored and auto-refreshed
+3. No manual cookie extraction or copy/paste needed
 
 ## Workflow
 
 ### Step 1: Check Current Status
 
-Run this Bash command to check authentication status:
+Call the MCP tool to check if already authenticated:
 
-```bash
-uvx datarails-finance-os-mcp status
 ```
-
-Or use the MCP tool: `mcp__datarails-finance-os__check_auth_status`
+Use: mcp__datarails-finance-os__auth_status
+```
 
 ### Step 2: If Not Authenticated
 
-1. **Ask the user to log into Datarails in their browser first** (e.g., https://dev.datarails.com)
+Call the authenticate tool to start the OAuth flow:
 
-2. **Run the CLI auth command** - it will automatically extract cookies from the browser:
-
-```bash
-uvx datarails-finance-os-mcp auth
+```
+Use: mcp__datarails-finance-os__authenticate
+Parameters:
+  env: <parsed env, default "prod">
 ```
 
-For a specific environment:
-```bash
-uvx datarails-finance-os-mcp auth --env app
-```
+This opens the user's browser automatically. The user logs in via the Datarails login page, and tokens are returned to the MCP server via a local callback.
 
-3. **Verify it worked:**
-```bash
-uvx datarails-finance-os-mcp status
+Then verify authentication succeeded:
+
+```
+Use: mcp__datarails-finance-os__auth_status
 ```
 
 ### Step 3: If Already Authenticated
 
-Confirm the connection is active and show which environment is connected.
+Confirm the connection is active and show the environment, organization, and token status.
 
-## Available Environments
+## Arguments
 
-| Environment | URL | Description |
-|-------------|-----|-------------|
-| `dev` | dev.datarails.com | Development (default) |
-| `demo` | demo.datarails.com | Demo |
-| `testapp` | testapp.datarails.com | Test App |
-| `app` | app.datarails.com | Production |
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--env <env>` | Auth server: `prod`, `dev`, `test` | `prod` |
+| `--disable` | Revoke tokens and disconnect | — |
 
-## CLI Commands
+## Disconnecting / Switching Environments
 
-```bash
-# Check status
-uvx datarails-finance-os-mcp status
+To disconnect or switch to a different environment:
 
-# Authenticate (auto-extracts from browser)
-uvx datarails-finance-os-mcp auth
-
-# Authenticate to specific environment
-uvx datarails-finance-os-mcp auth --env app
-uvx datarails-finance-os-mcp auth --env dev
-uvx datarails-finance-os-mcp auth --env demo
-
-# List all environments and auth status
-uvx datarails-finance-os-mcp auth --list
-
-# Switch active environment
-uvx datarails-finance-os-mcp auth --switch app
-
-# Logout from environment
-uvx datarails-finance-os-mcp auth --logout dev
-
-# Logout from all
-uvx datarails-finance-os-mcp auth --logout-all
-
-# Manual entry (only if automatic fails)
-uvx datarails-finance-os-mcp auth --manual
-```
+1. Run `/dr-auth --disable` (or call `mcp__datarails-finance-os__disable`)
+2. Then authenticate to the new environment: `/dr-auth --env <env>`
 
 ## Example Interactions
 
 **User: "/dr-auth"**
-1. Run `uvx datarails-finance-os-mcp status`
-2. If authenticated: "You're connected to Datarails (dev)"
-3. If not: Ask user to log into Datarails in browser, then run `uvx datarails-finance-os-mcp auth`
+1. Call `auth_status`
+2. If authenticated: "You're connected to Datarails (organization: Acme Corp, environment: prod)"
+3. If not: Call `authenticate` → browser opens → verify with `auth_status`
 
-**User: "/dr-auth --list"**
-Run: `uvx datarails-finance-os-mcp auth --list`
+**User: "/dr-auth --env dev"**
+1. Call `authenticate` with `env: "dev"`
+2. Browser opens for dev login
+3. Verify with `auth_status`
 
-**User: "/dr-auth --env app"**
-1. Ask user to log into https://app.datarails.com in browser
-2. Run: `uvx datarails-finance-os-mcp auth --env app`
-3. Verify: `uvx datarails-finance-os-mcp status`
+**User: "/dr-auth --disable"**
+1. Call `disable` to revoke tokens and clear credentials
+2. Confirm: "Disconnected from Datarails"
 
-**User: "/dr-auth --switch app"**
-Run: `uvx datarails-finance-os-mcp auth --switch app`
+## Auth Status Response
 
-**User: "/dr-auth --logout dev"**
-Run: `uvx datarails-finance-os-mcp auth --logout dev`
+The `auth_status` tool returns:
+- `authenticated` — whether connected
+- `organization` — the org name
+- `environment` — which environment (prod/dev/test)
+- `api_url` — the API base URL
+- `jwt_expires_in_seconds` — time until JWT expires
+- `jwt_expired` — whether the JWT has expired (auto-refreshes)
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| "No browser cookies found" | User must log into Datarails in browser first |
-| "Browser may be locked" | Close the browser and try again |
-| "Cookie decryption failed" | Grant keychain access (macOS) or try `--manual` |
-| Wrong environment | Specify with `--env` flag |
-
-**If automatic extraction fails**, use manual mode:
-```bash
-uvx datarails-finance-os-mcp auth --manual
-```
-Then user copies cookies from DevTools (F12 > Application > Cookies).
+| Browser doesn't open | Check default browser settings; try opening the URL manually |
+| "Authentication failed" | Verify your Datarails credentials and try again |
+| "Token expired" | Tokens auto-refresh; if persistent, run `/dr-auth` again |
+| Need different environment | Run `/dr-auth --disable` then `/dr-auth --env <env>` |
+| Callback timeout | Ensure no firewall blocking localhost; try again |

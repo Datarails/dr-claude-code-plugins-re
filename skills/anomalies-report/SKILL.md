@@ -3,7 +3,7 @@ name: dr-anomalies-report
 description: Generate comprehensive anomaly detection report with Excel deliverables. Discovers data quality issues without requiring configuration.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__profile_numeric_fields
@@ -13,7 +13,7 @@ allowed-tools:
   - Write
   - Read
   - Bash
-argument-hint: "[--table-id <id>] [--severity <level>] [--env <env>] [--output <file>]"
+argument-hint: "[--table-id <id>] [--severity <level>] [--output <file>]"
 ---
 
 # Anomaly Detection Report
@@ -36,7 +36,6 @@ This skill automatically discovers your data structure and detects issues withou
 |----------|-------------|---------|
 | `--table-id <id>` | Specific table to analyze | Uses profile or discovers automatically |
 | `--severity <level>` | Filter results: critical, high, medium, low | All |
-| `--env <env>` | Environment: dev, demo, testapp, app | Active |
 | `--output <file>` | Output filename | `tmp/Anomaly_Report_TIMESTAMP.xlsx` |
 
 ## What It Reports
@@ -66,7 +65,7 @@ This skill automatically discovers your data structure and detects issues withou
 ## Workflow
 
 **Phase 1: Discovery**
-1. Verify authentication (`check_auth_status`)
+1. Verify authentication (`auth_status`)
 2. If no `--table-id`, discover tables or use profile
 3. Load table schema
 
@@ -91,7 +90,7 @@ This skill automatically discovers your data structure and detects issues withou
 
 ### Analyze default financials table
 ```bash
-/dr-anomalies-report --env app
+/dr-anomalies-report
 ```
 
 Output:
@@ -129,11 +128,6 @@ Report: tmp/Anomaly_Report_2026-02-03_143022.xlsx
 ### Analyze specific table for critical issues only
 ```bash
 /dr-anomalies-report --table-id TABLE_ID --severity critical
-```
-
-### Analyze development environment
-```bash
-/dr-anomalies-report --env dev
 ```
 
 ### Save to custom location
@@ -186,7 +180,7 @@ If profile incomplete or unavailable:
 
 ### Pre-Month-End Close Validation
 ```bash
-/dr-anomalies-report --env app --severity critical
+/dr-anomalies-report --severity critical
 ```
 *Alerts on critical issues that could affect close*
 
@@ -198,7 +192,7 @@ If profile incomplete or unavailable:
 
 ### Exploratory Analysis
 ```bash
-/dr-anomalies-report --env dev --table-id unknown_table_id
+/dr-anomalies-report --table-id unknown_table_id
 ```
 *Discovers what's in an unfamiliar table*
 
@@ -216,7 +210,7 @@ Each report includes:
 ## Troubleshooting
 
 **"Not authenticated" error**
-- Run `/dr-auth --env app` first
+- Run `/dr-auth` first
 
 **"No tables found" error**
 - Check that authentication succeeded
@@ -224,10 +218,10 @@ Each report includes:
 
 **"Table not found" error**
 - Verify table ID is correct
-- Run `/dr-tables --env app` to see available tables
+- Run `/dr-tables` to see available tables
 
 **"Incomplete profile" error**
-- Run `/dr-learn --env app` to refresh profile
+- Run `/dr-learn` to refresh profile
 - Or specify `--table-id` to override
 
 ## Related Skills

@@ -3,10 +3,10 @@ name: dr-extract
 description: Extract validated financial data from Datarails Finance OS to Excel. Creates workbooks with P&L, Balance Sheet, KPIs (including ARR), and validation checks.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__extract_financials
   - Read
-argument-hint: "[--output <file>] [--scenario <name>] [--year <YYYY>] [--env <env>]"
+argument-hint: "[--output <file>] [--scenario <name>] [--year <YYYY>]"
 ---
 
 # Datarails Financial Data Extraction
@@ -23,14 +23,13 @@ Extract validated financial data from Finance OS to Excel workbooks with:
 | `--output <file>` | Output filename | `tmp/Financial_Extract_YYYY.xlsx` |
 | `--scenario <name>` | Primary scenario | `Actuals` |
 | `--year <YYYY>` | Calendar year to extract | Current year |
-| `--env <env>` | Environment: dev, demo, testapp, app | Active |
 
 ## Workflow
 
 ### Step 1: Verify Authentication
 ```
-Use: check_auth_status
-If not authenticated, guide to /dr-auth --env <env>
+Use: auth_status
+If not authenticated, guide to /dr-auth
 ```
 
 ### Step 2: Run Extraction via MCP Tool
@@ -41,7 +40,6 @@ Call the `extract_financials` MCP tool with the parsed arguments:
 Use: extract_financials
 Arguments:
   year: <parsed year, default current year>
-  env: <parsed env, default "app">
   scenario: <parsed scenario, default "Actuals">
   output_path: <parsed output, or omit for default>
 ```
@@ -72,7 +70,7 @@ Output location: `tmp/` folder (configurable via `--output`)
 ## Troubleshooting
 
 ### "profile_not_found" error
-Run `/dr-learn --env <env>` first to create a profile for this environment.
+Run `/dr-learn` first to create a profile.
 
 ### "missing_dependency" error
 The MCP server needs the reports extra installed: `pip install datarails-finance-os-mcp[reports]`

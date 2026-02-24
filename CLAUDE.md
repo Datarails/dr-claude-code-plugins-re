@@ -40,7 +40,7 @@ The Finance OS API has a two-tier data access model. **Read `docs/analysis/FINAN
 | Issue | Status | Impact |
 |-------|--------|--------|
 | **Aggregation API** | ✅ WORKING (async polling) | ~5 seconds per query, 120x faster than pagination |
-| **JWT Token Expiry** | ⚠️ 5 minutes | Must refresh every 20K rows (pagination only) |
+| **JWT Token Expiry** | ⚠️ 5 minutes | Auto-refreshes; manual refresh every 20K rows (pagination only) |
 | **Distinct Values** | 🔴 BROKEN | Returns 409 - use sample data |
 | **Page Size Limit** | ⚠️ 500 max | Requires pagination for raw data |
 | **Some Fields Fail** | ⚠️ Per-client | Some fields cause 500 in aggregation - tracked in client profile |
@@ -150,7 +150,7 @@ datarails-plugin/                   # This repo (plugin distribution)
 │   └── plugin.json              # Plugin manifest
 │
 ├── commands/                    # Cowork-friendly commands (no CLI)
-│   ├── login.md                 # Browser-based authentication
+│   ├── login.md                 # OAuth authentication
 │   ├── financial-summary.md     # Quick financial overview
 │   ├── expense-analysis.md      # Expense breakdown
 │   ├── revenue-trends.md        # Revenue patterns
@@ -204,7 +204,7 @@ The MCP server provides 18 tools including `aggregate_table_data`, `get_records_
 ### Core Skills
 | Skill | Description | Output |
 |-------|-------------|--------|
-| `/dr-auth` | Authenticate with Datarails | Session stored in keyring |
+| `/dr-auth` | Authenticate with Datarails via OAuth | JWT tokens auto-refreshed |
 | `/dr-learn` | Discover table structure + aggregation compatibility | Creates client profile |
 | `/dr-test` | Test API field compatibility and performance | Diagnostic report + profile update |
 | `/dr-tables` | List and explore tables | Table metadata |
@@ -232,7 +232,7 @@ In Claude Cowork, users interact via free text - the AI sees all MCP tools and u
 
 | Workflow | Description |
 |----------|-------------|
-| `getting-started` | Authenticate and explore data |
+| `getting-started` | Connect via OAuth and explore data |
 | `financial-summary` | Revenue, expenses, and profit overview |
 | `expense-analysis` | Expense breakdown with complete totals |
 | `revenue-trends` | Revenue patterns over time |
@@ -400,73 +400,33 @@ Files in `tmp/` are **not committed** (protected by `.gitignore`).
 
 ---
 
-## Multi-Account Support
+## Authentication
 
-This plugin supports simultaneous authentication to multiple Datarails environments.
+Authentication uses **OAuth 2.0 Authorization Code + PKCE**. A browser window opens automatically for login — no manual cookie extraction needed.
 
-### Available Environments
-
-| Name | Display | URL |
-|------|---------|-----|
-| `dev` | Development | dev.datarails.com |
-| `demo` | Demo | demo.datarails.com |
-| `testapp` | Test App | testapp.datarails.com |
-| `app` | Production | app.datarails.com |
-
-### Managing Accounts
+### Managing Authentication
 
 ```bash
-# List all environments and their auth status
-/dr-auth --list
+# Authenticate (opens browser)
+/dr-auth
 
-# Authenticate to specific environment
-/dr-auth --env app
-/dr-auth --env dev
+# Authenticate to a specific auth server
+/dr-auth --env prod    # Production (default)
+/dr-auth --env dev     # Development
+/dr-auth --env test    # Test
 
-# Switch active environment
-/dr-auth --switch app
+# Check connection status
+/dr-auth               # Shows current status
 
-# Logout from specific environment
-/dr-auth --logout dev
-
-# Logout from all
-/dr-auth --logout-all
+# Disconnect (revoke tokens)
+/dr-auth --disable
 ```
 
-### Using --env Flag
+### Switching Environments
 
-All skills support the `--env` flag:
-
-```bash
-/dr-tables --env app               # List tables in production
-/dr-profile TABLE_ID --env dev     # Profile in development
-/dr-learn --env app                # Create profile for production
-/dr-extract --env app --year 2025  # Extract from production
-/dr-intelligence --year 2025 --env app  # Intelligence workbook
-```
-
----
-
-## Adding Custom Environments
-
-Edit `config/environments.json` to add custom environments:
-
-```json
-{
-  "environments": {
-    "custom-instance": {
-      "base_url": "https://custom.datarails.com",
-      "auth_url": "https://custom-auth.datarails.com",
-      "display_name": "Custom Instance"
-    }
-  }
-}
-```
-
-After adding a custom environment:
-1. `/dr-auth --env custom-instance` to authenticate
-2. `/dr-learn --env custom-instance` to discover tables
-3. `/dr-extract --env custom-instance --year 2025` to extract
+The environment is selected during the OAuth login flow. To switch:
+1. `/dr-auth --disable` to disconnect
+2. `/dr-auth --env <env>` to authenticate to the new environment
 
 ---
 
@@ -480,39 +440,35 @@ The MCP server is transitioning to remote hosting. End users do not need to inst
 
 ## Authentication Flow
 
-1. **Browser Cookie Extraction**: CLI reads cookies from your browser's local storage
-2. **Keyring Storage**: Credentials are securely stored in your system keyring (per environment)
-3. **JWT Auto-refresh**: Session cookies are used to automatically fetch/refresh JWT tokens (5-min expiry)
-
-**Supported browsers:** Chrome, Firefox, Safari, Edge, Brave, Opera, Chromium
+1. **OAuth 2.0 + PKCE**: Running `/dr-auth` opens a browser window for secure login
+2. **Token Storage**: JWT tokens (access + refresh) are securely stored
+3. **Auto-refresh**: Tokens auto-refresh transparently — no manual intervention needed
 
 ---
 
 ## Troubleshooting
 
 ### "Not authenticated" error
-1. Make sure you're logged into Datarails in your browser
-2. Run `/dr-auth` to extract cookies
-3. Check status: `/dr-auth --list`
+1. Run `/dr-auth` to authenticate via OAuth
+2. A browser window will open — log in with your Datarails credentials
 
-### Browser cookie extraction fails
-1. Try closing the browser first (some browsers lock the cookie database)
-2. Use manual entry: `/dr-auth --manual`
-3. Grant keychain access if prompted (macOS)
+### Authentication fails or browser doesn't open
+1. Check your default browser settings
+2. Try running `/dr-auth` again
+3. If callback times out, ensure no firewall is blocking localhost
 
-### Wrong environment
-1. Check active environment: `/dr-auth --list`
-2. Switch: `/dr-auth --switch <env>`
-3. Or specify explicitly: `/dr-tables --env app`
+### Need a different environment
+1. Run `/dr-auth --disable` to disconnect
+2. Run `/dr-auth --env <env>` to authenticate to the desired environment
 
 ### "No profile found" error
-1. Run `/dr-learn --env <env>` to create a profile
+1. Run `/dr-learn` to create a profile
 2. Or copy an existing profile and modify it locally
 
 ### Extraction returns unexpected data
 1. Check profile at `config/client-profiles/<env>.json`
 2. Verify all field mappings are correct
-3. Re-run `/dr-learn --env <env>` to rediscover structure
+3. Re-run `/dr-learn` to rediscover structure
 
 ### Slow extraction (normal for raw data)
 For raw data extraction via pagination:

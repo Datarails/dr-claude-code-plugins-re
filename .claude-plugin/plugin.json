@@ -1,7 +1,7 @@
 {
   "name": "datarails-finance-os",
-  "version": "1.3.0",
-  "description": "Datarails Finance OS integration for Claude Code and Cowork - analyze financial data, detect anomalies, and generate insights. Works with browser-based authentication (no CLI required for Cowork users).",
+  "version": "2.0.0",
+  "description": "Datarails Finance OS integration for Claude Code and Cowork - analyze financial data, detect anomalies, and generate insights with OAuth 2.0 authentication.",
   "author": {
     "name": "Datarails",
     "email": "support@datarails.com"
@@ -15,14 +15,14 @@
     "fpna",
     "data-analysis",
     "anomaly-detection",
-    "multi-account",
+    "oauth",
     "cowork",
     "financial-analysis"
   ],
   "mcpServers": {
     "datarails-finance-os": {
-      "command": "uvx",
-      "args": ["datarails-finance-os-mcp[all]", "serve"],
+      "command": "datarails-mcp",
+      "args": ["serve"],
       "env": {
         "DATARAILS_CONFIG_DIR": "${CLAUDE_PLUGIN_ROOT}/config"
       }

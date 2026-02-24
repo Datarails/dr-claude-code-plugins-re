@@ -3,7 +3,7 @@ name: dr-get-formula
 description: Generate Excel workbooks with DR.GET formulas that pull live financial data from Datarails. Creates P&L templates, budget models, and variance reports with validated dimension values.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__get_field_distinct_values
@@ -13,7 +13,7 @@ allowed-tools:
   - Write
   - Read
   - Bash
-argument-hint: "[--type summary|detail|budget|variance] [--year <YYYY>] [--env <env>] [--output <file>]"
+argument-hint: "[--type summary|detail|budget|variance] [--year <YYYY>] [--output <file>]"
 ---
 
 # DR.GET Formula Workbook Generator
@@ -28,7 +28,6 @@ Generate Excel workbooks containing DR.GET formulas that pull live financial dat
 |----------|-------------|---------|
 | `--type <type>` | Report type: `summary`, `detail`, `budget`, `variance` | `summary` |
 | `--year <YYYY>` | Calendar year for date headers | Current year |
-| `--env <env>` | Environment: dev, demo, testapp, app | app |
 | `--output <file>` | Output file path | `tmp/DR_GET_<type>_<YEAR>.xlsx` |
 
 ## Client Profile System
@@ -117,8 +116,8 @@ Store the serial number as the cell value and apply `'MMM-YY'` number format so 
 
 #### Step 1: Verify Authentication
 ```
-Use: check_auth_status
-If not authenticated, guide to /dr-auth --env <env>
+Use: auth_status
+If not authenticated, guide to /dr-auth
 ```
 
 #### Step 2: Load Client Profile
@@ -131,7 +130,7 @@ If profile exists:
   - Continue to Phase 2
 
 If profile does NOT exist:
-  - Inform user: "No profile found for '<env>'. Run '/dr-learn --env <env>' first."
+  - Inform user: "No profile found. Run '/dr-learn' first."
   - Stop execution
 ```
 
@@ -295,22 +294,22 @@ Report what was generated:
 
 ### Summary P&L with Actuals
 ```bash
-/dr-get-formula --type summary --year 2026 --env app
+/dr-get-formula --type summary --year 2026
 ```
 
 ### Detailed departmental breakdown
 ```bash
-/dr-get-formula --type detail --year 2026 --env app
+/dr-get-formula --type detail --year 2026
 ```
 
 ### Budget template
 ```bash
-/dr-get-formula --type budget --year 2026 --env app
+/dr-get-formula --type budget --year 2026
 ```
 
 ### Actuals vs Budget variance
 ```bash
-/dr-get-formula --type variance --year 2026 --env app
+/dr-get-formula --type variance --year 2026
 ```
 
 ### Custom output location
@@ -323,10 +322,10 @@ Report what was generated:
 ## Troubleshooting
 
 **"Not authenticated" error**
-- Run `/dr-auth --env app` first
+- Run `/dr-auth` first
 
 **"No profile found" error**
-- Run `/dr-learn --env app` to create a client profile first
+- Run `/dr-learn` to create a client profile first
 
 **DR.GET formulas return 0 or errors when opened in Excel**
 - Verify the Datarails Excel Add-in is active

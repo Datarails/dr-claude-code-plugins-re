@@ -3,12 +3,12 @@ name: dr-dashboard
 description: Generate executive KPI dashboard with real-time metrics. Creates Excel dashboards and PowerPoint one-pagers.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__aggregate_table_data
   - Write
   - Read
   - Bash
-argument-hint: "[--period <YYYY-MM>] [--env <env>] [--output-xlsx <file>] [--output-pptx <file>]"
+argument-hint: "[--period <YYYY-MM>] [--output-xlsx <file>] [--output-pptx <file>]"
 ---
 
 # Executive KPI Dashboard
@@ -22,7 +22,6 @@ Creates both Excel dashboards (for analysis) and PowerPoint one-pagers (for meet
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `--period <YYYY-MM>` | Month to dashboard for | Current month |
-| `--env <env>` | Environment: dev, demo, testapp, app | Active |
 | `--output-xlsx <file>` | Excel output path | `tmp/Executive_Dashboard_TIMESTAMP.xlsx` |
 | `--output-pptx <file>` | PowerPoint output path | `tmp/Dashboard_OnePager_TIMESTAMP.pptx` |
 
@@ -64,7 +63,7 @@ Creates both Excel dashboards (for analysis) and PowerPoint one-pagers (for meet
 
 ### Generate current month dashboard
 ```bash
-/dr-dashboard --env app
+/dr-dashboard
 ```
 
 Output:
@@ -96,7 +95,7 @@ Outputs:
 
 ### With custom locations
 ```bash
-/dr-dashboard --env app \
+/dr-dashboard \
   --output-xlsx reports/dashboard.xlsx \
   --output-pptx reports/dashboard.pptx
 ```
@@ -105,13 +104,13 @@ Outputs:
 
 ### Daily Executive Sync
 ```bash
-/dr-dashboard --env app  # Use PowerPoint for standup
+/dr-dashboard  # Use PowerPoint for standup
 ```
 
 ### Weekly Team Update
 ```bash
 # Share Excel for details, PowerPoint for overview
-/dr-dashboard --env app
+/dr-dashboard
 ```
 
 ### Monthly Board Package
@@ -123,7 +122,7 @@ Outputs:
 ### Investor Demo
 ```bash
 # Professional one-pager
-/dr-dashboard --env app --output-pptx investors_dashboard.pptx
+/dr-dashboard --output-pptx investors_dashboard.pptx
 ```
 
 ## Performance
@@ -158,7 +157,7 @@ Outputs:
 Schedule weekly updates:
 ```bash
 # Every Monday at 8 AM
-0 8 * * 1 /dr-dashboard --env app \
+0 8 * * 1 /dr-dashboard \
   --output-pptx reports/weekly_dashboard.pptx
 ```
 

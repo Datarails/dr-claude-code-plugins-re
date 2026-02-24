@@ -3,12 +3,12 @@ name: dr-tables
 description: List and explore Datarails Finance OS tables. Use to discover available data, view schemas, and understand table structure.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__get_field_distinct_values
   - mcp__datarails-finance-os__profile_table_summary
-argument-hint: "[table_id] [--schema] [--field <field_name>] [--env <env>]"
+argument-hint: "[table_id] [--schema] [--field <field_name>]"
 ---
 
 # Datarails Table Discovery
@@ -19,9 +19,7 @@ Explore Finance OS tables - list available tables, view schemas, and understand 
 
 ### Step 1: Verify Authentication
 
-Always check auth status first with `mcp__datarails-finance-os__check_auth_status`. If not authenticated, guide user to run `/dr-auth`.
-
-Note: The command uses the **active environment** by default. User can specify `--env` to query a different environment.
+Always check auth status first with `mcp__datarails-finance-os__auth_status`. If not authenticated, guide user to run `/dr-auth`.
 
 ### Step 2: Handle Request
 
@@ -48,7 +46,6 @@ Note: The command uses the **active environment** by default. User can specify `
 | `<table_id>` | Show schema and summary for specific table |
 | `--schema` | Show detailed schema (columns, types, constraints) |
 | `--field <name>` | Show distinct values for a specific field |
-| `--env <env>` | Query specific environment (dev, demo, testapp, app) |
 
 ## Example Interactions
 
@@ -94,31 +91,15 @@ Found 156 unique values:
 ...
 ```
 
-**User: "/dr-tables --env app"**
-Lists tables from the Production environment instead of the active environment.
-
-## Multi-Environment Usage
-
-When working with multiple Datarails environments:
-
-```
-/dr-tables                    # Uses active environment
-/dr-tables --env dev          # Explicitly use dev
-/dr-tables --env app          # Use production
-/dr-tables 11442 --env demo   # View table in demo environment
-```
-
 ## Tips
 
 - Use this skill first when starting analysis to understand available data
 - Table IDs are needed for other skills like `/dr-profile` and `/dr-anomalies`
 - Check distinct values to understand categorical field cardinality
 - The profile summary gives a quick data quality overview
-- Same table ID may exist in different environments with different data
-
 ## Related Skills
 
-- `/dr-auth` - Authenticate to different environments
+- `/dr-auth` - Authenticate
 - `/dr-profile` - Deep profiling of numeric and categorical fields
 - `/dr-anomalies` - Detect data quality issues
 - `/dr-query` - Query specific records

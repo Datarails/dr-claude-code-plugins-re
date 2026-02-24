@@ -3,13 +3,13 @@ name: dr-query
 description: Query Datarails Finance OS tables with filters. Fetch specific records, get samples, or run custom queries for investigation.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__get_records_by_filter
   - mcp__datarails-finance-os__get_sample_records
   - mcp__datarails-finance-os__execute_query
   - mcp__datarails-finance-os__get_field_distinct_values
-argument-hint: "<table_id> [filter_expression] [--sample] [--limit N] [--env <env>]"
+argument-hint: "<table_id> [filter_expression] [--sample] [--limit N]"
 ---
 
 # Datarails Data Query
@@ -41,7 +41,6 @@ Format results as a readable table. Highlight any notable patterns.
 | `--sample` | Get random sample (default 20 rows) |
 | `--limit N` | Limit results (max 500 for filters, 1000 for queries) |
 | `--sql` | Treat filter as raw SQL-like query |
-| `--env <env>` | Query specific environment (dev, demo, testapp, app) |
 
 ## Filter Syntax
 
@@ -157,22 +156,6 @@ Found 892 records with missing vendor_name since Jan 1
    Consider joining with vendor master table
 ```
 
-**User: "/dr-query 11442 --sample --env app"**
-Gets sample records from the Production environment.
-
-## Multi-Environment Usage
-
-```
-/dr-query 11442 --sample              # Active environment
-/dr-query 11442 --sample --env dev    # Development
-/dr-query 11442 --sample --env app    # Production
-```
-
-Useful for:
-- Comparing data between environments
-- Investigating production issues
-- Validating data migration
-
 ## Filter Object Format (API)
 
 When using `get_records_by_filter` programmatically:
@@ -201,8 +184,6 @@ When using `get_records_by_filter` programmatically:
 - Use filters to investigate anomalies found by `/dr-anomalies`
 - For aggregations, use `--sql` with GROUP BY
 - If you need more than 500 rows, consider profiling instead
-- Always specify `--env` when working across environments
-
 ## Related Skills
 
 - `/dr-tables` - Get schema before querying

@@ -3,7 +3,7 @@ name: dr-anomalies
 description: Detect data anomalies in Datarails Finance OS tables. Finds outliers, missing values, duplicates, and data quality issues.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__profile_table_summary
   - mcp__datarails-finance-os__detect_anomalies
@@ -11,7 +11,7 @@ allowed-tools:
   - mcp__datarails-finance-os__profile_categorical_fields
   - mcp__datarails-finance-os__get_records_by_filter
   - mcp__datarails-finance-os__get_sample_records
-argument-hint: "<table_id> [--severity critical|high|medium|low] [--type <anomaly_type>] [--env <env>]"
+argument-hint: "<table_id> [--severity critical|high|medium|low] [--type <anomaly_type>]"
 ---
 
 # Datarails Anomaly Detection
@@ -46,7 +46,6 @@ Organize findings by severity:
 | `<table_id>` | Required - the table to analyze |
 | `--severity <level>` | Filter to specific severity (critical, high, medium, low) |
 | `--type <type>` | Filter to specific anomaly type |
-| `--env <env>` | Analyze in specific environment (dev, demo, testapp, app) |
 
 ## Anomaly Types Detected
 
@@ -183,22 +182,6 @@ quantity: 23 outliers
 unit_cost: 45 outliers
 ...
 ```
-
-**User: "/dr-anomalies 11442 --env app"**
-Runs anomaly detection on Production environment data.
-
-## Multi-Environment Usage
-
-```
-/dr-anomalies 11442                  # Active environment
-/dr-anomalies 11442 --env dev        # Development
-/dr-anomalies 11442 --env app        # Production
-```
-
-Compare anomalies across environments:
-- Development may have test data with intentional anomalies
-- Production anomalies require immediate attention
-- Demo environment may have synthetic data patterns
 
 ## Investigation Workflow
 

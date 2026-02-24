@@ -70,10 +70,10 @@ Skills are auto-discovered from the `skills/` directory when running inside the 
 Once installed, authenticate and explore:
 
 ```
-/dr-auth --env app                     # Connect to your Datarails environment
+/dr-auth                               # Connect via OAuth (opens browser)
 /dr-tables                             # List available tables
-/dr-learn --env app                    # Create client profile (first time)
-/dr-intelligence --year 2025 --env app # Generate FP&A intelligence workbook
+/dr-learn                              # Create client profile (first time)
+/dr-intelligence --year 2025           # Generate FP&A intelligence workbook
 ```
 
 New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)** for a hands-on walkthrough (~15 minutes).
@@ -109,7 +109,6 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 
 ```
 /dr-intelligence --year 2025                    # Full intelligence workbook
-/dr-intelligence --year 2025 --env app          # From production
 ```
 
 **10 Sheets Generated:**
@@ -126,20 +125,14 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 
 ---
 
-## Multi-Environment Support
+## Authentication
 
-| Environment | URL | Description |
-|-------------|-----|-------------|
-| `dev` | dev.datarails.com | Development |
-| `demo` | demo.datarails.com | Demo |
-| `testapp` | testapp.datarails.com | Test App |
-| `app` | app.datarails.com | Production |
-
-All skills support the `--env` flag:
+Uses **OAuth 2.0 + PKCE** — a browser window opens automatically for secure login. Environment is selected during login.
 
 ```
-/dr-tables --env app               # Production tables
-/dr-intelligence --year 2025 --env app  # Intelligence from production
+/dr-auth                    # Connect (opens browser)
+/dr-auth --env dev          # Connect to dev auth server
+/dr-auth --disable          # Disconnect
 ```
 
 ---
@@ -148,9 +141,9 @@ All skills support the `--env` flag:
 
 | Problem | Solution |
 |---------|----------|
-| "Not authenticated" | Run `/dr-auth --env app` |
-| Wrong environment | Use `--env` flag or `/dr-auth --switch <env>` |
-| "No profile found" | Run `/dr-learn --env <env>` first |
+| "Not authenticated" | Run `/dr-auth` (opens browser for OAuth login) |
+| Need different environment | `/dr-auth --disable` then `/dr-auth --env <env>` |
+| "No profile found" | Run `/dr-learn` first |
 | Skills not showing | Restart Claude Desktop / Claude Code |
 | Slow extraction | Normal for raw data (~90 rec/sec). Summaries use aggregation (~5s) |
 

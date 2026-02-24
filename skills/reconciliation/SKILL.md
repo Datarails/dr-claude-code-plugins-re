@@ -3,13 +3,13 @@ name: dr-reconcile
 description: Reconcile P&L vs KPI data sources. Validates consistency and identifies discrepancies with variance analysis.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__aggregate_table_data
   - mcp__datarails-finance-os__list_finance_tables
   - Write
   - Read
   - Bash
-argument-hint: "--year <YYYY> [--scenario <name>] [--tolerance-pct <#>] [--env <env>] [--output <file>]"
+argument-hint: "--year <YYYY> [--scenario <name>] [--tolerance-pct <#>] [--output <file>]"
 ---
 
 # P&L vs KPI Reconciliation
@@ -25,7 +25,6 @@ Essential for month-end close and financial validation.
 | `--year <YYYY>` | **REQUIRED** Calendar year to reconcile | — |
 | `--scenario <name>` | Scenario to reconcile | `Actuals` |
 | `--tolerance-pct <#>` | Acceptable variance threshold | `5.0` |
-| `--env <env>` | Environment: dev, demo, testapp, app | Active |
 | `--output <file>` | Output file path | `tmp/Reconciliation_YYYY_TIMESTAMP.xlsx` |
 
 ## What It Validates
@@ -76,11 +75,6 @@ Excel report with multiple sheets:
 ### Reconcile specific scenario
 ```bash
 /dr-reconcile --year 2025 --scenario Forecast
-```
-
-### Development environment
-```bash
-/dr-reconcile --year 2025 --env dev
 ```
 
 ### Custom output location

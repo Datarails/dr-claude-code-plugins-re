@@ -9,7 +9,7 @@ Help the user understand where their money is going. Uses aggregation for comple
 ## Step 1: Verify Connection
 
 ```
-Use: mcp__datarails-finance-os__check_auth_status
+Use: mcp__datarails-finance-os__auth_status
 ```
 
 **If not authenticated:** Guide user to run `/datarails-finance-os:login` first.

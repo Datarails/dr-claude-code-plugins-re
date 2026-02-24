@@ -3,10 +3,10 @@ name: dr-intelligence
 description: Generate comprehensive FP&A intelligence workbooks with auto-detected insights, recommendations, and professional Excel formatting. The most powerful financial analysis skill.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__generate_intelligence_workbook
   - Read
-argument-hint: "--year <YYYY> [--env <env>] [--output <file>]"
+argument-hint: "--year <YYYY> [--output <file>]"
 ---
 
 # FP&A Intelligence Workbook
@@ -30,15 +30,14 @@ This is the **most powerful** financial analysis skill - it answers real busines
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `--year <YYYY>` | **REQUIRED** Calendar year | -- |
-| `--env <env>` | Environment: dev, demo, testapp, app | app |
 | `--output <file>` | Output file path | `tmp/FPA_Intelligence_Workbook_YYYY_TIMESTAMP.xlsx` |
 
 ## Workflow
 
 ### Step 1: Verify Authentication
 ```
-Use: check_auth_status
-If not authenticated, guide to /dr-auth --env <env>
+Use: auth_status
+If not authenticated, guide to /dr-auth
 ```
 
 ### Step 2: Generate Workbook via MCP Tool
@@ -49,7 +48,6 @@ Call the `generate_intelligence_workbook` MCP tool with the parsed arguments:
 Use: generate_intelligence_workbook
 Arguments:
   year: <parsed year, REQUIRED>
-  env: <parsed env, default "app">
   output_path: <parsed output, or omit for default>
 ```
 
@@ -116,7 +114,7 @@ This workbook answers the **Top 10 Business Questions**:
 ## Troubleshooting
 
 ### "profile_not_found" error
-Run `/dr-learn --env <env>` first to create a profile.
+Run `/dr-learn` first to create a profile.
 
 ### "missing_dependency" error
 The MCP server needs the reports extra: `pip install datarails-finance-os-mcp[reports]`
@@ -127,7 +125,7 @@ The MCP server needs the reports extra: `pip install datarails-finance-os-mcp[re
 
 ### Missing data in sheets
 - Check if profile has correct field mappings
-- Run `/dr-learn --env app` to refresh profile
+- Run `/dr-learn` to refresh profile
 
 ## Related Skills
 

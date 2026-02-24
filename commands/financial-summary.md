@@ -9,7 +9,7 @@ Generate a quick overview of the user's financial data with real aggregated tota
 ## Step 1: Verify Connection
 
 ```
-Use: mcp__datarails-finance-os__check_auth_status
+Use: mcp__datarails-finance-os__auth_status
 ```
 
 **If not authenticated:** Guide user to run `/datarails-finance-os:login` first.

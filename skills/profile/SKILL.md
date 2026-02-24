@@ -3,13 +3,13 @@ name: dr-profile
 description: Profile Datarails Finance OS table fields. Analyze numeric fields for statistics and outliers, categorical fields for cardinality and frequencies.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__profile_table_summary
   - mcp__datarails-finance-os__profile_numeric_fields
   - mcp__datarails-finance-os__profile_categorical_fields
   - mcp__datarails-finance-os__get_field_distinct_values
-argument-hint: "<table_id> [--numeric] [--categorical] [--field <field_name>] [--env <env>]"
+argument-hint: "<table_id> [--numeric] [--categorical] [--field <field_name>]"
 ---
 
 # Datarails Table Profiling
@@ -54,7 +54,6 @@ Check auth status first. If not authenticated, guide user to `/dr-auth`.
 | `--categorical` | Profile only categorical fields |
 | `--field <name>` | Profile a specific field |
 | `--fields <a,b,c>` | Profile specific fields (comma-separated) |
-| `--env <env>` | Profile in specific environment (dev, demo, testapp, app) |
 
 ## Example Interactions
 
@@ -146,17 +145,6 @@ Outliers (|z| > 3): 127 records
    Use: /dr-query 11442 "amount > 500000 OR amount < -100000"
 ```
 
-**User: "/dr-profile 11442 --env app"**
-Profiles the table in the Production environment.
-
-## Multi-Environment Usage
-
-```
-/dr-profile 11442                    # Active environment
-/dr-profile 11442 --env dev          # Development
-/dr-profile 11442 --env app          # Production
-```
-
 ## Data Quality Indicators
 
 | Symbol | Meaning |
@@ -172,8 +160,6 @@ Profiles the table in the Production environment.
 - High null rates (>5%) may indicate data collection issues
 - High cardinality categorical fields may need normalization
 - Outliers aren't always bad - verify against business rules
-- Compare profiles across environments to spot data drift
-
 ## Related Skills
 
 - `/dr-tables` - Discover available tables

@@ -3,13 +3,13 @@ name: dr-insights
 description: Generate executive-ready insights with trend analysis and visualizations. Creates professional PowerPoint presentations and Excel data books.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__aggregate_table_data
   - mcp__datarails-finance-os__list_finance_tables
   - Write
   - Read
   - Bash
-argument-hint: "[--year <YYYY>] [--quarter <Q#>] [--env <env>] [--output-pptx <file>] [--output-xlsx <file>]"
+argument-hint: "[--year <YYYY>] [--quarter <Q#>] [--output-pptx <file>] [--output-xlsx <file>]"
 ---
 
 # Financial Insights Report
@@ -25,7 +25,6 @@ Creates both PowerPoint presentations (for meetings) and Excel data books (for d
 | `--year <YYYY>` | Calendar year to analyze | Current year |
 | `--quarter <Q#>` | Quarter: Q1, Q2, Q3, Q4 | Current quarter |
 | `--period <period>` | Combined period: YYYY-QX or YYYY-MM | Auto-determined |
-| `--env <env>` | Environment: dev, demo, testapp, app | Active |
 | `--output-pptx <file>` | PowerPoint output path | `tmp/Insights_TIMESTAMP.pptx` |
 | `--output-xlsx <file>` | Excel output path | `tmp/Insights_Data_TIMESTAMP.xlsx` |
 
@@ -136,7 +135,7 @@ Comprehensive workbook includes:
 
 ### Generate current quarter insights
 ```bash
-/dr-insights --env app
+/dr-insights
 ```
 
 Output:
@@ -164,12 +163,12 @@ Outputs:
 
 ### Generate specific quarter
 ```bash
-/dr-insights --year 2025 --quarter Q4 --env app
+/dr-insights --year 2025 --quarter Q4
 ```
 
 ### Generate previous month
 ```bash
-/dr-insights --period 2026-01 --env app
+/dr-insights --period 2026-01
 ```
 
 ### Save to custom location
@@ -183,20 +182,20 @@ Outputs:
 
 ### Board Presentations
 ```bash
-/dr-insights --quarter Q4 --year 2025 --env app
+/dr-insights --quarter Q4 --year 2025
 # Use PowerPoint for board meeting
 ```
 
 ### Executive Dashboard Updates
 ```bash
 # Weekly insights
-/dr-insights --env app
+/dr-insights
 ```
 
 ### Quarterly Business Reviews
 ```bash
 # Comprehensive analysis for stakeholders
-/dr-insights --year 2025 --quarter Q4 --env app
+/dr-insights --year 2025 --quarter Q4
 ```
 
 ### Investor Communications
@@ -208,7 +207,7 @@ Outputs:
 ### Department Reviews
 ```bash
 # Share with teams for transparency
-/dr-insights --env app
+/dr-insights
 ```
 
 ## Key Metrics Included
@@ -249,7 +248,7 @@ Fast processing via efficient MCP aggregation tools.
 ## Error Handling
 
 **"Not authenticated" error**
-- Run `/dr-auth --env app` first
+- Run `/dr-auth` first
 
 **"No KPI data found" warning**
 - Agent adapts and focuses on P&L trends

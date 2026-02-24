@@ -3,7 +3,7 @@ name: dr-learn
 description: Discover and learn a client's table structure for financial data extraction. Creates a client profile that enables /dr-extract to work with any Datarails environment.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__get_field_distinct_values
@@ -13,7 +13,7 @@ allowed-tools:
   - Write
   - Read
   - AskUserQuestion
-argument-hint: "[--env <env>] [--force]"
+argument-hint: "[--force]"
 ---
 
 # Datarails Table Discovery & Profile Generation
@@ -34,7 +34,6 @@ This skill discovers these mappings and saves them to a client profile.
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--env <env>` | Environment: dev, demo, testapp, app | Active environment |
 | `--force` | Overwrite existing profile | Prompt for confirmation |
 
 ## Workflow
@@ -43,14 +42,11 @@ This skill discovers these mappings and saves them to a client profile.
 
 #### Step 1: Check Authentication
 ```
-Use: mcp__datarails-finance-os__check_auth_status
+Use: mcp__datarails-finance-os__auth_status
 If not authenticated, guide user to run /dr-auth first
 ```
 
-#### Step 2: Determine Target Environment
-Parse `--env` flag or use active environment from config.
-
-#### Step 3: Check for Existing Profile
+#### Step 2: Check for Existing Profile
 ```
 Read: config/client-profiles/<env>.json
 If exists and no --force flag, ask user if they want to overwrite
@@ -325,8 +321,8 @@ Summary:
 - Aggregation: <X>/<Y> fields supported
 - Alternatives: <list of alternatives discovered>
 
-You can now use /dr-extract --env <env> to extract financial data.
-For detailed aggregation testing, run /dr-test --env <env>.
+You can now use /dr-extract to extract financial data.
+For detailed aggregation testing, run /dr-test.
 ```
 
 ## Example Interaction

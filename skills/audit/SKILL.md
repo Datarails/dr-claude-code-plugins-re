@@ -3,12 +3,12 @@ name: dr-audit
 description: Generate SOX compliance audit reports with evidence packages. Creates professional PDF audit reports and Excel evidence workbooks.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__aggregate_table_data
   - Write
   - Read
   - Bash
-argument-hint: "--year <YYYY> --quarter <Q#> [--env <env>] [--output-pdf <file>] [--output-xlsx <file>]"
+argument-hint: "--year <YYYY> --quarter <Q#> [--output-pdf <file>] [--output-xlsx <file>]"
 ---
 
 # SOX Compliance Audit
@@ -23,7 +23,6 @@ Creates both PDF audit reports (for management) and Excel evidence workbooks (fo
 |----------|-------------|---------|
 | `--year <YYYY>` | **REQUIRED** Calendar year | — |
 | `--quarter <Q#>` | **REQUIRED** Quarter: Q1, Q2, Q3, Q4 | — |
-| `--env <env>` | Environment: dev, demo, testapp, app | Active |
 | `--output-pdf <file>` | PDF output path | `tmp/Audit_Report_YYYY_QX_DATE.pdf` |
 | `--output-xlsx <file>` | Excel evidence path | `tmp/Audit_Evidence_YYYY_QX_DATE.xlsx` |
 
@@ -64,11 +63,6 @@ Performs comprehensive audit of key financial controls:
 ### Mid-year audit
 ```bash
 /dr-audit --year 2025 --quarter Q2
-```
-
-### Development environment
-```bash
-/dr-audit --year 2025 --quarter Q1 --env dev
 ```
 
 ### Custom output locations

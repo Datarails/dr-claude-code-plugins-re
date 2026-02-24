@@ -3,7 +3,7 @@ name: dr-test
 description: Test API field compatibility and performance. Discovers which fields work with aggregation, suggests alternatives for failed fields, and updates the client profile automatically.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__aggregate_table_data
@@ -11,7 +11,7 @@ allowed-tools:
   - Write
   - Read
   - Bash
-argument-hint: "[--env <env>]"
+argument-hint: ""
 ---
 
 # API Diagnostic & Field Compatibility Test
@@ -28,9 +28,7 @@ The Datarails aggregation API works for most fields (~212/220) but some fields f
 
 ## Arguments
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--env <env>` | Environment: dev, demo, testapp, app | Active environment |
+No arguments required. Uses the currently authenticated environment.
 
 ## Client Profile System
 
@@ -52,8 +50,8 @@ This skill reads AND writes to client profiles at `config/client-profiles/<env>.
 
 #### Step 1: Check Authentication
 ```
-Use: mcp__datarails-finance-os__check_auth_status
-If not authenticated, guide user to run /dr-auth --env <env> first
+Use: mcp__datarails-finance-os__auth_status
+If not authenticated, guide user to run /dr-auth first
 ```
 
 #### Step 2: Load Client Profile
@@ -207,7 +205,7 @@ Impact:
 
 | Issue | Solution |
 |-------|----------|
-| No profile found | Run `/dr-learn --env <env>` first |
+| No profile found | Run `/dr-learn` first |
 | All fields fail | Aggregation API may not work in this environment; commands will use pagination |
 | Auth expires during testing | Tests run sequentially, each ~5s; re-auth if needed |
 | New fields not detected | Re-run `/dr-learn` to refresh the schema, then `/dr-test` |

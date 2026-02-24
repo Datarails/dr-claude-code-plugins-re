@@ -3,12 +3,12 @@ name: dr-forecast-variance
 description: Analyze budget vs forecast vs actual variances. Compares multi-scenario financial data for planning and performance review.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__aggregate_table_data
   - Write
   - Read
   - Bash
-argument-hint: "--year <YYYY> [--scenarios <list>] [--period <YYYY-MM>] [--env <env>] [--output-xlsx <file>] [--output-pptx <file>]"
+argument-hint: "--year <YYYY> [--scenarios <list>] [--period <YYYY-MM>] [--output-xlsx <file>] [--output-pptx <file>]"
 ---
 
 # Forecast Variance Analysis
@@ -24,7 +24,6 @@ Essential for FP&A reviews, planning adjustments, and performance tracking.
 | `--year <YYYY>` | **REQUIRED** Calendar year to analyze | — |
 | `--scenarios <list>` | Comma-separated scenarios | `Actuals,Budget,Forecast` |
 | `--period <YYYY-MM>` | Specific period to focus on | All year |
-| `--env <env>` | Environment: dev, demo, testapp, app | Active |
 | `--output-xlsx <file>` | Excel output path | `tmp/Forecast_Variance_YYYY_TIMESTAMP.xlsx` |
 | `--output-pptx <file>` | PowerPoint output path | `tmp/Forecast_Summary_YYYY_TIMESTAMP.pptx` |
 
@@ -77,16 +76,6 @@ Essential for FP&A reviews, planning adjustments, and performance tracking.
 ### Specific period focus
 ```bash
 /dr-forecast-variance --year 2025 --period 2025-Q4
-```
-
-### Strict analysis (1% threshold)
-```bash
-/dr-forecast-variance --year 2025 --env app
-```
-
-### Development environment
-```bash
-/dr-forecast-variance --year 2025 --env dev
 ```
 
 ### Custom output

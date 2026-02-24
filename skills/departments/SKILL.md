@@ -3,12 +3,12 @@ name: dr-departments
 description: Analyze P&L and performance by department. Creates departmental reports and comparative analysis with Excel and PowerPoint outputs.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__check_auth_status
+  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__aggregate_table_data
   - Write
   - Read
   - Bash
-argument-hint: "--year <YYYY> [--department <name>] [--env <env>] [--output-xlsx <file>] [--output-pptx <file>]"
+argument-hint: "--year <YYYY> [--department <name>] [--output-xlsx <file>] [--output-pptx <file>]"
 ---
 
 # Department Analytics
@@ -23,7 +23,6 @@ Creates detailed departmental reports for team leads and management reviews.
 |----------|-------------|---------|
 | `--year <YYYY>` | **REQUIRED** Calendar year | — |
 | `--department <name>` | Specific department (optional) | All departments |
-| `--env <env>` | Environment: dev, demo, testapp, app | Active |
 | `--output-xlsx <file>` | Excel output path | `tmp/Department_Analysis_YYYY_TIMESTAMP.xlsx` |
 | `--output-pptx <file>` | PowerPoint output path | `tmp/Department_Review_YYYY_TIMESTAMP.pptx` |
 
@@ -68,11 +67,6 @@ Creates detailed departmental reports for team leads and management reviews.
 ### Specific department review
 ```bash
 /dr-departments --year 2025 --department Engineering
-```
-
-### Development environment
-```bash
-/dr-departments --year 2025 --env dev
 ```
 
 ### Custom output
