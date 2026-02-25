@@ -1,20 +1,14 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "datarails-marketplace",
   "owner": {
     "name": "Datarails",
     "email": "support@datarails.com"
   },
-  "metadata": {
-    "description": "Datarails Finance OS plugins for Claude",
-    "version": "2.0.0"
-  },
   "plugins": [
     {
       "name": "datarails-finance-os",
-      "source": {
-        "source": "github",
-        "repo": "Datarails/dr-claude-code-plugins-re"
-      },
+      "source": "./",
       "description": "Financial analysis, reporting, and DR.GET formula generation for Datarails Finance OS",
       "version": "2.0.0",
       "author": {

@@ -14,7 +14,7 @@
 
 1. Open Claude Desktop → Browse plugins → **Personal** tab
 2. Click **+** → **Add marketplace from GitHub**
-3. Enter: `Datarails/dr-claude-code-plugins-re`
+3. Enter: `https://github.com/Datarails/dr-claude-code-plugins-re.git`
 4. Install the **Datarails Finance OS** plugin
 5. Restart Claude Desktop
 

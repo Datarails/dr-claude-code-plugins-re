@@ -1,24 +1,11 @@
 {
   "name": "datarails-finance-os",
   "version": "2.0.0",
-  "description": "Datarails Finance OS integration for Claude Code and Cowork - analyze financial data, detect anomalies, and generate insights with OAuth 2.0 authentication.",
+  "description": "Datarails Finance OS integration - analyze financial data, detect anomalies, and generate insights.",
   "author": {
     "name": "Datarails",
     "email": "support@datarails.com"
   },
-  "homepage": "https://datarails.com",
-  "repository": "https://github.com/Datarails/dr-claude-code-plugins-re",
-  "license": "MIT",
-  "keywords": [
-    "datarails",
-    "finance",
-    "fpna",
-    "data-analysis",
-    "anomaly-detection",
-    "oauth",
-    "cowork",
-    "financial-analysis"
-  ],
   "mcpServers": {
     "datarails-finance-os": {
       "command": "datarails-mcp",
@@ -27,27 +14,5 @@
         "DATARAILS_CONFIG_DIR": "${CLAUDE_PLUGIN_ROOT}/config"
       }
     }
-  },
-  "skills": [
-    "skills/auth",
-    "skills/test",
-    "skills/tables",
-    "skills/profile",
-    "skills/anomalies",
-    "skills/query",
-    "skills/extract",
-    "skills/learn",
-    "skills/intelligence",
-    "skills/anomalies-report",
-    "skills/insights",
-    "skills/reconciliation",
-    "skills/dashboard",
-    "skills/forecast-variance",
-    "skills/audit",
-    "skills/departments",
-    "skills/get-formula"
-  ],
-  "agents": [
-    "agents/finance-analyst.md"
-  ]
+  }
 }
