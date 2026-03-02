@@ -117,7 +117,7 @@ This workbook answers the **Top 10 Business Questions**:
 Run `/dr-learn` first to create a profile.
 
 ### "missing_dependency" error
-The MCP server needs the reports extra: `pip install datarails-finance-os-mcp[reports]`
+The MCP server is hosted remotely — this error should not occur. If it does, contact support.
 
 ### Takes too long
 - With aggregation: should complete in ~30 seconds

@@ -73,7 +73,7 @@ Output location: `tmp/` folder (configurable via `--output`)
 Run `/dr-learn` first to create a profile.
 
 ### "missing_dependency" error
-The MCP server needs the reports extra installed: `pip install datarails-finance-os-mcp[reports]`
+The MCP server is hosted remotely — this error should not occur. If it does, contact support.
 
 ### Token expires during extraction
 The script auto-refreshes tokens every 20K rows. If you still get 401 errors:

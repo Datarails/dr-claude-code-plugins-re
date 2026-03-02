@@ -189,13 +189,11 @@ datarails-plugin/                   # This repo (plugin distribution)
 └── .gitignore
 ```
 
-### MCP Server (Separate Repo)
+### MCP Server (Remote)
 
-The MCP server lives in a separate repo: [`dr-datarails-mcp-re`](https://github.com/Datarails/dr-datarails-mcp-re)
+The MCP server is hosted at `https://mcp.datarails.com/mcp` and configured automatically via `plugin.json`. No local installation needed.
 
 The MCP server provides 18 tools including `aggregate_table_data`, `get_records_by_filter`, `generate_intelligence_workbook`, `extract_financials`, and more.
-
-**Note:** The MCP server is transitioning to remote hosting. The `plugin.json` MCP server configuration will be updated to point to the hosted endpoint when available.
 
 ---
 
@@ -390,7 +388,7 @@ Files in `tmp/` are **not committed** (protected by `.gitignore`).
 - **Operational guides** (`docs/guides/*.md`)
 - **Jupyter notebooks** (`docs/notebooks/*.ipynb`)
 
-**Note:** MCP server code lives in the separate `datarails-mcp` repo.
+**Note:** MCP server is hosted remotely — no local server code needed.
 
 ### ❌ DO NOT COMMIT (Protected by .gitignore)
 - **Client profiles** (`config/client-profiles/*.json`) - Use these for data that varies per environment
@@ -432,9 +430,11 @@ The environment is selected during the OAuth login flow. To switch:
 
 ## MCP Server
 
-The MCP server is a **separate package** in its own repo: [`dr-datarails-mcp-re`](https://github.com/Datarails/dr-datarails-mcp-re)
+The MCP server is hosted remotely at `https://mcp.datarails.com/mcp`. The plugin configures it automatically — no local installation or setup needed. Users can also add it manually:
 
-The MCP server is transitioning to remote hosting. End users do not need to install or manage it directly - the plugin handles MCP server connectivity through `plugin.json`.
+```bash
+claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp
+```
 
 ---
 
@@ -554,5 +554,5 @@ Use the full HTTPS URL — the shorthand `owner/repo` format may fail due to SSH
 - All generated outputs go in `tmp/` (not committed)
 - Keep CLAUDE.md free of specific table IDs, field names, and client business logic
 - Use client profiles for environment-specific configuration
-- MCP server code lives in the separate [`dr-datarails-mcp-re`](https://github.com/Datarails/dr-datarails-mcp-re) repo
+- MCP server is hosted at `https://mcp.datarails.com/mcp` (configured automatically by plugin)
 - **Read `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` before building new features**

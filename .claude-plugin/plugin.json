@@ -1,6 +1,6 @@
 {
   "name": "datarails-finance-os",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Datarails Finance OS integration - analyze financial data, detect anomalies, and generate insights.",
   "author": {
     "name": "Datarails",
@@ -8,11 +8,8 @@
   },
   "mcpServers": {
     "datarails-finance-os": {
-      "command": "datarails-mcp",
-      "args": ["serve"],
-      "env": {
-        "DATARAILS_CONFIG_DIR": "${CLAUDE_PLUGIN_ROOT}/config"
-      }
+      "type": "http",
+      "url": "https://mcp.datarails.com/mcp"
     }
   }
 }
