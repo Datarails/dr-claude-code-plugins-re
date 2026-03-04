@@ -8,14 +8,19 @@ Help the user connect to their Datarails account using OAuth 2.0 authentication.
 
 ## IMPORTANT: If Datarails Tools Are Not Available
 
-If the Datarails MCP tools are not available (tool calls fail or tools not found), the Datarails connector is not connected yet. **Do NOT try bash commands or workarounds.** Instead, tell the user:
+If the Datarails MCP tools are not available (tool calls fail or tools not found), the Datarails connector is not connected yet. **Do NOT try bash commands, `which` commands, or workarounds.**
+
+Instead, check if there is a way to suggest the Datarails connector to the user (e.g., via the MCP registry or connector suggestions). If the platform supports showing "Suggested connectors", use that to let the user click **Connect** directly.
+
+If connector suggestions are not available, tell the user:
 
 > The Datarails connector isn't connected yet. To connect:
 >
-> 1. Go to **Settings > Connectors**
-> 2. Find **Datarails** and click **Connect**
-> 3. Log in with your Datarails credentials in the browser window
-> 4. Come back here and try again
+> - **Cowork (Claude Desktop):** Go to **Settings > Connectors**, find **Datarails**, and click **Connect**
+> - **Claude Code in Desktop:** Go to **Settings > MCP Servers**, find **Datarails Finance OS**, and click **Reconnect**
+> - **Claude Code (Terminal):** Run: `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
+>
+> After connecting, come back here and try again.
 
 Then STOP. Do not attempt any other tools or commands.
 
