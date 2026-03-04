@@ -448,6 +448,13 @@ claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp
 
 ## Troubleshooting
 
+### Datarails tools not available / tools not found
+The Datarails connector is not connected. **Do not try bash workarounds.** Tell the user:
+1. Go to **Settings > Connectors**
+2. Find **Datarails** and click **Connect**
+3. Log in with Datarails credentials in the browser
+4. Come back and try again
+
 ### "Not authenticated" error
 1. Run `/dr-auth` to authenticate via OAuth
 2. A browser window will open — log in with your Datarails credentials
