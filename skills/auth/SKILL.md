@@ -15,9 +15,9 @@ Help the user authenticate with Datarails Finance OS using OAuth 2.0 + PKCE.
 
 ## IMPORTANT: If Datarails Tools Are Not Available
 
-If the MCP tools (`auth_status`, `authenticate`, etc.) are not available, fail, or are not found, the Datarails connector is not connected yet. **Do NOT try bash commands, `which` commands, or any workarounds.**
+If the Datarails tools (`auth_status`, `authenticate`, etc.) are not available, fail, or are not found, the Datarails connector is not connected yet. **Do NOT try bash commands, `which` commands, or any workarounds.**
 
-Instead, check if there is a way to suggest the Datarails connector to the user (e.g., via the MCP registry or connector suggestions). If the platform supports showing "Suggested connectors", use that to let the user click **Connect** directly.
+Instead, check if there is a way to suggest the Datarails connector to the user (e.g., via connector suggestions). If the platform supports showing "Suggested connectors", use that to let the user click **Connect** directly.
 
 If connector suggestions are not available, tell the user:
 
@@ -25,11 +25,9 @@ If connector suggestions are not available, tell the user:
 >
 > Click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. You can also go to **Settings > Connectors** to manage connectors.
 >
-> If you're using Claude Code in a terminal (not Claude Desktop), run: `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
->
 > After connecting, come back here and try again.
 
-**IMPORTANT:** The primary instruction is always the Connectors UI. Only mention the `claude mcp add` terminal command if you are certain the user is running Claude Code in a standalone terminal, NOT in the Claude Desktop Code tab.
+**IMPORTANT:** Do NOT suggest terminal commands, CLI commands, or manual configuration steps. The Connectors UI is the only supported way to connect. Do NOT mention "MCP", "MCP server", or technical jargon — just say "Datarails connector" or "Datarails".
 
 Then STOP. Do not attempt any other tools or commands until the user has connected.
 
@@ -60,7 +58,7 @@ Parameters:
   env: <parsed env, default "prod">
 ```
 
-This opens the user's browser automatically. The user logs in via the Datarails login page, and tokens are returned to the MCP server via a local callback.
+This opens the user's browser automatically. The user logs in via the Datarails login page, and tokens are returned securely via a local callback.
 
 Then verify authentication succeeded:
 
