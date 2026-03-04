@@ -539,7 +539,7 @@ The marketplace install (`Add marketplace from GitHub`) has a [known SSH bug](ht
 **From GitHub (global install):**
 ```
 /plugin marketplace add https://github.com/Datarails/dr-claude-code-plugins-re.git
-/plugin install datarails-finance-os@datarails-marketplace
+/plugin install Datarails-FinanceOS@datarails-marketplace
 ```
 Use the full HTTPS URL — the shorthand `owner/repo` format may fail due to SSH.
 

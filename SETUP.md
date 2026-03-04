@@ -15,7 +15,7 @@
 1. Open Claude Desktop → Browse plugins → **Personal** tab
 2. Click **+** → **Add marketplace from GitHub**
 3. Enter: `https://github.com/Datarails/dr-claude-code-plugins-re.git`
-4. Install the **Datarails Finance OS** plugin
+4. Install the **Datarails FinanceOS** plugin
 5. Restart Claude Desktop
 
 > **Known issue:** The marketplace install may fail with "Host key verification failed" due to a [known Claude Desktop bug](https://github.com/anthropics/claude-code/issues/26588) where the VM uses SSH instead of HTTPS. Use Option 1 (ZIP upload) if this happens.

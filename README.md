@@ -12,14 +12,14 @@ Analyze financial data, detect anomalies, and generate insights directly from Cl
 2. Open Claude Desktop → Cowork → Browse plugins → **Personal** tab
 3. Click **+** → **Upload plugin**
 4. Select the downloaded ZIP
-5. Install the **Datarails Finance OS** plugin
+5. Install the **Datarails FinanceOS** plugin
 
 **Option 2: Add from GitHub**
 
 1. Open Claude Desktop → Browse plugins → **Personal** tab
 2. Click **+** → **Add marketplace from GitHub**
 3. Enter: `Datarails/dr-claude-code-plugins-re`
-4. Install the **Datarails Finance OS** plugin
+4. Install the **Datarails FinanceOS** plugin
 
 > **Note:** Option 2 may fail on some machines due to a [known SSH issue](https://github.com/anthropics/claude-code/issues/26588) in Claude Desktop. If installation fails, use Option 1 (ZIP upload) instead.
 
@@ -30,7 +30,7 @@ Analyze financial data, detect anomalies, and generate insights directly from Cl
 Open Claude Code in any project and run:
 ```
 /plugin marketplace add https://github.com/Datarails/dr-claude-code-plugins-re.git
-/plugin install datarails-finance-os@datarails-marketplace
+/plugin install Datarails-FinanceOS@datarails-marketplace
 ```
 
 > **Important:** Use the full HTTPS URL (not `Datarails/dr-claude-code-plugins-re`). The shorthand format triggers SSH cloning which may fail without SSH keys configured.
