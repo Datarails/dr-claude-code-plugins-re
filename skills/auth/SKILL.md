@@ -23,8 +23,7 @@ If connector suggestions are not available, tell the user:
 
 > The Datarails connector isn't connected yet. To connect:
 >
-> - **Cowork (Claude Desktop):** Go to **Settings > Connectors**, find **Datarails**, and click **Connect**
-> - **Claude Code in Desktop:** Go to **Settings > MCP Servers**, find **Datarails Finance OS**, and click **Reconnect**
+> - **Claude Desktop:** Click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. Alternatively, go to **Settings > Connectors** to manage connectors.
 > - **Claude Code (Terminal):** Run: `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
 >
 > After connecting, come back here and try again.

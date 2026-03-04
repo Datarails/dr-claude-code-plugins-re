@@ -40,15 +40,17 @@ Both tracks access the same data and produce the same quality results.
 
 **Time:** ~2 minutes
 
-### Claude Desktop (Cowork) Track
+### Claude Desktop Track (Cowork and Claude Code)
 
 The plugin automatically configures a Datarails connector when installed. To connect:
 
-1. Go to **Settings > Connectors**
-2. Find **Datarails FinanceOS** in your connectors list
-3. Click **Connect**
+1. Click the **"+"** button next to the prompt
+2. Select **Connectors**
+3. Find **Datarails** and click **Connect**
 4. A browser window opens — log in with your Datarails credentials
 5. After login, return to Claude Desktop — you're connected
+
+You can also manage connectors from **Settings > Connectors**.
 
 **If the connector doesn't appear:**
 1. Go to **Settings > Connectors**
@@ -115,7 +117,7 @@ Then pull a quick sample to see the data structure:
 
 | Problem | Solution |
 |---------|----------|
-| "Session expired" | Reconnect: Cowork → Settings > Connectors > Disconnect/Connect. Claude Code → `/dr-auth` |
+| "Session expired" | Reconnect: Claude Desktop → "+" > Connectors > Disconnect/Connect. Claude Code Terminal → `/dr-auth` |
 | Empty results | Check that your environment has data for the current year |
 | Slow response | First query may take 5-10 seconds; subsequent queries are faster |
 
@@ -285,7 +287,7 @@ You're up and running. Here's where to go from here:
 
 | I want to... | Cowork Command | Claude Code Skill |
 |--------------|----------------|-------------------|
-| **Connect to Datarails** | Settings > Connectors > Connect | `/dr-auth` |
+| **Connect to Datarails** | "+" > Connectors > Connect | `/dr-auth` |
 | **See financial totals** | `/datarails-finance-os:financial-summary` | `/dr-tables` + `/dr-query` |
 | **Analyze expenses** | `/datarails-finance-os:expense-analysis` | `/dr-query` with filters |
 | **Check revenue trends** | `/datarails-finance-os:revenue-trends` | `/dr-profile --numeric` |
