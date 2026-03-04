@@ -450,8 +450,8 @@ claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp
 
 ### Datarails tools not available / tools not found
 The Datarails connector is not connected. **Do not try bash workarounds.** Guide the user based on their environment:
-- **Claude Desktop:** Try to suggest the connector via the MCP registry. If not available, tell them: click "+" next to the prompt > Connectors > find Datarails > Connect (or Settings > Connectors)
-- **Claude Code (Terminal):** Run `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
+- **Primary (all Desktop users):** Try to suggest the connector via the MCP registry. If not available, tell them: click "+" next to the prompt > Connectors > find Datarails > Connect (or Settings > Connectors)
+- **Terminal only (standalone Claude Code, NOT Desktop Code tab):** Run `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
 
 ### "Not authenticated" error
 1. Run `/dr-auth` to authenticate via OAuth

@@ -16,8 +16,7 @@ If connector suggestions are not available, tell the user:
 
 > The Datarails connector isn't connected yet. To connect:
 >
-> - **Claude Desktop:** Click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. Alternatively, go to **Settings > Connectors** to manage connectors.
-> - **Claude Code (Terminal):** Run: `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
+> Click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. You can also go to **Settings > Connectors** to manage connectors.
 >
 > After connecting, come back here and try again.
 
