@@ -150,7 +150,6 @@ datarails-plugin/                   # This repo (plugin distribution)
 │   └── plugin.json              # Plugin manifest
 │
 ├── commands/                    # Cowork-friendly commands (no CLI)
-│   ├── login.md                 # OAuth authentication
 │   ├── financial-summary.md     # Quick financial overview
 │   ├── expense-analysis.md      # Expense breakdown
 │   ├── revenue-trends.md        # Revenue patterns
@@ -160,10 +159,9 @@ datarails-plugin/                   # This repo (plugin distribution)
 │   └── explore-tables.md        # Discover data
 │
 ├── skills/                      # Full-featured skills (Claude Code)
-│   ├── auth/SKILL.md
 │   ├── intelligence/SKILL.md    # Most powerful skill
 │   ├── extract/SKILL.md
-│   └── ... (17 skills total)
+│   └── ... (16 skills total)
 │
 ├── agents/                      # Agent definitions
 │   └── finance-analyst.md
@@ -202,7 +200,6 @@ The MCP server provides 18 tools including `aggregate_table_data`, `get_records_
 ### Core Skills
 | Skill | Description | Output |
 |-------|-------------|--------|
-| `/dr-auth` | Authenticate with Datarails via OAuth | JWT tokens auto-refreshed |
 | `/dr-learn` | Discover table structure + aggregation compatibility | Creates client profile |
 | `/dr-test` | Test API field compatibility and performance | Diagnostic report + profile update |
 | `/dr-tables` | List and explore tables | Table metadata |
@@ -400,71 +397,38 @@ Files in `tmp/` are **not committed** (protected by `.gitignore`).
 
 ## Authentication
 
-Authentication uses **OAuth 2.0 Authorization Code + PKCE**. A browser window opens automatically for login — no manual cookie extraction needed.
+Authentication is handled automatically at the MCP transport layer via **OAuth 2.0 + PKCE**. When a user connects to the Datarails connector, a browser window opens for login. Tokens are managed transparently — no manual steps needed.
 
-### Managing Authentication
+**There is no `/dr-auth` command.** Authentication happens when the connector is first connected.
 
-```bash
-# Authenticate (opens browser)
-/dr-auth
+### Connecting
 
-# Authenticate to a specific auth server
-/dr-auth --env prod    # Production (default)
-/dr-auth --env dev     # Development
-/dr-auth --env test    # Test
-
-# Check connection status
-/dr-auth               # Shows current status
-
-# Disconnect (revoke tokens)
-/dr-auth --disable
-```
+- **Claude Desktop / Cowork:** Click "+" next to the prompt > Connectors > Datarails > Connect
+- **Claude Code (standalone terminal):** `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
 
 ### Switching Environments
 
-The environment is selected during the OAuth login flow. To switch:
-1. `/dr-auth --disable` to disconnect
-2. `/dr-auth --env <env>` to authenticate to the new environment
+Disconnect and reconnect through the Connectors UI, or re-run the `claude mcp add` command with a different URL.
 
 ---
 
 ## MCP Server
 
-The MCP server is hosted remotely at `https://mcp.datarails.com/mcp`. The plugin configures it automatically — no local installation or setup needed. Users can also add it manually:
-
-```bash
-claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp
-```
-
----
-
-## Authentication Flow
-
-1. **OAuth 2.0 + PKCE**: Running `/dr-auth` opens a browser window for secure login
-2. **Token Storage**: JWT tokens (access + refresh) are securely stored
-3. **Auto-refresh**: Tokens auto-refresh transparently — no manual intervention needed
+The MCP server is hosted remotely at `https://mcp.datarails.com/mcp`. The plugin configures it automatically — no local installation or setup needed.
 
 ---
 
 ## Troubleshooting
 
 ### Datarails tools not available / tools not found
-The Datarails connector is not connected. **Do not try bash workarounds.** Guide the user based on their environment:
-- **Primary (all Desktop users):** Try to suggest the connector via the MCP registry. If not available, tell them: click "+" next to the prompt > Connectors > find Datarails > Connect (or Settings > Connectors)
-- **Terminal only (standalone Claude Code, NOT Desktop Code tab):** Run `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
+The Datarails connector is not connected. **Do not try bash workarounds.** Guide the user:
 
-### "Not authenticated" error
-1. Run `/dr-auth` to authenticate via OAuth
-2. A browser window will open — log in with your Datarails credentials
+Tell them: click **"+"** next to the prompt > **Connectors** > find **Datarails** > **Connect** (or **Settings > Connectors**).
 
-### Authentication fails or browser doesn't open
-1. Check your default browser settings
-2. Try running `/dr-auth` again
-3. If callback times out, ensure no firewall is blocking localhost
+Do NOT mention "MCP", terminal commands, or technical jargon unless the user is explicitly running Claude Code in a standalone terminal.
 
-### Need a different environment
-1. Run `/dr-auth --disable` to disconnect
-2. Run `/dr-auth --env <env>` to authenticate to the desired environment
+### "Not authenticated" or connection error
+The connector needs to be reconnected. Guide the user to disconnect and reconnect via the Connectors UI.
 
 ### "No profile found" error
 1. Run `/dr-learn` to create a profile

@@ -3,7 +3,6 @@ name: dr-query
 description: Query Datarails Finance OS tables with filters. Fetch specific records, get samples, or run custom queries for investigation.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__get_records_by_filter
   - mcp__datarails-finance-os__get_sample_records
@@ -20,7 +19,7 @@ Query Finance OS tables - fetch records by filter, get samples, or run custom qu
 
 ### Step 1: Verify Authentication
 
-Check auth status. If not authenticated, guide to `/dr-auth`.
+If any tool call fails with an authentication or connection error, guide the user to connect via the Connectors UI ("+" > Connectors > Datarails > Connect).
 
 ### Step 2: Understand the Request
 

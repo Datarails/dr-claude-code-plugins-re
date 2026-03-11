@@ -3,7 +3,6 @@ name: dr-test
 description: Test API field compatibility and performance. Discovers which fields work with aggregation, suggests alternatives for failed fields, and updates the client profile automatically.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__aggregate_table_data
@@ -48,11 +47,13 @@ This skill reads AND writes to client profiles at `config/client-profiles/<env>.
 
 ### Phase 1: Setup
 
-#### Step 1: Check Authentication
-```
-Use: mcp__datarails-finance-os__auth_status
-If not authenticated, guide user to run /dr-auth first
-```
+#### Step 1: Verify Connection
+
+If any Datarails tool call fails with an authentication or connection error, tell the user:
+
+> The Datarails connector isn't connected. Click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**.
+
+Then STOP — do not retry until the user has reconnected.
 
 #### Step 2: Load Client Profile
 ```
@@ -213,5 +214,5 @@ Impact:
 ## Related Skills
 
 - `/dr-learn` - Creates the profile that this skill tests
-- `/dr-auth` - Authenticate before testing
+- Connect via Connectors UI before testing
 - `/dr-intelligence` - Uses the aggregation hints from the profile

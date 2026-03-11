@@ -3,7 +3,6 @@ name: dr-departments
 description: Analyze P&L and performance by department. Creates departmental reports and comparative analysis with Excel and PowerPoint outputs.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__aggregate_table_data
   - Write
   - Read

@@ -58,15 +58,15 @@ claude
 
 Skills are automatically available from the `skills/` directory.
 
-### Step 3: Authenticate
+### Step 3: Connect to Datarails
 
-In Claude Code:
+Add the Datarails connector:
 
 ```
-/dr-auth
+claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp
 ```
 
-A browser window will open automatically for OAuth login. Log in with your Datarails credentials.
+A browser window will open for OAuth login when you first use a Datarails tool.
 
 ### Step 4: Create Client Profile (First Time)
 
@@ -88,31 +88,23 @@ This discovers your table structure and creates `config/client-profiles/app.json
 
 ## Authentication
 
-### How It Works
+Authentication is handled automatically via **OAuth 2.0 + PKCE** when you connect the Datarails connector.
 
-1. **Run `/dr-auth`** — opens a browser window for OAuth login
-2. **Log in** with your Datarails credentials in the browser
-3. **Tokens stored** securely with auto-refresh (no manual intervention needed)
+### Connecting
 
-### Switching Environments
+- **Claude Desktop / Cowork:** Click "+" > Connectors > Datarails > Connect
+- **Claude Code (terminal):** `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
 
-```
-/dr-auth                    # Authenticate (default: prod)
-/dr-auth --env dev          # Authenticate to development
-/dr-auth --env test         # Authenticate to test
-/dr-auth --disable          # Disconnect (revoke tokens)
-```
+A browser window opens for login. Tokens are managed and refreshed automatically.
 
-To switch: disconnect first, then authenticate to the new environment.
-
-### Troubleshooting Authentication
+### Troubleshooting Connection
 
 | Problem | Solution |
 |---------|----------|
+| Tools not available | Connect via Connectors UI or `claude mcp add` command |
+| "Not authenticated" | Disconnect and reconnect via Connectors UI |
 | Browser doesn't open | Check default browser settings |
-| "Authentication failed" | Verify Datarails credentials and try again |
-| Callback timeout | Ensure no firewall blocking localhost; retry |
-| Need different environment | `/dr-auth --disable` then `/dr-auth --env <env>` |
+| Need different environment | Disconnect and reconnect |
 
 ---
 
@@ -120,8 +112,6 @@ To switch: disconnect first, then authenticate to the new environment.
 
 | Skill | Description |
 |-------|-------------|
-| `/dr-auth` | Authenticate with Datarails (OAuth) |
-| `/dr-auth --disable` | Disconnect from Datarails |
 | `/dr-learn` | Create client profile |
 | `/dr-test` | Test API field compatibility |
 | `/dr-tables` | List all Finance OS tables |
@@ -155,7 +145,7 @@ Most skills use the aggregation API for fast results. Only `/dr-extract` with ra
 ## Reporting Issues
 
 1. Run `/dr-test` in Claude Code for a comprehensive API diagnostic
-2. Check authentication: `/dr-auth`
+2. Verify the Datarails connector is connected
 3. Report with error message and steps to reproduce
 
 - GitHub Issues: https://github.com/Datarails/dr-claude-code-plugins-re/issues

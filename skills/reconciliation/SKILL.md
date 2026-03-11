@@ -3,7 +3,6 @@ name: dr-reconcile
 description: Reconcile P&L vs KPI data sources. Validates consistency and identifies discrepancies with variance analysis.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__aggregate_table_data
   - mcp__datarails-finance-os__list_finance_tables
   - Write

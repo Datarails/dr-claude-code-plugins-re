@@ -3,7 +3,6 @@ name: dr-anomalies-report
 description: Generate comprehensive anomaly detection report with Excel deliverables. Discovers data quality issues without requiring configuration.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__profile_numeric_fields
@@ -65,7 +64,7 @@ This skill automatically discovers your data structure and detects issues withou
 ## Workflow
 
 **Phase 1: Discovery**
-1. Verify authentication (`auth_status`)
+1. Verify connection (if tools fail, guide user to Connectors UI)
 2. If no `--table-id`, discover tables or use profile
 3. Load table schema
 
@@ -210,7 +209,7 @@ Each report includes:
 ## Troubleshooting
 
 **"Not authenticated" error**
-- Run `/dr-auth` first
+- Connect via Connectors UI ("+" > Connectors > Datarails > Connect)
 
 **"No tables found" error**
 - Check that authentication succeeded

@@ -3,7 +3,6 @@ name: dr-profile
 description: Profile Datarails Finance OS table fields. Analyze numeric fields for statistics and outliers, categorical fields for cardinality and frequencies.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__profile_table_summary
   - mcp__datarails-finance-os__profile_numeric_fields
@@ -20,7 +19,7 @@ Deep profiling of Finance OS tables - analyze numeric statistics, categorical di
 
 ### Step 1: Verify Authentication
 
-Check auth status first. If not authenticated, guide user to `/dr-auth`.
+If any tool call fails with an authentication or connection error, guide the user to connect via the Connectors UI ("+" > Connectors > Datarails > Connect).
 
 ### Step 2: Profile the Table
 

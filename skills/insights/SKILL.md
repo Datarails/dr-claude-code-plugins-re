@@ -3,7 +3,6 @@ name: dr-insights
 description: Generate executive-ready insights with trend analysis and visualizations. Creates professional PowerPoint presentations and Excel data books.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__aggregate_table_data
   - mcp__datarails-finance-os__list_finance_tables
   - Write
@@ -248,7 +247,7 @@ Fast processing via efficient MCP aggregation tools.
 ## Error Handling
 
 **"Not authenticated" error**
-- Run `/dr-auth` first
+- Connect via Connectors UI ("+" > Connectors > Datarails > Connect)
 
 **"No KPI data found" warning**
 - Agent adapts and focuses on P&L trends

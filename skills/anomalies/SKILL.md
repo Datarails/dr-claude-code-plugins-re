@@ -3,7 +3,6 @@ name: dr-anomalies
 description: Detect data anomalies in Datarails Finance OS tables. Finds outliers, missing values, duplicates, and data quality issues.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__profile_table_summary
   - mcp__datarails-finance-os__detect_anomalies
@@ -22,7 +21,7 @@ Automated anomaly detection for Finance OS tables - find data quality issues, ou
 
 ### Step 1: Verify Authentication
 
-Check auth status. If not authenticated, guide to `/dr-auth`.
+If any tool call fails with an authentication or connection error, guide the user to connect via the Connectors UI ("+" > Connectors > Datarails > Connect).
 
 ### Step 2: Run Detection
 

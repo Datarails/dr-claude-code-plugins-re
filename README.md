@@ -67,14 +67,15 @@ Skills are auto-discovered from the `skills/` directory when running inside the 
 
 ## Getting Started
 
-Once installed, authenticate and explore:
+Once the Datarails connector is connected, explore your data:
 
 ```
-/dr-auth                               # Connect via OAuth (opens browser)
 /dr-tables                             # List available tables
 /dr-learn                              # Create client profile (first time)
 /dr-intelligence --year 2025           # Generate FP&A intelligence workbook
 ```
+
+**Connecting:** In Claude Desktop, click "+" > Connectors > Datarails > Connect. In Claude Code terminal, run `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`.
 
 New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)** for a hands-on walkthrough (~15 minutes).
 
@@ -85,7 +86,6 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 ### Data Access & Setup
 | Skill | Description |
 |-------|-------------|
-| `/dr-auth` | Authenticate with Datarails |
 | `/dr-learn` | Discover table structure and create client profile |
 | `/dr-tables` | List and explore tables |
 | `/dr-profile` | Profile field statistics |
@@ -127,13 +127,7 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 
 ## Authentication
 
-Uses **OAuth 2.0 + PKCE** — a browser window opens automatically for secure login. Environment is selected during login.
-
-```
-/dr-auth                    # Connect (opens browser)
-/dr-auth --env dev          # Connect to dev auth server
-/dr-auth --disable          # Disconnect
-```
+Authentication is handled automatically via **OAuth 2.0 + PKCE** when you connect the Datarails connector. A browser window opens for login — no manual steps needed.
 
 ---
 
@@ -141,8 +135,8 @@ Uses **OAuth 2.0 + PKCE** — a browser window opens automatically for secure lo
 
 | Problem | Solution |
 |---------|----------|
-| "Not authenticated" | Run `/dr-auth` (opens browser for OAuth login) |
-| Need different environment | `/dr-auth --disable` then `/dr-auth --env <env>` |
+| Tools not available | Connect via Connectors UI ("+" > Connectors > Datarails > Connect) |
+| "Not authenticated" | Disconnect and reconnect via Connectors UI |
 | "No profile found" | Run `/dr-learn` first |
 | Skills not showing | Restart Claude Desktop / Claude Code |
 | Slow extraction | Normal for raw data (~90 rec/sec). Summaries use aggregation (~5s) |

@@ -8,11 +8,9 @@ Run a quick diagnostic to test which fields work with the aggregation API in you
 
 ## Step 1: Verify Connection
 
-```
-Use: mcp__datarails-finance-os__auth_status
-```
+Start by calling `list_finance_tables` to verify the connection is active.
 
-**If not authenticated:** Guide user to run `/datarails-finance-os:login` first.
+**If the tool call fails:** The Datarails connector isn't connected. Tell the user to click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. Then STOP.
 
 ## Step 2: Find Financial Data
 

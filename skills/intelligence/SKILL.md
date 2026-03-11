@@ -3,7 +3,6 @@ name: dr-intelligence
 description: Generate comprehensive FP&A intelligence workbooks with auto-detected insights, recommendations, and professional Excel formatting. The most powerful financial analysis skill.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__generate_intelligence_workbook
   - Read
 argument-hint: "--year <YYYY> [--output <file>]"
@@ -34,11 +33,13 @@ This is the **most powerful** financial analysis skill - it answers real busines
 
 ## Workflow
 
-### Step 1: Verify Authentication
-```
-Use: auth_status
-If not authenticated, guide to /dr-auth
-```
+### Step 1: Verify Connection
+
+If any Datarails tool call fails with an authentication or connection error, tell the user:
+
+> The Datarails connector isn't connected. Click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**.
+
+Then STOP — do not retry until the user has reconnected.
 
 ### Step 2: Generate Workbook via MCP Tool
 

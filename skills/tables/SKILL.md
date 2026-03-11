@@ -3,7 +3,6 @@ name: dr-tables
 description: List and explore Datarails Finance OS tables. Use to discover available data, view schemas, and understand table structure.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__get_field_distinct_values
@@ -19,7 +18,7 @@ Explore Finance OS tables - list available tables, view schemas, and understand 
 
 ### Step 1: Verify Authentication
 
-Always check auth status first with `mcp__datarails-finance-os__auth_status`. If not authenticated, guide user to run `/dr-auth`.
+If any Datarails tool call fails with an authentication or connection error, tell the user to click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. Then STOP.
 
 ### Step 2: Handle Request
 
@@ -99,7 +98,7 @@ Found 156 unique values:
 - The profile summary gives a quick data quality overview
 ## Related Skills
 
-- `/dr-auth` - Authenticate
+- Connect via Connectors UI
 - `/dr-profile` - Deep profiling of numeric and categorical fields
 - `/dr-anomalies` - Detect data quality issues
 - `/dr-query` - Query specific records

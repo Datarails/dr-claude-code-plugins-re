@@ -3,7 +3,6 @@ name: dr-extract
 description: Extract validated financial data from Datarails Finance OS to Excel. Creates workbooks with P&L, Balance Sheet, KPIs (including ARR), and validation checks.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__extract_financials
   - Read
 argument-hint: "[--output <file>] [--scenario <name>] [--year <YYYY>]"
@@ -26,11 +25,13 @@ Extract validated financial data from Finance OS to Excel workbooks with:
 
 ## Workflow
 
-### Step 1: Verify Authentication
-```
-Use: auth_status
-If not authenticated, guide to /dr-auth
-```
+### Step 1: Verify Connection
+
+If any Datarails tool call fails with an authentication or connection error, tell the user:
+
+> The Datarails connector isn't connected. Click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**.
+
+Then STOP — do not retry until the user has reconnected.
 
 ### Step 2: Run Extraction via MCP Tool
 
@@ -77,14 +78,14 @@ The MCP server is hosted remotely — this error should not occur. If it does, c
 
 ### Token expires during extraction
 The script auto-refreshes tokens every 20K rows. If you still get 401 errors:
-1. Run `/dr-auth` to get fresh credentials
+1. Reconnect via Connectors UI ("+" > Connectors > Datarails)
 
 ### Missing months in data
 Check `System_Year` filter value - must be a **string** ("2025"), not integer.
 
 ## Related Skills
 
-- `/dr-auth` - Authenticate first
+- Connect via Connectors UI first
 - `/dr-learn` - Create/update client profile
 - `/dr-tables` - Explore available tables
 - `/dr-query` - Investigate specific records

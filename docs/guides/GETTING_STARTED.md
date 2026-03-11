@@ -65,25 +65,22 @@ You can also manage connectors from **Settings > Connectors**.
 | Connection fails | Click **Disconnect**, wait a moment, then **Connect** again |
 | Authentication error | Make sure you're using valid Datarails credentials |
 
-### Claude Code Track
+### Claude Code Track (Terminal)
+
+Add the Datarails connector:
 
 ```
-/dr-auth
+claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp
 ```
 
-A browser window opens automatically for OAuth login. No manual steps needed.
-
-```
-/dr-auth --env dev          # Connect to dev auth server
-/dr-auth --disable          # Disconnect
-```
+A browser window opens for OAuth login when you first use a Datarails tool.
 
 **Troubleshooting:**
 | Problem | Solution |
 |---------|----------|
-| "Not authenticated" | Run `/dr-auth` — browser opens for login |
+| "Not authenticated" | Re-run `claude mcp add` command above |
 | Browser doesn't open | Check your default browser settings, retry |
-| Need different environment | `/dr-auth --disable` then `/dr-auth --env <env>` |
+| Need different environment | Disconnect and reconnect |
 
 ---
 
@@ -117,7 +114,7 @@ Then pull a quick sample to see the data structure:
 
 | Problem | Solution |
 |---------|----------|
-| "Session expired" | Reconnect: Claude Desktop → "+" > Connectors > Disconnect/Connect. Claude Code Terminal → `/dr-auth` |
+| "Session expired" | Reconnect: Claude Desktop → "+" > Connectors > Disconnect/Connect. Claude Code Terminal → re-run `claude mcp add` |
 | Empty results | Check that your environment has data for the current year |
 | Slow response | First query may take 5-10 seconds; subsequent queries are faster |
 
@@ -287,7 +284,7 @@ You're up and running. Here's where to go from here:
 
 | I want to... | Cowork Command | Claude Code Skill |
 |--------------|----------------|-------------------|
-| **Connect to Datarails** | "+" > Connectors > Connect | `/dr-auth` |
+| **Connect to Datarails** | "+" > Connectors > Connect | `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp` |
 | **See financial totals** | `/datarails-finance-os:financial-summary` | `/dr-tables` + `/dr-query` |
 | **Analyze expenses** | `/datarails-finance-os:expense-analysis` | `/dr-query` with filters |
 | **Check revenue trends** | `/datarails-finance-os:revenue-trends` | `/dr-profile --numeric` |
@@ -301,4 +298,4 @@ You're up and running. Here's where to go from here:
 
 ---
 
-**Last updated:** March 4, 2026
+**Last updated:** March 11, 2026

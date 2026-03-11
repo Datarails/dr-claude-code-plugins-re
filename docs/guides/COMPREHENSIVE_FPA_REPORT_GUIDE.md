@@ -222,11 +222,12 @@ tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx  (7.5 KB - full dataset)
 
 ### "Not authenticated" Error
 ```
-# Solution: Authenticate first
-/dr-auth --env app
+# Solution: Connect the Datarails connector first
+# Claude Desktop: "+" > Connectors > Datarails > Connect
+# Claude Code: claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp
 
 # Then try again
-/dr-intelligence --year 2025 --env app
+/dr-intelligence --year 2025
 ```
 
 ### "No profile found" Error

@@ -3,7 +3,6 @@ name: dr-learn
 description: Discover and learn a client's table structure for financial data extraction. Creates a client profile that enables /dr-extract to work with any Datarails environment.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__get_field_distinct_values
@@ -40,11 +39,13 @@ This skill discovers these mappings and saves them to a client profile.
 
 ### Phase 1: Setup & Verification
 
-#### Step 1: Check Authentication
-```
-Use: mcp__datarails-finance-os__auth_status
-If not authenticated, guide user to run /dr-auth first
-```
+#### Step 1: Verify Connection
+
+If any Datarails tool call fails with an authentication or connection error, tell the user:
+
+> The Datarails connector isn't connected. Click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**.
+
+Then STOP — do not retry until the user has reconnected.
 
 #### Step 2: Check for Existing Profile
 ```
@@ -387,6 +388,6 @@ You can now run:
 
 ## Related Skills
 
-- `/dr-auth` - Authenticate first
+- Connect via Connectors UI first
 - `/dr-tables` - Explore table details
 - `/dr-extract` - Uses the generated profile

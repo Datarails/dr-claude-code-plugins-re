@@ -3,7 +3,6 @@ name: dr-get-formula
 description: Generate Excel workbooks with DR.GET formulas that pull live financial data from Datarails. Creates P&L templates, budget models, and variance reports with validated dimension values.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__get_field_distinct_values
@@ -116,8 +115,7 @@ Store the serial number as the cell value and apply `'MMM-YY'` number format so 
 
 #### Step 1: Verify Authentication
 ```
-Use: auth_status
-If not authenticated, guide to /dr-auth
+If any tool call fails with a connection error, guide the user to connect via Connectors UI.
 ```
 
 #### Step 2: Load Client Profile
@@ -322,7 +320,7 @@ Report what was generated:
 ## Troubleshooting
 
 **"Not authenticated" error**
-- Run `/dr-auth` first
+- Connect via Connectors UI ("+" > Connectors > Datarails > Connect)
 
 **"No profile found" error**
 - Run `/dr-learn` to create a client profile first

@@ -3,7 +3,6 @@ name: dr-forecast-variance
 description: Analyze budget vs forecast vs actual variances. Compares multi-scenario financial data for planning and performance review.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__auth_status
   - mcp__datarails-finance-os__aggregate_table_data
   - Write
   - Read
