@@ -106,6 +106,24 @@ Store the serial number as the cell value and apply `'MMM-YY'` number format so 
 | Using Report_Field without scoping | Always include `[DR_ACC_L2]` alongside `[Report_Field]` |
 | Inventing or guessing dimension values | Validate against actual distinct values first |
 | Using `Scenario="Budget"` | Use `Scenario="Forecast"` + `Scenario Cycle` + `Planning Scenario` |
+| Wrapping DR.GET in IFERROR/IF/other functions | DR.GET must be bare: `=DR.GET(...)` only |
+| Adding fallback values for missing data | Let DR.GET return empty/0 — users need to see gaps |
+| Pointing to cells that don't contain data | Every cell reference must point to an actual parameter or header cell |
+
+### CRITICAL: DR.GET Formulas Must Be Simple
+
+**NEVER** wrap DR.GET formulas in any other Excel function. Write them as bare formulas only.
+
+```
+WRONG:  =IFERROR(DR.GET(Value, "[Scenario]", $B$1, ...), 0)
+WRONG:  =IF(DR.GET(Value, ...) > 0, DR.GET(Value, ...), "")
+WRONG:  =ROUND(DR.GET(Value, ...), 2)
+RIGHT:  =DR.GET(Value, "[Scenario]", $B$1, "[DR_ACC_L1.5]", $A6, "[Reporting Date]", B$5)
+```
+
+**Why:** The Datarails Add-in manages DR.GET formulas. Wrapping them in other functions breaks the add-in's ability to refresh, track, and drill down on them. If data is missing, the cell should show 0 or empty — this is valuable information that users need to see, not mask.
+
+**Cell references must be intentional.** Every cell reference in a DR.GET formula must point to a specific cell that contains a validated parameter value (scenario name, account name, date serial). Never generate references to empty cells or cells outside the data layout.
 
 ---
 
@@ -262,6 +280,8 @@ Use Bash to run a Python script (inline or from file) that generates the workboo
 
 #### DR.GET Formula Construction
 
+**Every DR.GET formula must be a bare `=DR.GET(...)` call. No IFERROR, no IF, no ROUND, no wrapping of any kind.**
+
 **Actuals formula pattern:**
 ```python
 f'=DR.GET(Value, "[{l1_5_field}]", $A{{row}}, "[{scenario_field}]", $B$1, "[{date_field}]", {{col}}$5)'
@@ -276,6 +296,16 @@ f'=DR.GET(Value, "[{l1_5_field}]", $A{{row}}, "[{scenario_field}]", $B$1, "[{cyc
 ```python
 f'=DR.GET(Value, "[{report_field}]", $A{{row}}, "[{l2_field}]", $B{{row}}, "[{scenario_field}]", $D$2, "[{date_field}]", {{col}}$5)'
 ```
+
+**Cell reference map** — each reference in the formula must point to:
+- `$A{row}` → the account/line item label in column A of that row
+- `$B$1` → the Scenario parameter cell (e.g., "Actuals")
+- `$B$2` → the Scenario Cycle parameter cell (e.g., "0+12")
+- `$B$3` → the Planning Scenario parameter cell (e.g., "Bottom up")
+- `{col}$5` → the date header in row 5 of that column (EOM serial number)
+- `$B{row}` → the L2 scoping value in column B of that row (detail reports)
+
+If a reference doesn't map to one of these known locations, it is wrong. Do not invent references.
 
 #### Excel Formatting
 
