@@ -196,6 +196,11 @@ Build a filters list:
 - For each DR.GET parameter: `{"name": "<dim>", "values": ["<value>"], "is_excluded": false}`
 - For each active global filter: `{"name": "<Name>", "values": <Values>, "is_excluded": <IsExcluded>}`
 
+**Aggregation rules:**
+- Date fields (`Reporting Date`, `Reporting Month`, etc.) must ALWAYS go in `dimensions`, never in `filters`. Date filters silently return empty results.
+- To limit to a specific period, include the date as a dimension and filter the results client-side after the response.
+- Only text fields (`Scenario`, `Account Group L0`, etc.) go in `filters`.
+
 Then call `aggregate_table_data`:
 
     aggregate_table_data(

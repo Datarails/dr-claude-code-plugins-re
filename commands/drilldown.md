@@ -60,6 +60,11 @@ Use `get_table_schema` to validate that the chosen fields exist.
 
 ## Step 5: Run the Aggregation
 
+**Aggregation rules:**
+- Date fields (`Reporting Date`, `Reporting Month`, etc.) must ALWAYS go in `dimensions`, never in `filters`. Date filters silently return empty results.
+- To limit to a specific period, include the date as a dimension and filter the results client-side after the response.
+- Only text fields (`Scenario`, `Account Group L0`, etc.) go in `filters`.
+
 ```
 Use: mcp__datarails-finance-os__aggregate_table_data
 Parameters:

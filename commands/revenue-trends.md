@@ -39,6 +39,11 @@ Look for:
 
 Use aggregation for complete monthly revenue data:
 
+**Aggregation rules:**
+- Date fields (`Reporting Date`, `Reporting Month`, etc.) must ALWAYS go in `dimensions`, never in `filters`. Date filters silently return empty results.
+- To limit to a specific period, include the date as a dimension and filter the results client-side after the response.
+- Only text fields (`Scenario`, `Account Group L0`, etc.) go in `filters`.
+
 ```
 Use: mcp__datarails-finance-os__aggregate_table_data
 Parameters:
