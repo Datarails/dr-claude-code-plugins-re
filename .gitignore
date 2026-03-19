@@ -33,6 +33,9 @@ config/client-profiles/*.json
 config/client-profiles/*.backup
 !config/client-profiles/.gitkeep
 
+# Private developer commands (not shipped with plugin)
+.claude/commands/
+
 # Build artifacts
 *.zip
 datarails-finance-os-cowork-plugin/
