@@ -73,10 +73,10 @@ result = await client.aggregate(
 ```
 
 **IMPORTANT — Date fields must be dimensions, never filters:**
-- `Reporting Date` (and any date/period field) must go in `dimensions`, NOT in `filters`.
-- To get data for a specific period, include the date field as a dimension and filter the results client-side after the response.
-- Putting date fields in `filters` causes errors or returns incorrect results.
-- Only categorical fields like `Scenario`, `DR_ACC_L0` belong in `filters`.
+- `Reporting Date`, `Reporting Month`, and any date/period field must go in `dimensions`, NOT in `filters`.
+- Date filters silently return empty results because the API stores dates as epoch timestamps internally, and string date values like "2025-01-31" do not match.
+- To get data for a specific period, include the date field as a dimension, then filter the results client-side after the response.
+- Only text/categorical fields like `Scenario`, `DR_ACC_L0` belong in `filters`.
 
 ### FALLBACK: Pagination (Tier 2 - Slow)
 
