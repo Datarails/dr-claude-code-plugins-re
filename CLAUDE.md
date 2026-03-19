@@ -72,6 +72,12 @@ result = await client.aggregate(
 )
 ```
 
+**IMPORTANT — Date fields must be dimensions, never filters:**
+- `Reporting Date` (and any date/period field) must go in `dimensions`, NOT in `filters`.
+- To get data for a specific period, include the date field as a dimension and filter the results client-side after the response.
+- Putting date fields in `filters` causes errors or returns incorrect results.
+- Only categorical fields like `Scenario`, `DR_ACC_L0` belong in `filters`.
+
 ### FALLBACK: Pagination (Tier 2 - Slow)
 
 **Use pagination only for raw data extraction or when aggregation fails.**
