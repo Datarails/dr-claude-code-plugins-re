@@ -10,7 +10,7 @@
       "name": "Datarails-FinanceOS",
       "source": "./",
       "description": "Financial analysis, reporting, and DR.GET formula generation for Datarails Finance OS",
-      "version": "2.1.1",
+      "version": "2.2.0",
       "author": {
         "name": "Datarails"
       }
