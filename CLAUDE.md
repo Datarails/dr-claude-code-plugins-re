@@ -1,533 +1,91 @@
-# CLAUDE.md - Datarails Finance OS Plugin
-**Guidelines for agents and developers working with this plugin.**
+# CLAUDE.md
 
----
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 🚨 CRITICAL PRINCIPLE: ALWAYS USE FRESH REAL DATA
+## What This Is
 
-**NEVER generate reports, Excel files, or any artifacts without first fetching fresh data from the live Datarails API.**
+A Claude Code plugin for Datarails Finance OS. It provides skills (`skills/*/SKILL.md`), commands (`commands/*.md`), and agents (`agents/*.md`) that connect to a remote MCP server at `https://mcp.datarails.com/mcp` (configured in `.claude-plugin/plugin.json`). There is no local server code — the MCP server is hosted remotely.
 
-### Why This Matters
-Reports with fake/placeholder data have ZERO value and mislead stakeholders. Every agent must:
-1. Connect to the live environment (verify authentication)
-2. Fetch fresh data from Datarails tables
-3. Analyze the real data
-4. Generate reports based on that analysis
+## Critical Rules
 
-### How to Verify
-Before creating any artifact:
-```python
-# Always start with fresh API calls
-records = await client.get_sample(table_id, n=50)
-print(f"✓ Got {len(records)} real records")
+**NEVER generate reports, Excel files, or any artifacts without first fetching fresh data from the live Datarails API.** Reports with fake/placeholder data have zero value.
 
-# Never use placeholder data
-assert len(records) > 0, "No data to analyze!"
+**NEVER put client-specific information in CLAUDE.md or committed files.** Table IDs, field names, account hierarchies, and business logic go in `config/client-profiles/<env>.json` (gitignored). See `config/profile-schema.json` for the schema.
 
-# Generate report from actual analysis
-total = sum([r.get("Amount", 0) for r in records])
-excel.add_data([["Total", total]])  # Real number, not made up
+## Build & Release
+
+```bash
+# Build Cowork ZIP for upload
+./build-cowork-zip.sh [version]
+
+# Bump version: update BOTH files
+#   .claude-plugin/plugin.json  →  "version": "X.Y.Z"
+#   build-cowork-zip.sh         →  VERSION="${1:-X.Y.Z}"
+
+# Publish release
+git tag vX.Y.Z && git push origin main --tags
+# GitHub Actions builds the release ZIP automatically
 ```
 
----
+## Architecture
 
-## API Capabilities & Best Practices
+### Two-Tier Data Access
 
-The Finance OS API has a two-tier data access model. **Read `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` for full details.**
+Read `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` before building new features.
 
-### Known Issues
+| Tier | Method | Speed | Use When |
+|------|--------|-------|----------|
+| 1 | Aggregation API (async polling) | ~5 seconds | Summaries, totals, grouped data |
+| 2 | Pagination (500/page) | ~10 min for 50K rows | Raw data extraction, full exports |
 
-| Issue | Status | Impact |
-|-------|--------|--------|
-| **Aggregation API** | ✅ WORKING (async polling) | ~5 seconds per query, 120x faster than pagination |
-| **JWT Token Expiry** | ⚠️ 5 minutes | Auto-refreshes; manual refresh every 20K rows (pagination only) |
-| **Distinct Values** | 🔴 BROKEN | Returns 409 - use sample data |
-| **Page Size Limit** | ⚠️ 500 max | Requires pagination for raw data |
-| **Some Fields Fail** | ⚠️ Per-client | Some fields cause 500 in aggregation - tracked in client profile |
+**Always prefer aggregation.** Fall back to pagination only when aggregation fails or raw records are needed.
 
-### PREFERRED: Aggregation API (Tier 1 - Fast)
+### Aggregation API Gotchas
 
-**Use aggregation for summaries, totals, and grouped data (~5 seconds).**
+- **Date fields must be dimensions, never filters.** Date filters silently return empty results (API stores dates as epoch timestamps). Include dates as dimensions, then filter client-side.
+- **Some fields fail per-client** (500 errors). The client profile tracks these in `aggregation.failed_fields` and provides alternatives in `aggregation.field_alternatives`. Run `/dr-test` to discover compatibility.
+- **Distinct values API is broken** (returns 409). Use sample data instead.
+- **JWT tokens expire in 5 minutes.** Auto-refreshes for aggregation; manual refresh every 20K rows for pagination.
 
-The aggregation API uses async polling (POST 202 + Location header). The `client.aggregate()` method handles this automatically. Most fields work (212/220 tested), but some fields fail per-client. The client profile tracks which fields work and provides alternatives.
+### Client Profiles
 
-```python
-# Use aggregate_table_data MCP tool or client.aggregate()
-# The profile's aggregation.field_alternatives maps failed fields to working ones
-profile = load_profile(env)
-agg_hints = profile.get("aggregation", {})
+Located at `config/client-profiles/<env>.json` (not committed). Created by `/dr-learn`, tested by `/dr-test`. Contains table IDs, field mappings, account hierarchies, and aggregation compatibility hints.
 
-# Check if a field has a known alternative
-account_field = fields["account_l1"]
-if account_field in agg_hints.get("failed_fields", []):
-    # Use the alternative field from the profile
-    alt = agg_hints.get("field_alternatives", {}).get("account_l1", account_field)
-    account_field = fields.get(alt, account_field)
+### Plugin Content Types
 
-result = await client.aggregate(
-    table_id=financials_table,
-    dimensions=["Reporting Date", account_field],
-    metrics=[{"field": "Amount", "agg": "SUM"}],
-    filters=[{"name": "Scenario", "values": ["Actuals"], "is_excluded": False}]
-)
-```
+- **Skills** (`skills/*/SKILL.md`): Full-featured workflows for Claude Code. Each has frontmatter with `allowed-tools` listing which MCP tools it can use. Reference: `skills/intelligence/SKILL.md`.
+- **Commands** (`commands/*.md`): Lightweight Cowork-friendly commands (no CLI dependencies).
+- **Agents** (`agents/*.md`): Specialized agent definitions (finance-analyst, dashboard, audit, etc.).
 
-**IMPORTANT — Date fields must be dimensions, never filters:**
-- `Reporting Date`, `Reporting Month`, and any date/period field must go in `dimensions`, NOT in `filters`.
-- Date filters silently return empty results because the API stores dates as epoch timestamps internally, and string date values like "2025-01-31" do not match.
-- To get data for a specific period, include the date field as a dimension, then filter the results client-side after the response.
-- Only text/categorical fields like `Scenario`, `DR_ACC_L0` belong in `filters`.
+### Adding a New Skill
 
-### FALLBACK: Pagination (Tier 2 - Slow)
+1. Create `skills/<name>/SKILL.md` with frontmatter (name, description, allowed-tools, argument-hint)
+2. Include: Client Profile System section, Workflow phases, Execution Instructions, Troubleshooting
+3. No registration step needed — skills are auto-discovered from the `skills/` directory
 
-**Use pagination only for raw data extraction or when aggregation fails.**
+## Git Guidelines
 
-```python
-async def fetch_all_data(table_id, filters, max_rows=100000):
-    """Fetch ALL data using pagination with token refresh."""
-    all_data = []
-    offset = 0
+**Commit:** Skills, commands, agents, plugin config, schemas, docs (`docs/analysis/`, `docs/guides/`), notebooks.
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        while len(all_data) < max_rows:
-            if offset > 0 and offset % 20000 == 0:
-                await auth.ensure_valid_token()
-
-            resp = await client.post(url, headers=auth.get_headers(), json={
-                'filters': filters,
-                'limit': 500,
-                'offset': offset
-            })
-
-            if resp.status_code == 401:
-                await auth.ensure_valid_token()
-                continue
-            if resp.status_code >= 500:
-                await asyncio.sleep(1)
-                continue
-
-            page = resp.json().get('data', [])
-            if not page:
-                break
-
-            all_data.extend(page)
-            offset += 500
-
-    return all_data
-```
-
-### Profile-Based Aggregation Hints
-
-The client profile (`config/client-profiles/<env>.json`) tracks which fields work with aggregation:
-
-```json
-"aggregation": {
-  "supported": true,
-  "failed_fields": ["DR_ACC_L1", "DR_ACC_L2"],
-  "field_alternatives": {
-    "account_l1": "account_l1_5",
-    "account_l2": "account_l1_5"
-  },
-  "tested_at": "2026-02-08T..."
-}
-```
-
-Run `/dr-test` to discover field compatibility and update the profile automatically.
-
-### Performance Expectations
-
-| Approach | Expected Time | Use Case |
-|----------|---------------|----------|
-| Aggregation (Tier 1) | ~5 seconds | Summaries, totals, grouped data |
-| Pagination (Tier 2) | ~10 minutes (50K+ rows) | Raw data extraction, full exports |
-
-**Decision matrix:**
-- Need totals/summaries? → Use aggregation
-- Need raw records for Excel pivot? → Use pagination
-- Field fails in aggregation? → Check `aggregation.field_alternatives` in profile, or fall back to pagination
-
----
-
-## Project Structure
-
-```
-datarails-plugin/                   # This repo (plugin distribution)
-├── .claude-plugin/
-│   └── plugin.json              # Plugin manifest
-│
-├── commands/                    # Cowork-friendly commands (no CLI)
-│   ├── financial-summary.md     # Quick financial overview
-│   ├── expense-analysis.md      # Expense breakdown
-│   ├── revenue-trends.md        # Revenue patterns
-│   ├── budget-comparison.md     # Actual vs budget
-│   ├── test-api.md              # API field compatibility test
-│   ├── data-check.md            # Data quality check
-│   └── explore-tables.md        # Discover data
-│
-├── skills/                      # Full-featured skills (Claude Code)
-│   ├── intelligence/SKILL.md    # Most powerful skill
-│   ├── extract/SKILL.md
-│   └── ... (16 skills total)
-│
-├── agents/                      # Agent definitions
-│   └── finance-analyst.md
-│
-├── config/
-│   ├── environments.json        # Available Datarails environments
-│   ├── profile-schema.json      # Client profile JSON schema
-│   └── client-profiles/         # CLIENT-SPECIFIC DATA (not committed)
-│       └── .gitkeep
-│
-├── docs/
-│   ├── analysis/                # System analysis & strategy
-│   ├── guides/                  # Operational documentation
-│   └── notebooks/               # Jupyter notebooks
-│
-├── tmp/                         # Generated outputs (not committed)
-│
-├── marketplace.json             # Marketplace listing for Cowork
-├── build-cowork-zip.sh          # Build ZIP for manual upload
-├── CLAUDE.md                    # This file
-├── README.md                    # Installation & overview
-├── SETUP.md                     # Detailed setup guide
-└── .gitignore
-```
-
-### MCP Server (Remote)
-
-The MCP server is hosted at `https://mcp.datarails.com/mcp` and configured automatically via `plugin.json`. No local installation needed.
-
-The MCP server provides 18 tools including `aggregate_table_data`, `get_records_by_filter`, `generate_intelligence_workbook`, `extract_financials`, and more.
-
----
-
-## Available Skills
-
-### Core Skills
-| Skill | Description | Output |
-|-------|-------------|--------|
-| `/dr-learn` | Discover table structure + aggregation compatibility | Creates client profile |
-| `/dr-test` | Test API field compatibility and performance | Diagnostic report + profile update |
-| `/dr-tables` | List and explore tables | Table metadata |
-| `/dr-profile` | Profile table statistics | Data quality metrics |
-| `/dr-anomalies` | Detect data anomalies | Quality findings |
-| `/dr-query` | Query table data | Sample records |
-| `/dr-extract` | Extract to Excel | Financial reports |
-
-### Financial Analysis Skills
-| Skill | Description | Output |
-|-------|-------------|--------|
-| `/dr-intelligence` | **Most powerful** - FP&A intelligence with auto-insights | 10-sheet Excel |
-| `/dr-anomalies-report` | Data quality assessment | Excel report |
-| `/dr-insights` | Executive insights | PowerPoint + Excel |
-| `/dr-reconcile` | P&L vs KPI validation | Excel report |
-| `/dr-dashboard` | KPI monitoring | Excel + PowerPoint |
-| `/dr-forecast-variance` | Variance analysis | Excel + PowerPoint |
-| `/dr-audit` | SOX compliance | PDF + Excel |
-| `/dr-departments` | Department analytics | Excel + PowerPoint |
-| `/dr-get-formula` | Generate Excel with DR.GET formulas | Excel workbook |
-
-### Cowork (Free Text + Guided Workflows)
-
-In Claude Cowork, users interact via free text - the AI sees all MCP tools and uses them directly. The `get_workflow_guide` MCP tool provides structured guidance for common tasks:
-
-| Workflow | Description |
-|----------|-------------|
-| `getting-started` | Connect via OAuth and explore data |
-| `financial-summary` | Revenue, expenses, and profit overview |
-| `expense-analysis` | Expense breakdown with complete totals |
-| `revenue-trends` | Revenue patterns over time |
-| `budget-comparison` | Actual vs budget variance analysis |
-| `data-quality` | Data quality assessment |
-| `explore-data` | Discover available data |
-| `api-test` | Test API field compatibility |
-
-Users can say things like "show me my financial summary" or "what can you do?" and the AI will call the appropriate tools, optionally using `get_workflow_guide` for step-by-step guidance.
-
----
-
-## Documentation Organization
-
-### System Analysis & Strategy (Versioned)
-**Location:** `docs/analysis/`
-
-These files document how systems work and are versioned with the project:
-- `*_ANALYSIS.md` - Technical analysis and findings
-- `*_STRATEGY.md` - Implementation strategies and architectures
-- `*_REPORT.md` - Investigation reports and discoveries
-- `FINANCE_OS_API_ISSUES_REPORT.md` - **Critical API limitations**
-
-**Purpose:** Help future agents understand system architecture and optimization opportunities.
-
-### Operational Guides (Versioned)
-**Location:** `docs/guides/`
-
-How-to documents and tutorials:
-- `*_GUIDE.md` - Step-by-step operational guides
-- `README_*.md` - Setup and tutorial documentation
-
-**Purpose:** Train agents on how to use features and workflows.
-
-### Notebooks & Tools (Versioned)
-**Location:** `docs/notebooks/`
-
-Interactive Jupyter notebooks for testing and exploration.
-
-### Generated Outputs (Not Versioned)
-**Location:** `tmp/`
-
-Generated reports, exports, and temporary files:
-- Excel exports (`.xlsx`)
-- PowerPoint presentations (`.pptx`)
-- CSV extracts (`.csv`)
-- Diagnostic reports (`.txt`)
-- Temporary logs and debugging output
-
-**Not committed to git** - Use `.gitignore`
-
----
-
-## 🔒 Client-Specific Information
-
-### Where Client Data Goes
-**NEVER put client-specific information in CLAUDE.md or root documentation.**
-
-All client-specific data belongs in `config/client-profiles/<env>.json`:
-- Table IDs
-- Field mappings
-- Account hierarchies
-- Data quirks and special handling
-- Business rules and calculations
-
-### What Goes in Client Profiles
-
-```json
-{
-  "version": "1.0",
-  "environment": "app",
-
-  "tables": {
-    "financials": {
-      "id": "12345",
-      "name": "Financial Records"
-    },
-    "kpis": {
-      "id": "67890",
-      "name": "KPI Metrics"
-    }
-  },
-
-  "field_mappings": {
-    "amount": "Amount",
-    "date": "Reporting Date",
-    "account_l0": "DR_ACC_L0",
-    "account_l1": "DR_ACC_L1",
-    "account_l2": "DR_ACC_L2",
-    "scenario": "Scenario",
-    "year": "System_Year"
-  },
-
-  "account_hierarchy": {
-    "pnl_filter": "P&L",
-    "revenue": "REVENUE",
-    "cogs": "Cost of Goods Sold",
-    "opex": "Operating Expense"
-  },
-
-  "data_quality": {
-    "known_issues": ["Missing July data"],
-    "missing_periods": ["2025-07", "2025-10"],
-    "negative_values_valid": true
-  },
-
-  "notes": {
-    "data_organization": "Records randomly distributed, sort client-side",
-    "optimization": "Use 500-record batches for optimal throughput",
-    "special_handling": "14.9% negative values are legitimate reversals"
-  }
-}
-```
-
-### What NOT to Include in CLAUDE.md
-
-❌ **DON'T document here:**
-- Table IDs (e.g., "TABLE_ID")
-- Field names (e.g., "DR_ACC_L1")
-- Business logic specifics
-- Account hierarchies
-- Data anomalies or quirks
-- Client-specific workflows
-
-✅ **DO document client data in:** `config/client-profiles/<env>.json`
-
----
+**Never commit:** Client profiles (`config/client-profiles/*.json`), output files (`tmp/`), credentials, `.env.local`.
 
 ## Output Files
 
-Generated output files should be saved to `tmp/`:
-
-```bash
-# Example output locations
-tmp/FPA_Intelligence_Workbook_2025_20260205.xlsx
-tmp/Financial_Extract_2025.xlsx
-tmp/API_Diagnostic_Report_20260205.txt
-tmp/Insights_2025_Q4.pptx
-```
-
-Files in `tmp/` are **not committed** (protected by `.gitignore`).
-
----
-
-## Git Commit Guidelines
-
-### ✅ DO COMMIT (Plugin changes)
-- Skill definitions (`skills/*/SKILL.md`)
-- Command definitions (`commands/*.md`)
-- Agent definitions (`agents/*.md`)
-- Plugin configuration (`.claude-plugin/plugin.json`, `marketplace.json`)
-- Schema files (`config/profile-schema.json`, `config/environments.json`)
-- Documentation (`CLAUDE.md`, `README.md`, `SETUP.md`)
-- **Analysis & findings** (`docs/analysis/*.md`)
-- **Operational guides** (`docs/guides/*.md`)
-- **Jupyter notebooks** (`docs/notebooks/*.ipynb`)
-
-**Note:** MCP server is hosted remotely — no local server code needed.
-
-### ❌ DO NOT COMMIT (Protected by .gitignore)
-- **Client profiles** (`config/client-profiles/*.json`) - Use these for data that varies per environment
-- **Output files** (`tmp/`) - Generated reports and exports
-- **Authentication credentials** - Stored in system keyring, not files
-- **Environment variables** (`.env.local`)
-
----
+All generated artifacts (Excel, PowerPoint, CSV, diagnostics) go to `tmp/` (gitignored).
 
 ## Authentication
 
-Authentication is handled automatically at the MCP transport layer via **OAuth 2.0 + PKCE**. When a user connects to the Datarails connector, a browser window opens for login. Tokens are managed transparently — no manual steps needed.
+OAuth 2.0 + PKCE at the MCP transport layer. No `/dr-auth` command exists — auth happens when the connector is first connected.
 
-**There is no `/dr-auth` command.** Authentication happens when the connector is first connected.
-
-### Connecting
-
-- **Claude Desktop / Cowork:** Click "+" next to the prompt > Connectors > Datarails > Connect
-- **Claude Code (standalone terminal):** `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
-
-### Switching Environments
-
-Disconnect and reconnect through the Connectors UI, or re-run the `claude mcp add` command with a different URL.
-
----
-
-## MCP Server
-
-The MCP server is hosted remotely at `https://mcp.datarails.com/mcp`. The plugin configures it automatically — no local installation or setup needed.
-
----
+- **Cowork:** "+" > Connectors > Datarails > Connect
+- **Claude Code terminal:** `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
 
 ## Troubleshooting
 
-### Datarails tools not available / tools not found
-The Datarails connector is not connected. **Do not try bash workarounds.** Guide the user:
-
-Tell them: click **"+"** next to the prompt > **Connectors** > find **Datarails** > **Connect** (or **Settings > Connectors**).
-
-Do NOT mention "MCP", terminal commands, or technical jargon unless the user is explicitly running Claude Code in a standalone terminal.
-
-### "Not authenticated" or connection error
-The connector needs to be reconnected. Guide the user to disconnect and reconnect via the Connectors UI.
-
-### "No profile found" error
-1. Run `/dr-learn` to create a profile
-2. Or copy an existing profile and modify it locally
-
-### Extraction returns unexpected data
-1. Check profile at `config/client-profiles/<env>.json`
-2. Verify all field mappings are correct
-3. Re-run `/dr-learn` to rediscover structure
-
-### Slow extraction (normal for raw data)
-For raw data extraction via pagination:
-- ~90 records/second
-- 54K records = ~10 minutes
-- This is expected for `/dr-extract` raw exports
-
-For summaries/totals, use aggregation instead (~5 seconds).
-
-### API returns 500 errors on aggregation
-Some fields fail in aggregation on a per-client basis:
-1. Run `/dr-test` to discover which fields work
-2. Check `aggregation.field_alternatives` in the client profile
-3. See `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` for details
-
----
-
-## For Developers
-
-### Adding New Skills
-
-Create a new skill in `skills/<skill-name>/SKILL.md`:
-```
-skills/
-└── new-skill/
-    └── SKILL.md
-```
-
-Then register it in `.claude-plugin/plugin.json` under the `skills` array.
-
-**Required SKILL.md sections:**
-- Frontmatter (name, description, allowed-tools, argument-hint)
-- Client Profile System section (if using profiles)
-- Workflow section with phases
-- Execution Instructions
-- Troubleshooting
-
-See `skills/intelligence/SKILL.md` as reference.
-
-### Adding System Analysis
-
-Document discoveries in `docs/analysis/`:
-```
-docs/analysis/
-└── NEW_SYSTEM_ANALYSIS.md
-```
-
-### Adding Guides
-
-Document procedures in `docs/guides/`:
-```
-docs/guides/
-└── HOW_TO_*.md
-```
-
-All new files should be committed to git when they're ready for team use.
-
----
-
-## Distribution
-
-### Cowork (Claude Desktop)
-**Recommended:** Upload ZIP: `./build-cowork-zip.sh` → Browse plugins → **Upload plugin**
-
-The marketplace install (`Add marketplace from GitHub`) has a [known SSH bug](https://github.com/anthropics/claude-code/issues/26588) in the Cowork VM. Use ZIP upload until Anthropic fixes this.
-
-### Claude Code
-**From GitHub (global install):**
-```
-/plugin marketplace add https://github.com/Datarails/dr-claude-code-plugins-re.git
-/plugin install Datarails-FinanceOS@datarails-marketplace
-```
-Use the full HTTPS URL — the shorthand `owner/repo` format may fail due to SSH.
-
-**From local directory:** Clone the repo and run `claude` from the plugin directory. Skills are automatically available.
-
----
-
-## Notes
-
-- All client-specific data stays in `config/client-profiles/` (not committed)
-- All system documentation goes in `docs/` (committed)
-- All generated outputs go in `tmp/` (not committed)
-- Keep CLAUDE.md free of specific table IDs, field names, and client business logic
-- Use client profiles for environment-specific configuration
-- MCP server is hosted at `https://mcp.datarails.com/mcp` (configured automatically by plugin)
-- **Read `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` before building new features**
+| Problem | Fix |
+|---------|-----|
+| Tools not available | Connect via Connectors UI. Do NOT suggest bash workarounds or mention "MCP" to Cowork users. |
+| "Not authenticated" | Disconnect and reconnect via Connectors UI |
+| "No profile found" | Run `/dr-learn` |
+| Field fails in aggregation | Run `/dr-test`, check `aggregation.field_alternatives` in profile |
+| Slow extraction | Normal for pagination (~90 rec/sec). Use aggregation for summaries (~5s). |
