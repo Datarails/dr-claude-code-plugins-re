@@ -18,9 +18,11 @@ A Claude Code plugin for Datarails Finance OS. It provides skills (`skills/*/SKI
 # Build Cowork ZIP for upload
 ./build-cowork-zip.sh [version]
 
-# Bump version: update BOTH files
-#   .claude-plugin/plugin.json  →  "version": "X.Y.Z"
-#   build-cowork-zip.sh         →  VERSION="${1:-X.Y.Z}"
+# Bump version: update ALL THREE files — they MUST match
+#   .claude-plugin/plugin.json       →  "version": "X.Y.Z"
+#   .claude-plugin/marketplace.json  →  "version": "X.Y.Z"
+#   build-cowork-zip.sh              →  VERSION="${1:-X.Y.Z}"
+# WARNING: Cowork requires version in plugin.json even though docs say it's optional
 
 # Publish release
 git tag vX.Y.Z && git push origin main --tags
