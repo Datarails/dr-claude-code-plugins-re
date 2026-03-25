@@ -6,7 +6,7 @@
 
 set -e
 
-VERSION="${1:-2.2.5}"
+VERSION="${1:-2.3.0}"
 OUTPUT="datarails-finance-os-cowork-plugin.zip"
 STAGING_DIR="datarails-finance-os-cowork-plugin"
 
@@ -30,6 +30,11 @@ cp README.md "$STAGING_DIR/"
 # Remove client-specific profiles from the package
 rm -f "$STAGING_DIR/config/client-profiles/"*.json
 touch "$STAGING_DIR/config/client-profiles/.gitkeep"
+
+# Cowork requires kebab-case plugin names — patch for Cowork distribution
+# Source repo keeps "Datarails-FinanceOS" for Claude Code CLI compatibility
+sed -i '' 's/"Datarails-FinanceOS"/"datarails-financeos"/g' "$STAGING_DIR/.claude-plugin/plugin.json"
+sed -i '' 's/"Datarails-FinanceOS"/"datarails-financeos"/g' "$STAGING_DIR/.claude-plugin/marketplace.json"
 
 # Create ZIP
 zip -r "$OUTPUT" "$STAGING_DIR/" -x "*.DS_Store" "*__pycache__*"
