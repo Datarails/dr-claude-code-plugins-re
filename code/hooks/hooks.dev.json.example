@@ -1,0 +1,15 @@
+{
+  "_comment": "Copy this to hooks.json for local dev (before SDK is published). Update paths to match your machine.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pip install -e ~/dev/dr-datarails-sdk/python 2>/dev/null || true; cd ~/dev/dr-datarails-sdk/typescript && npm install && npm link 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}
