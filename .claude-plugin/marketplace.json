@@ -9,7 +9,7 @@
   },
   "plugins": [
     {
-      "name": "Datarails-FinanceOS",
+      "name": "datarails-financeos",
       "source": "./",
       "description": "Financial analysis, reporting, and DR.GET formula generation for Datarails Finance OS",
       "author": {
