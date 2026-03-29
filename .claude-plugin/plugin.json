@@ -1,6 +1,6 @@
 {
   "name": "Datarails-FinanceOS",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "Datarails Finance OS integration - analyze financial data, detect anomalies, and generate insights.",
   "author": {
     "name": "Datarails",
@@ -12,7 +12,7 @@
   "keywords": ["finance", "fpna", "datarails", "financial-analysis", "reporting", "budgeting"],
   "mcpServers": {
     "datarails-finance-os": {
-      "transport": "http",
+      "type": "http",
       "url": "https://mcp.datarails.com/mcp"
     }
   }
