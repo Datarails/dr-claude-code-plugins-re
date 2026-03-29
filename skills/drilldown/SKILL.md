@@ -172,7 +172,7 @@ Now build and execute the aggregation query using the resolved DR.GET parameters
 
 #### Step 3.1 - Determine the Table ID
 
-Load the client profile from `config/client-profiles/<env>.json` and use `tables.financials.id`. If no profile exists, call `list_finance_tables` to discover the financials table and ask the user to confirm.
+Load the client profile from `${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json` (or fallback to `config/client-profiles/<env>.json`) and use `tables.financials.id`. If no profile exists, call `list_finance_tables` to discover the financials table and ask the user to confirm.
 
 #### Step 3.2 - Determine Drill-Down Dimensions
 

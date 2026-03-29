@@ -326,7 +326,7 @@ Fast processing via efficient MCP aggregation tools.
 
 ## Customization
 
-Insights adapt to client profiles at `config/client-profiles/{env}.json`:
+Insights adapt to client profiles at `${CLAUDE_PLUGIN_DATA}/client-profiles/{env}.json` (or `config/client-profiles/{env}.json`):
 - Different account hierarchies
 - Custom KPI definitions
 - Department structures

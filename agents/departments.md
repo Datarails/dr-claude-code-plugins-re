@@ -1,3 +1,16 @@
+---
+name: departments
+description: Departmental P&L analysis and performance comparison with Excel and PowerPoint outputs
+tools:
+  - mcp__datarails-finance-os__aggregate_table_data
+  - mcp__datarails-finance-os__get_table_schema
+  - mcp__datarails-finance-os__list_finance_tables
+  - mcp__datarails-finance-os__extract_financials
+  - Read
+  - Write
+  - Bash
+---
+
 # Department Analytics Agent
 
 A specialized agent for analyzing departmental P&L and performance.

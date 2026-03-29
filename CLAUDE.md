@@ -50,7 +50,7 @@ Read `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` before building new feature
 
 ### Client Profiles
 
-Located at `config/client-profiles/<env>.json` (not committed). Created by `/dr-learn`, tested by `/dr-test`. Contains table IDs, field mappings, account hierarchies, and aggregation compatibility hints.
+Located at `${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json` (persistent across plugin updates). Created by `/dr-learn`, tested by `/dr-test`. Contains table IDs, field mappings, account hierarchies, and aggregation compatibility hints. Legacy profiles at `config/client-profiles/<env>.json` are also supported as fallback.
 
 ### Plugin Content Types
 

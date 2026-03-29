@@ -188,7 +188,7 @@ Clamped to 0-100 range
 ## Adaptive Behavior
 
 ### With Client Profile
-- Uses table IDs from `config/client-profiles/<env>.json`
+- Uses table IDs from `${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json` (or `config/client-profiles/<env>.json`)
 - Uses discovered field names and mappings
 - Applies business rules from profile notes
 

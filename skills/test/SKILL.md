@@ -31,7 +31,7 @@ No arguments required. Uses the currently authenticated environment.
 
 ## Client Profile System
 
-This skill reads AND writes to client profiles at `config/client-profiles/<env>.json`.
+This skill reads AND writes to client profiles at `${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json`.
 
 ### What It Reads
 - `tables.financials.id` - Table to test against
@@ -57,7 +57,7 @@ Then STOP — do not retry until the user has reconnected.
 
 #### Step 2: Load Client Profile
 ```
-Read: config/client-profiles/<env>.json
+Read: ${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json
 
 If profile exists:
   - Load table IDs and field mappings
@@ -157,7 +157,7 @@ If new alternative fields are discovered, also add them to `field_mappings`:
 Write the updated profile:
 ```
 Use: Write
-file_path: config/client-profiles/<env>.json
+file_path: ${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json
 content: <updated_profile_json>
 ```
 
@@ -198,7 +198,7 @@ Alternatives Discovered:
   account_l1 -> account_l1_5 (DR_ACC_L1.5, 18 groups)
   account_l2 -> account_l1_5 (DR_ACC_L1.5, 18 groups)
 
-Profile updated: config/client-profiles/<env>.json
+Profile updated: ${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json
 Report saved: tmp/API_Diagnostic_<env>_<timestamp>.txt
 
 Impact:

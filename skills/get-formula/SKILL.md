@@ -34,7 +34,7 @@ Generate Excel workbooks containing DR.GET formulas that pull live financial dat
 This skill uses **client profiles** to adapt to different Datarails environments. Each client has different table IDs, field names, account hierarchies, and dimension values.
 
 ### Profile Location
-Profiles are stored at: `config/client-profiles/<env>.json`
+Profiles are stored at: `${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json`
 
 ### First-Time Setup
 If no profile exists for the target environment:
@@ -138,7 +138,7 @@ If any tool call fails with a connection error, guide the user to connect via Co
 
 #### Step 2: Load Client Profile
 ```
-Read: config/client-profiles/<env>.json
+Read: ${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json
 
 If profile exists:
   - Load table IDs and field mappings

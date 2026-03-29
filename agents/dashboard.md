@@ -1,3 +1,16 @@
+---
+name: dashboard
+description: Real-time KPI monitoring and executive dashboard generation with Excel and PowerPoint outputs
+tools:
+  - mcp__datarails-finance-os__aggregate_table_data
+  - mcp__datarails-finance-os__get_table_schema
+  - mcp__datarails-finance-os__list_finance_tables
+  - mcp__datarails-finance-os__generate_intelligence_workbook
+  - Read
+  - Write
+  - Bash
+---
+
 # Dashboard Agent
 
 A specialized agent for real-time KPI monitoring and executive visibility.

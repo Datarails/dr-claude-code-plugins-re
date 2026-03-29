@@ -1,3 +1,20 @@
+---
+name: anomaly-detector
+description: Automated data quality monitoring — finds outliers, missing values, duplicates, and inconsistencies
+tools:
+  - mcp__datarails-finance-os__list_finance_tables
+  - mcp__datarails-finance-os__get_table_schema
+  - mcp__datarails-finance-os__get_sample_records
+  - mcp__datarails-finance-os__profile_table_summary
+  - mcp__datarails-finance-os__profile_numeric_fields
+  - mcp__datarails-finance-os__profile_categorical_fields
+  - mcp__datarails-finance-os__detect_anomalies
+  - mcp__datarails-finance-os__get_records_by_filter
+  - mcp__datarails-finance-os__aggregate_table_data
+  - Read
+  - Write
+---
+
 # Anomaly Detection Agent
 
 A specialized agent for automated data quality monitoring across ANY Datarails environment.

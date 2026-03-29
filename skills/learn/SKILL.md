@@ -49,7 +49,7 @@ Then STOP — do not retry until the user has reconnected.
 
 #### Step 2: Check for Existing Profile
 ```
-Read: config/client-profiles/<env>.json
+Read: ${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json
 If exists and no --force flag, ask user if they want to overwrite
 ```
 
@@ -309,14 +309,14 @@ Create the profile structure, including the aggregation hints discovered in Phas
 #### Step 19: Write Profile
 ```
 Use: Write
-file_path: config/client-profiles/<env>.json
+file_path: ${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json
 content: <generated_profile>
 ```
 
 #### Step 20: Confirmation
 Display summary:
 ```
-Profile saved to config/client-profiles/<env>.json
+Profile saved to ${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json
 
 Summary:
 - Financials table: <name> (ID: <id>)
@@ -376,7 +376,7 @@ Confirm these mappings? [Y/n/Edit]
 **User: "y"**
 
 ```
-Profile saved to config/client-profiles/app.json
+Profile saved to ${CLAUDE_PLUGIN_DATA}/client-profiles/app.json
 
 You can now run:
   /dr-extract --year 2025 --env app

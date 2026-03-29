@@ -1,3 +1,17 @@
+---
+name: insights
+description: Executive-ready trend analysis and business insights with professional PowerPoint and Excel outputs
+tools:
+  - mcp__datarails-finance-os__aggregate_table_data
+  - mcp__datarails-finance-os__get_table_schema
+  - mcp__datarails-finance-os__list_finance_tables
+  - mcp__datarails-finance-os__extract_financials
+  - mcp__datarails-finance-os__generate_intelligence_workbook
+  - Read
+  - Write
+  - Bash
+---
+
 # Insights Agent
 
 A specialized agent for generating executive-ready trend analysis and business insights with professional visualizations.
@@ -280,7 +294,7 @@ done
 
 ## Configuration
 
-Adapts to client profiles at `config/client-profiles/{env}.json`:
+Adapts to client profiles at `${CLAUDE_PLUGIN_DATA}/client-profiles/{env}.json` (or `config/client-profiles/{env}.json`):
 - Custom account hierarchies
 - KPI definitions
 - Business rules

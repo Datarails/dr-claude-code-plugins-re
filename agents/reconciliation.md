@@ -1,3 +1,16 @@
+---
+name: reconciliation
+description: Validate consistency between P&L and KPI data sources with variance analysis
+tools:
+  - mcp__datarails-finance-os__aggregate_table_data
+  - mcp__datarails-finance-os__get_table_schema
+  - mcp__datarails-finance-os__list_finance_tables
+  - mcp__datarails-finance-os__get_records_by_filter
+  - mcp__datarails-finance-os__extract_financials
+  - Read
+  - Write
+---
+
 # Reconciliation Agent
 
 A specialized agent for validating consistency between P&L and KPI data sources.
