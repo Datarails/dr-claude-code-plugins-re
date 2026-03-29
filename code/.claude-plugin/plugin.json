@@ -1,0 +1,9 @@
+{
+  "name": "Datarails-FinanceOS-Code",
+  "version": "0.1.0",
+  "description": "Datarails Finance OS integration — SDK-based financial analysis for Claude Code.",
+  "author": {
+    "name": "Datarails",
+    "email": "support@datarails.com"
+  }
+}

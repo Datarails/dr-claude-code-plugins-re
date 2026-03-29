@@ -29,9 +29,9 @@ tmp/*
 /tmp
 
 # Client-specific profiles (created by /dr-learn)
-config/client-profiles/*.json
-config/client-profiles/*.backup
-!config/client-profiles/.gitkeep
+shared/config/client-profiles/*.json
+shared/config/client-profiles/*.backup
+!shared/config/client-profiles/.gitkeep
 
 # Private developer commands (not shipped with plugin)
 .claude/commands/

@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c 'from datarails_sdk import DatarailsClient' 2>/dev/null && echo 'datarails_sdk OK' || echo 'datarails_sdk not found — set PYTHONPATH to include dr-datarails-sdk/python'"
+          }
+        ]
+      }
+    ]
+  }
+}

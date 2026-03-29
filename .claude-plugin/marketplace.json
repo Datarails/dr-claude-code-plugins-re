@@ -8,9 +8,18 @@
   "plugins": [
     {
       "name": "Datarails-FinanceOS",
-      "source": "./",
-      "description": "Financial analysis, reporting, and DR.GET formula generation for Datarails Finance OS",
-      "version": "2.2.3",
+      "source": "./cowork",
+      "description": "For Cowork — MCP-based financial analysis, reporting, and insights",
+      "version": "3.0.0",
+      "author": {
+        "name": "Datarails"
+      }
+    },
+    {
+      "name": "Datarails-FinanceOS-Code",
+      "source": "./code",
+      "description": "For Claude Code — SDK-based financial analysis with code generation",
+      "version": "0.1.0",
       "author": {
         "name": "Datarails"
       }

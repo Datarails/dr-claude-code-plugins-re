@@ -1,6 +1,7 @@
 {
   "name": "Datarails-FinanceOS",
-  "description": "Datarails Finance OS integration - analyze financial data, detect anomalies, and generate insights.",
+  "version": "3.0.0",
+  "description": "Datarails Finance OS integration — MCP-based financial analysis for Cowork.",
   "author": {
     "name": "Datarails",
     "email": "support@datarails.com"

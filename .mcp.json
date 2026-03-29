@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "datarails-finance-os": {
-      "type": "http",
-      "url": "https://mcp.datarails.com/mcp"
-    }
-  }
-}
