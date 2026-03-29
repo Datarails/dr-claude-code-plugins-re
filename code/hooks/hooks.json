@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv pip install dr-datarails-sdk 2>/dev/null && echo 'dr-datarails-sdk OK' || echo 'dr-datarails-sdk: install failed — run: uv pip install dr-datarails-sdk'"
+          }
+        ]
+      }
+    ]
+  }
+}

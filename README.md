@@ -2,6 +2,13 @@
 
 Analyze financial data, detect anomalies, and generate insights directly from Claude.
 
+This repo contains **two plugins** for different environments:
+
+| Plugin | For | How it works |
+|--------|-----|-------------|
+| **Datarails-FinanceOS** | Cowork (Claude Desktop) | MCP-based — Claude calls tools directly |
+| **Datarails-FinanceOS-Code** | Claude Code (terminal) | SDK-based — Claude writes and runs code |
+
 ## Install
 
 ### Cowork (Claude Desktop)
@@ -9,94 +16,63 @@ Analyze financial data, detect anomalies, and generate insights directly from Cl
 **Option 1: Upload ZIP (Recommended)**
 
 1. Download the plugin ZIP from the [latest release](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest)
-2. Open Claude Desktop → Cowork → Browse plugins → **Personal** tab
+2. Open Claude Desktop → Browse plugins → **Personal** tab
 3. Click **+** → **Upload plugin**
 4. Select the downloaded ZIP
 5. Install the **Datarails FinanceOS** plugin
 
 **Option 2: Add from GitHub**
 
-1. Open Claude Desktop → Browse plugins → **Personal** tab
-2. Click **+** → **Add marketplace from GitHub**
-3. Enter: `Datarails/dr-claude-code-plugins-re`
-4. Install the **Datarails FinanceOS** plugin
-
-> **Note:** Option 2 may fail on some machines due to a [known SSH issue](https://github.com/anthropics/claude-code/issues/26588) in Claude Desktop. If installation fails, use Option 1 (ZIP upload) instead.
-
-### Claude Code (Terminal)
-
-**Option A: Install from GitHub (Recommended)**
-
-Open Claude Code in any project and run:
 ```
 /plugin marketplace add https://github.com/Datarails/dr-claude-code-plugins-re.git
 /plugin install Datarails-FinanceOS@datarails-marketplace
 ```
 
-> **Important:** Use the full HTTPS URL (not `Datarails/dr-claude-code-plugins-re`). The shorthand format triggers SSH cloning which may fail without SSH keys configured.
+### Claude Code (Terminal)
 
-This installs the plugin globally — skills are available from any project.
+**From marketplace:**
+```
+/plugin marketplace add https://github.com/Datarails/dr-claude-code-plugins-re.git
+/plugin install Datarails-FinanceOS-Code@datarails-marketplace
+```
 
-**Option B: Load from local directory (Development)**
-
+**Local dev:**
 ```bash
-git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
-claude --plugin-dir ./dr-claude-code-plugins-re
-```
-
-This loads the plugin for the current session only — useful for development and testing.
-
-**Option C: Run from the plugin directory**
-
-```bash
-git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
-cd dr-claude-code-plugins-re
-claude
-```
-
-Skills are auto-discovered from the `skills/` directory when running inside the repo.
-
-**Managing the plugin:**
-```
-/plugin                    # View installed plugins, enable/disable
-/plugin update             # Update to latest version
-/plugin uninstall          # Remove the plugin
+# Requires: uv venv with dr-datarails-sdk installed, or PYTHONPATH set
+claude --plugin-dir ./code
 ```
 
 ---
 
 ## Getting Started
 
-Once the Datarails connector is connected, explore your data:
-
+### Cowork
+Once the Datarails connector is connected, start with:
 ```
 /dr-tables                             # List available tables
 /dr-learn                              # Create client profile (first time)
 /dr-intelligence --year 2025           # Generate FP&A intelligence workbook
 ```
 
-**Connecting:** In Claude Desktop, click "+" > Connectors > Datarails > Connect. In Claude Code terminal, run `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`.
-
-New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)** for a hands-on walkthrough (~15 minutes).
+### Claude Code
+```
+/dr-auth                               # Authenticate (first time)
+list my datarails tables               # Then ask anything naturally
+```
 
 ---
 
-## Skills
+## Cowork Skills
 
-### Data Access & Setup
-| Skill | Description |
-|-------|-------------|
-| `/dr-learn` | Discover table structure and create client profile |
-| `/dr-tables` | List and explore tables |
-| `/dr-profile` | Profile field statistics |
-| `/dr-query` | Query and filter records |
-| `/dr-extract` | Extract financial data to Excel |
-
-### Financial Analysis
 | Skill | Description | Output |
 |-------|-------------|--------|
-| `/dr-intelligence` | **Most powerful** - FP&A intelligence workbook with auto-insights | 10-sheet Excel |
-| `/dr-anomalies-report` | Data quality assessment with anomaly detection | Excel report |
+| `/dr-learn` | Discover table structure and create client profile | Profile JSON |
+| `/dr-tables` | List and explore tables | Table metadata |
+| `/dr-profile` | Profile field statistics | Stats |
+| `/dr-query` | Query and filter records | Data |
+| `/dr-extract` | Extract financial data to Excel | Excel |
+| `/dr-intelligence` | FP&A intelligence workbook with auto-insights | 10-sheet Excel |
+| `/dr-anomalies-report` | Data quality assessment | Excel report |
 | `/dr-insights` | Trend analysis and executive insights | PowerPoint + Excel |
 | `/dr-reconcile` | P&L vs KPI consistency validation | Excel report |
 | `/dr-dashboard` | Executive KPI monitoring | Excel + PowerPoint |
@@ -104,63 +80,54 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 | `/dr-audit` | SOX compliance audit reporting | PDF + Excel |
 | `/dr-departments` | Department P&L analysis | Excel + PowerPoint |
 | `/dr-get-formula` | Generate Excel with DR.GET formulas | Excel workbook |
+| `/dr-drilldown` | Drill into DR.GET cells | Breakdown data |
+| `/dr-test` | Test API field compatibility | Diagnostic report |
+| `/dr-anomalies` | Detect data anomalies | Quality findings |
 
-### /dr-intelligence (Most Powerful)
+## Claude Code Capabilities
 
-```
-/dr-intelligence --year 2025                    # Full intelligence workbook
-```
+The SDK agent handles all the above dynamically — no individual skills needed. It knows all SDK methods and domain knowledge (aggregation rules, DR.GET syntax, variance logic, audit framework, etc.).
 
-**10 Sheets Generated:**
-1. Insights Dashboard - Top 5 findings with severity
-2. Expense Deep Dive - Top 20 accounts, % of total
-3. Variance Waterfall - What changed and why
-4. Trend Analysis - 12-month trends
-5. Anomaly Report - Auto-detected outliers
-6. Vendor Analysis - Top vendors, concentration risk
-7. SaaS Metrics - ARR, LTV, CAC, Efficiency
-8. Sales Performance - Rep leaderboard
-9. Cost Center P&L - Department detail
-10. Raw Data - Pivot-ready for analysis
+Additionally available:
+- `ask_ai` — freeform AI assistant (not available in Cowork)
 
 ---
 
-## Authentication
+## Repo Structure
 
-Authentication is handled automatically via **OAuth 2.0 + PKCE** when you connect the Datarails connector. A browser window opens for login — no manual steps needed.
+```
+cowork/              Cowork plugin (MCP-based)
+  skills/            17 MCP-based skills
+  commands/          8 Cowork commands
+  agents/            8 agent definitions
+  .claude-plugin/    Plugin manifest with MCP server
 
----
+code/                Claude Code plugin (SDK-based)
+  agents/            datarails-sdk agent (all domain knowledge embedded)
+  skills/auth/       /dr-auth OAuth flow
+  hooks/             SessionStart SDK verification
+  settings.json      Default agent config
+  .claude-plugin/    Plugin manifest (no MCP)
 
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| Tools not available | Connect via Connectors UI ("+" > Connectors > Datarails > Connect) |
-| "Not authenticated" | Disconnect and reconnect via Connectors UI |
-| "No profile found" | Run `/dr-learn` first |
-| Skills not showing | Restart Claude Desktop / Claude Code |
-| Slow extraction | Normal for raw data (~90 rec/sec). Summaries use aggregation (~5s) |
-
-See [SETUP.md](SETUP.md) for detailed setup and troubleshooting.
+shared/              Shared by both
+  config/            environments.json, profile-schema.json, client-profiles/
+  docs/              Analysis reports, guides
+```
 
 ---
 
 ## For Maintainers
 
-### Publishing Updates
-
+### Building Cowork ZIP
 ```bash
-git tag v1.4.0
-git push origin main --tags
-# GitHub Actions builds the release ZIP automatically
+cd cowork && ./build-cowork-zip.sh
 ```
 
-### Building Cowork ZIP Manually
-
-```bash
-./build-cowork-zip.sh
-# Upload via Cowork → Browse plugins → Upload plugin
-```
+### Keep Plugins in Sync
+When adding a new capability to one plugin, consider whether it should be available in the other:
+- **New Cowork skill** → check if the domain knowledge should be added to `code/agents/datarails-sdk.md`
+- **New SDK method or domain rule** → check if a corresponding Cowork skill or skill update is needed
+- **New shared config/docs** → put in `shared/`
 
 ---
 
