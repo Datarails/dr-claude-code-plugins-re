@@ -38,4 +38,3 @@ config/client-profiles/*.backup
 
 # Build artifacts
 *.zip
-datarails-finance-os-cowork-plugin/

@@ -15,19 +15,18 @@ A Claude Code plugin for Datarails Finance OS. It provides skills (`skills/*/SKI
 ## Build & Release
 
 ```bash
-# Build Cowork ZIP for upload
-./build-cowork-zip.sh [version]
+# Bump version in plugin.json (single source of truth)
+#   .claude-plugin/plugin.json  →  "version": "X.Y.Z"
 
-# Bump version: update ALL THREE files — they MUST match
-#   .claude-plugin/plugin.json       →  "version": "X.Y.Z"
-#   .claude-plugin/marketplace.json  →  "version": "X.Y.Z"
-#   build-cowork-zip.sh              →  VERSION="${1:-X.Y.Z}"
-# WARNING: Cowork requires version in plugin.json even though docs say it's optional
-
-# Publish release
+# Publish release — GitHub Actions builds the ZIP automatically
 git tag vX.Y.Z && git push origin main --tags
-# GitHub Actions builds the release ZIP automatically
 ```
+
+## Installation
+
+**Cowork (Claude Desktop):** Browse plugins > Personal > **+** > Add marketplace from GitHub > `Datarails/dr-claude-code-plugins-re`
+
+**Claude Code:** `/plugin marketplace add Datarails/dr-claude-code-plugins-re`
 
 ## Architecture
 
@@ -79,8 +78,8 @@ All generated artifacts (Excel, PowerPoint, CSV, diagnostics) go to `tmp/` (giti
 
 OAuth 2.0 + PKCE at the MCP transport layer. No `/dr-auth` command exists — auth happens when the connector is first connected.
 
-- **Cowork:** "+" > Connectors > Datarails > Connect
-- **Claude Code terminal:** `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
+- **Cowork:** Install the plugin via Browse plugins > Personal tab. Auth happens automatically when the connector is first used.
+- **Claude Code:** `/plugin marketplace add Datarails/dr-claude-code-plugins-re` then `/plugin install Datarails-FinanceOS@datarails-marketplace`
 
 ## Troubleshooting
 
