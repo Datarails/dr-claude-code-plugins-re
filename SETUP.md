@@ -2,23 +2,13 @@
 
 ## Cowork Setup (Claude Desktop)
 
-### Option 1: Upload ZIP (Recommended)
-
-1. Download the plugin ZIP from the [latest release](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest)
-2. Open Claude Desktop → Cowork → Browse plugins → **Personal** tab
-3. Click **+** → **Upload plugin**
-4. Select the downloaded ZIP
-5. Restart Claude Desktop
-
-### Option 2: Marketplace (GitHub)
-
 1. Open Claude Desktop → Browse plugins → **Personal** tab
 2. Click **+** → **Add marketplace from GitHub**
-3. Enter: `https://github.com/Datarails/dr-claude-code-plugins-re.git`
+3. Enter: `Datarails/dr-claude-code-plugins-re`
 4. Install the **Datarails FinanceOS** plugin
 5. Restart Claude Desktop
 
-> **Known issue:** The marketplace install may fail with "Host key verification failed" due to a [known Claude Desktop bug](https://github.com/anthropics/claude-code/issues/26588) where the VM uses SSH instead of HTTPS. Use Option 1 (ZIP upload) if this happens.
+> **Fallback:** If marketplace install fails due to a [known SSH issue](https://github.com/anthropics/claude-code/issues/26588), download the ZIP from the [latest release](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest) and upload via **+** → **Upload plugin**.
 
 ### After Installation
 
@@ -74,7 +64,7 @@ A browser window will open for OAuth login when you first use a Datarails tool.
 /dr-learn
 ```
 
-This discovers your table structure and creates `config/client-profiles/app.json`.
+This discovers your table structure and creates a client profile (stored in plugin data directory, persistent across updates).
 
 ### Step 5: Test
 
@@ -128,6 +118,8 @@ A browser window opens for login. Tokens are managed and refreshed automatically
 | `/dr-audit --year 2025` | SOX compliance audit |
 | `/dr-departments --year 2025` | Department P&L analysis |
 | `/dr-get-formula` | Generate Excel with DR.GET formulas |
+| `/dr-drilldown` | Drill down on DR.GET formula cells |
+| `/dr-anomalies-report` | Comprehensive anomaly detection report |
 
 ---
 

@@ -79,7 +79,7 @@ All generated artifacts (Excel, PowerPoint, CSV, diagnostics) go to `tmp/` (giti
 OAuth 2.0 + PKCE at the MCP transport layer. No `/dr-auth` command exists — auth happens when the connector is first connected.
 
 - **Cowork:** Install the plugin via Browse plugins > Personal tab. Auth happens automatically when the connector is first used.
-- **Claude Code:** `/plugin marketplace add Datarails/dr-claude-code-plugins-re` then `/plugin install Datarails-FinanceOS@datarails-marketplace`
+- **Claude Code:** `/plugin marketplace add Datarails/dr-claude-code-plugins-re` then `/plugin install datarails-financeos@datarails-marketplace`
 
 ## Troubleshooting
 

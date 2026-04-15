@@ -6,22 +6,12 @@ Analyze financial data, detect anomalies, and generate insights directly from Cl
 
 ### Cowork (Claude Desktop)
 
-**Option 1: Upload ZIP (Recommended)**
-
-1. Download the plugin ZIP from the [latest release](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest)
-2. Open Claude Desktop → Cowork → Browse plugins → **Personal** tab
-3. Click **+** → **Upload plugin**
-4. Select the downloaded ZIP
-5. Install the **Datarails FinanceOS** plugin
-
-**Option 2: Add from GitHub**
-
 1. Open Claude Desktop → Browse plugins → **Personal** tab
 2. Click **+** → **Add marketplace from GitHub**
 3. Enter: `Datarails/dr-claude-code-plugins-re`
 4. Install the **Datarails FinanceOS** plugin
 
-> **Note:** Option 2 may fail on some machines due to a [known SSH issue](https://github.com/anthropics/claude-code/issues/26588) in Claude Desktop. If installation fails, use Option 1 (ZIP upload) instead.
+> **Fallback:** If marketplace install fails due to a [known SSH issue](https://github.com/anthropics/claude-code/issues/26588), download the ZIP from the [latest release](https://github.com/Datarails/dr-claude-code-plugins-re/releases/latest) and upload via **+** → **Upload plugin**.
 
 ### Claude Code (Terminal)
 
@@ -30,7 +20,7 @@ Analyze financial data, detect anomalies, and generate insights directly from Cl
 Open Claude Code in any project and run:
 ```
 /plugin marketplace add https://github.com/Datarails/dr-claude-code-plugins-re.git
-/plugin install Datarails-FinanceOS@datarails-marketplace
+/plugin install datarails-financeos@datarails-marketplace
 ```
 
 > **Important:** Use the full HTTPS URL (not `Datarails/dr-claude-code-plugins-re`). The shorthand format triggers SSH cloning which may fail without SSH keys configured.
@@ -91,6 +81,9 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 | `/dr-profile` | Profile field statistics |
 | `/dr-query` | Query and filter records |
 | `/dr-extract` | Extract financial data to Excel |
+| `/dr-test` | Test API field compatibility and update profile |
+| `/dr-anomalies` | Detect anomalies in a specific table |
+| `/dr-drilldown` | Drill down on DR.GET formula cells to see underlying detail |
 
 ### Financial Analysis
 | Skill | Description | Output |
@@ -104,6 +97,18 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 | `/dr-audit` | SOX compliance audit reporting | PDF + Excel |
 | `/dr-departments` | Department P&L analysis | Excel + PowerPoint |
 | `/dr-get-formula` | Generate Excel with DR.GET formulas | Excel workbook |
+
+### Cowork Commands (Claude Desktop)
+| Command | Description |
+|---------|-------------|
+| `/explore-tables` | Browse available tables |
+| `/financial-summary` | Quick financial overview |
+| `/revenue-trends` | Revenue trends and growth |
+| `/expense-analysis` | Expense breakdown and analysis |
+| `/budget-comparison` | Actual vs budget comparison |
+| `/data-check` | Data quality checks |
+| `/test-api` | Test API field compatibility |
+| `/drilldown` | Drill down on DR.GET values |
 
 ### /dr-intelligence (Most Powerful)
 
@@ -150,16 +155,10 @@ See [SETUP.md](SETUP.md) for detailed setup and troubleshooting.
 ### Publishing Updates
 
 ```bash
-git tag v1.4.0
+# Bump version in .claude-plugin/plugin.json first
+git tag v2.5.0
 git push origin main --tags
 # GitHub Actions builds the release ZIP automatically
-```
-
-### Building Cowork ZIP Manually
-
-```bash
-./build-cowork-zip.sh
-# Upload via Cowork → Browse plugins → Upload plugin
 ```
 
 ---

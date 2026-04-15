@@ -1,6 +1,6 @@
 {
   "name": "datarails-financeos",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "Datarails Finance OS integration - analyze financial data, detect anomalies, and generate insights.",
   "author": {
     "name": "Datarails",
