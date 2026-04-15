@@ -20,7 +20,7 @@ Analyze financial data, detect anomalies, and generate insights directly from Cl
 Open Claude Code in any project and run:
 ```
 /plugin marketplace add https://github.com/Datarails/dr-claude-code-plugins-re.git
-/plugin install Datarails-FinanceOS@datarails-marketplace
+/plugin install datarails-financeos@datarails-marketplace
 ```
 
 > **Important:** Use the full HTTPS URL (not `Datarails/dr-claude-code-plugins-re`). The shorthand format triggers SSH cloning which may fail without SSH keys configured.
