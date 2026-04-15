@@ -82,6 +82,7 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 | `/dr-query` | Query and filter records |
 | `/dr-extract` | Extract financial data to Excel |
 | `/dr-test` | Test API field compatibility and update profile |
+| `/dr-anomalies` | Detect anomalies in a specific table |
 | `/dr-drilldown` | Drill down on DR.GET formula cells to see underlying detail |
 
 ### Financial Analysis
