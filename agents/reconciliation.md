@@ -6,7 +6,6 @@ tools:
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_records_by_filter
-  - mcp__datarails-finance-os__extract_financials
   - Read
   - Write
 ---
