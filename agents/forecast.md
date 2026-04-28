@@ -5,7 +5,6 @@ tools:
   - mcp__datarails-finance-os__aggregate_table_data
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__list_finance_tables
-  - mcp__datarails-finance-os__extract_financials
   - Read
   - Write
   - Bash
