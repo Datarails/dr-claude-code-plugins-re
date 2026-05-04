@@ -26,6 +26,7 @@ jobs:
           zip -r "$ZIP_NAME" . \
             -x ".git/*" \
             -x ".github/*" \
+            -x ".claude/*" \
             -x "tmp/*" \
             -x "config/client-profiles/*.json" \
             -x "*.pyc" \
@@ -60,8 +61,8 @@ jobs:
 
             ### Install via Claude Code
             ```bash
-            git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
-            cd dr-claude-code-plugins-re && claude
+            /plugin marketplace add Datarails/dr-claude-code-plugins-re
+            /plugin install datarails-financeos@datarails-marketplace
             ```
 
             ### Getting Started

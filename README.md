@@ -36,16 +36,6 @@ claude --plugin-dir ./dr-claude-code-plugins-re
 
 This loads the plugin for the current session only — useful for development and testing.
 
-**Option C: Run from the plugin directory**
-
-```bash
-git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
-cd dr-claude-code-plugins-re
-claude
-```
-
-Skills are auto-discovered from the `skills/` directory when running inside the repo.
-
 **Managing the plugin:**
 ```
 /plugin                    # View installed plugins, enable/disable
