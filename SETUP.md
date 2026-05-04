@@ -33,22 +33,18 @@ Show me a financial summary for 2025
 - [Claude Code](https://docs.anthropic.com/claude-code) installed
 - A Datarails account with access to Finance OS
 
-### Step 1: Clone the Plugin
+### Step 1: Install the Plugin
 
-```bash
-git clone https://github.com/Datarails/dr-claude-code-plugins-re.git
-cd dr-claude-code-plugins-re
+Open Claude Code in any project and run:
+
+```
+/plugin marketplace add https://github.com/Datarails/dr-claude-code-plugins-re.git
+/plugin install datarails-financeos@datarails-marketplace
 ```
 
-### Step 2: Start Claude Code
+Skills are installed globally and available from any project.
 
-```bash
-claude
-```
-
-Skills are automatically available from the `skills/` directory.
-
-### Step 3: Connect to Datarails
+### Step 2: Connect to Datarails
 
 Add the Datarails connector:
 
@@ -58,7 +54,7 @@ claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp
 
 A browser window will open for OAuth login when you first use a Datarails tool.
 
-### Step 4: Create Client Profile (First Time)
+### Step 3: Create Client Profile (First Time)
 
 ```
 /dr-learn
@@ -66,7 +62,7 @@ A browser window will open for OAuth login when you first use a Datarails tool.
 
 This discovers your table structure and creates a client profile (stored in plugin data directory, persistent across updates).
 
-### Step 5: Test
+### Step 4: Test
 
 ```
 /dr-tables                             # List tables
