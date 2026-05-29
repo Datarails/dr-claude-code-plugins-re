@@ -1,18 +1,8 @@
 ---
 name: dr-intelligence
-description: Generate comprehensive FP&A intelligence workbooks with auto-detected insights, recommendations, and professional Excel formatting. The most powerful financial analysis skill.
+description: "Generate a 10-sheet FP&A intelligence workbook from Datarails Finance OS data with auto-detected insights, variance analysis, anomaly detection, and professional Excel formatting using openpyxl. Use when building financial analysis reports, executive dashboards, FP&A workbooks, budget-vs-actual comparisons, or expense deep-dives."
 user-invocable: true
-allowed-tools:
-  - mcp__datarails-finance-os__list_finance_tables
-  - mcp__datarails-finance-os__get_table_schema
-  - mcp__datarails-finance-os__aggregate_table_data
-  - mcp__datarails-finance-os__get_records_by_filter
-  - mcp__datarails-finance-os__detect_anomalies
-  - mcp__datarails-finance-os__profile_numeric_fields
-  - mcp__datarails-finance-os__profile_categorical_fields
-  - Write
-  - Read
-  - Bash
+allowed-tools: "mcp__datarails-finance-os__list_finance_tables, mcp__datarails-finance-os__get_table_schema, mcp__datarails-finance-os__aggregate_table_data, mcp__datarails-finance-os__get_records_by_filter, mcp__datarails-finance-os__detect_anomalies, mcp__datarails-finance-os__profile_numeric_fields, mcp__datarails-finance-os__profile_categorical_fields, Write, Read, Bash"
 argument-hint: "--year <YYYY> [--output <file>]"
 ---
 
@@ -20,17 +10,7 @@ argument-hint: "--year <YYYY> [--output <file>]"
 
 Generate a comprehensive 10-sheet FP&A intelligence workbook with auto-detected insights, recommendations, and professional Excel formatting.
 
-This is the **most powerful** financial analysis skill — it answers real business questions, not just data dumps. All data is pulled via MCP tools and the workbook is built locally with openpyxl. No server-side rendering.
-
-## What Makes This Different
-
-| Traditional Report | Intelligence Workbook |
-|-------------------|----------------------|
-| Shows data | Answers questions |
-| Lists numbers | Explains "why" |
-| Static tables | Highlights anomalies |
-| Manual analysis | Insights auto-surfaced |
-| Data dump | Recommendations included |
+This is the most powerful financial analysis skill — it answers real business questions, not just data dumps. All data is pulled via MCP tools and the workbook is built locally with openpyxl. No server-side rendering.
 
 ## Arguments
 
@@ -43,11 +23,11 @@ This is the **most powerful** financial analysis skill — it answers real busin
 
 ### Step 1: Verify Connection
 
-If any Datarails tool call fails with an authentication or connection error, tell the user:
+Check Datarails connectivity before proceeding. If any tool call fails with an authentication or connection error, tell the user:
 
 > The Datarails connector isn't connected. Click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**.
 
-Then STOP — do not retry until the user has reconnected.
+Then STOP — do not retry until the user has reconnected. **Expected outcome**: Confirmed API access to Datarails Finance OS.
 
 ### Step 2: Load Client Profile
 
@@ -60,6 +40,8 @@ Read: ${CLAUDE_PLUGIN_DATA}/client-profiles/{env}.json
 
 If no profile exists, tell the user to run `/dr-learn` first and STOP.
 
+**Expected outcome**: Loaded table IDs, field mappings, account hierarchy, and aggregation compatibility hints.
+
 The profile provides:
 - `tables.financials.id` and `tables.kpis.id`
 - `field_mappings` (semantic name → actual API field, e.g. `account_l1` → `Cost_Center__c`)
@@ -68,7 +50,7 @@ The profile provides:
 
 ### Step 3: Fetch Data via MCP
 
-Run these data pulls in parallel where possible. Use `aggregate_table_data` first; fall back to `get_records_by_filter` only if aggregation is marked unsupported in the profile.
+Run these 6 data pulls in parallel where possible. Use `aggregate_table_data` first; fall back to `get_records_by_filter` only if aggregation is marked unsupported in the profile. **Expected outcome**: Complete dataset for all 10 workbook sheets.
 
 1. **Monthly P&L** — `aggregate_table_data` grouped by `[account_l1, month]`, summed by `amount`, filtered to `--year`.
 2. **Monthly P&L by L2** — same, grouped by `[account_l1, account_l2, month]`. Used for top-20 expense drilldown and cost center P&L.
@@ -81,7 +63,7 @@ If a field listed in `aggregation.failed_fields` appears in a query, substitute 
 
 ### Step 4: Calculate Insights
 
-Apply these detection rules and rank results by severity:
+Apply these detection rules and rank results by severity. **Expected outcome**: Ranked list of findings with quantified impact and actionable recommendations.
 
 | Insight | Detection Rule | Severity |
 |---------|----------------|----------|
@@ -110,64 +92,15 @@ If openpyxl is not available in the local environment:
 - In Claude Code: `pip install openpyxl` (one time).
 - In Claude.ai web / ChatGPT: openpyxl is preinstalled in the analysis/code interpreter sandbox.
 
-Write a single Python script and execute it via `Bash`. The script reads a JSON payload of the analyzed data and writes the xlsx.
+Write a single Python script and execute it via `Bash`. The script reads a JSON payload of the analyzed data and writes the xlsx. **Expected outcome**: A branded 10-sheet Excel workbook saved to the output path.
 
-## 10 Sheets to Generate
+## Workbook Specification
 
-Order matters — the dashboard is sheet 1, raw data is sheet 10.
+See [SHEETS.md](SHEETS.md) for the full 10-sheet specification (order, columns, charts, and formatting per sheet).
 
-1. **Insights Dashboard** — Top 5 findings with severity color, current period KPIs (Revenue, Gross Margin, OpEx, Burn, Runway), and the ranked recommendations list.
-2. **Expense Deep Dive** — Top 20 expense accounts: amount, % of total OpEx, MoM Δ%, YoY Δ%. Color the % cells with a green→red color scale.
-3. **Variance Waterfall** — Current period vs. prior period: contribution to total variance line by line. Use a bar chart.
-4. **Trend Analysis** — 12-month rolling P&L: Revenue, COGS, Gross Profit, OpEx, Net Income. One line per metric, secondary axis for margin %.
-5. **Anomaly Report** — Auto-detected outliers from `detect_anomalies` + the σ-based rule above. Severity column, drill-down hint per row.
-6. **Vendor Analysis** — Top 20 vendors: spend, % of OpEx, MoM Δ. Concentration risk flag column. Pie chart for top-10.
-7. **SaaS Metrics** — ARR, Net New ARR, NRR, GRR, CAC, LTV, LTV/CAC, Magic Number, Burn Multiple, CAC Payback. Quarterly columns; YoY column at right.
-8. **Sales Performance** — Rep-level: bookings, win rate, ACV, ramp status. Cohort table by hire quarter.
-9. **Cost Center P&L** — Department × month grid with totals row and YoY column. Conditional formatting on Δ%.
-10. **Raw Data** — Long-form pivot-ready dataset (the monthly L1×L2 frame). No formatting — just headers + data.
+See [BRAND.md](BRAND.md) for Datarails brand colors, fonts, layout rules, and number formats to apply with openpyxl.
 
-Each sheet must include a generation timestamp footer and the year analyzed.
-
-## Datarails Brand Styling
-
-When generating the Excel, apply Datarails brand styling:
-
-**Font:** Poppins (fall back to Calibri if unavailable). Weights: 400 regular, 600 semibold, 700 bold.
-
-**Colors:**
-| Role | Hex | Use |
-|------|-----|-----|
-| Navy | `0C142B` | Header/banner background |
-| Main text | `333333` | Primary text |
-| Secondary | `6D6E6F` | Muted/subtitle text |
-| Border | `9EA1AA` | Cell borders |
-| Section bg | `F2F2FB` | Section header / row header background (lavender) |
-| Input bg | `EAEAFF` | Editable/input cell background |
-| Input text | `4646CE` | Editable cell text (indigo) |
-| Favorable | `2ECC71` | Positive variance / good KPI delta |
-| Unfavorable | `E74C3C` | Negative variance / bad KPI delta |
-| Severity CRITICAL | `C00000` | Critical insight banner |
-| Severity WARNING | `ED7D31` | Warning insight banner |
-| Severity POSITIVE | `70AD47` | Positive insight banner |
-| Severity INFO | `5B9BD5` | Informational insight banner |
-| Chart 1 | `0C142B` | Actuals (navy) |
-| Chart 2 | `F93576` | Budget (hot pink) |
-| Chart 3 | `00B4D8` | Teal |
-| Chart 4 | `FFA30F` | Amber |
-
-**Layout rules:**
-- Content starts at column B (column A is a narrow gutter).
-- Rows 1-6: header banner with navy background, white title text, white subtitle.
-- Gridlines OFF on every sheet. Freeze panes at B7.
-- Footer as last row with generation date and "Datarails FP&A Intelligence Workbook".
-- Every cell must have font, fill, alignment, and number format set.
-
-**Number formats:** `_(* #,##0_);_(* (#,##0);_(* "-"_);_(@_)` (default), `$#,##0` (dollars), `$#,##0.0,,"M"` (millions), `0.0%` (percent).
-
-**Variance coloring:** any cell showing a delta/change uses green (`2ECC71`) if favorable, red (`E74C3C`) if unfavorable.
-
-## Step 6: Output
+### Step 6: Output
 
 After writing the file, surface it to the user:
 
@@ -180,45 +113,15 @@ Always include in the summary:
 - Number of insights surfaced (by severity)
 - Top recommendation
 
-## Why This Matters
-
-This workbook answers the **Top 10 Business Questions**:
-
-1. **Where is the money going?** — Top 20 expense drivers
-2. **What changed vs last month?** — MoM variance waterfall
-3. **Which cost centers are over budget?** — Variance by department
-4. **Are we efficient?** — OpEx as % of Revenue, Gross Margin
-5. **What's unusual?** — Auto-detected anomalies
-6. **Who are our biggest vendors?** — Top 10 vendor spend
-7. **How are sales reps performing?** — Win rates, ARR by rep
-8. **What's our burn situation?** — Runway, burn multiple
-9. **What should we investigate?** — Exception report
-10. **What actions to take?** — Automated recommendations
-
-## Performance
-
-- Small datasets (1-2 years): ~1-2 minutes
-- Large datasets (3+ years): ~3-5 minutes
-
-Aggregation-first strategy keeps round-trips small. Pagination is the fallback only when the profile marks aggregation unsupported.
-
 ## Troubleshooting
 
-**"Not authenticated" error**
-- Connect via Connectors UI ("+" → Connectors → Datarails → Connect).
-
-**"Profile not found"**
-- Run `/dr-learn` first to create a profile for the environment.
-
-**openpyxl not available locally**
-- Claude Code: `pip install openpyxl`.
-- Claude.ai / ChatGPT analysis tools have it preinstalled — if it's missing, the sandbox is unavailable; tell the user the skill needs a code-execution-capable client.
-
-**Aggregation fails on a field**
-- The profile's `aggregation.failed_fields` should already redirect to alternatives. If a new field fails, run `/dr-test` to refresh.
-
-**Missing data in sheets**
-- Check profile's field mappings. Run `/dr-learn` to refresh.
+| Problem | Fix |
+|---------|-----|
+| "Not authenticated" | Connect via Connectors UI ("+" → Connectors → Datarails → Connect) |
+| "Profile not found" | Run `/dr-learn` first |
+| openpyxl not available | Claude Code: `pip install openpyxl`. Claude.ai/ChatGPT: preinstalled |
+| Aggregation fails on a field | Run `/dr-test` to refresh `aggregation.failed_fields` |
+| Missing data in sheets | Run `/dr-learn` to refresh field mappings |
 
 ## Related Skills
 
