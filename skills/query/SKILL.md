@@ -1,6 +1,6 @@
 ---
 name: dr-query
-description: Query Datarails Finance OS tables with filters. Fetch specific records, get samples, or run custom queries for investigation.
+description: Query Datarails Finance OS tables with filters. Fetch specific records or random samples for investigation. Filter API supports equality and value-list operators only — for ranges and patterns the skill explains the right alternative.
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__get_table_schema
@@ -13,19 +13,30 @@ argument-hint: "<table_id> [filter_expression] [--sample] [--limit N]"
 
 # Datarails Data Query
 
-Query Finance OS tables - fetch records by filter, get samples, or run custom queries.
+Query Finance OS tables — fetch records by filter, get random samples, or
+pull a raw page of up to 1000 rows. The filter API is value-list only;
+this skill explains the supported syntax and the right workaround when the
+user asks for something the API can't do natively.
 
 ## Workflow
 
 ### Step 1: Verify Authentication
 
-If any tool call fails with an authentication or connection error, guide the user to connect via the Connectors UI ("+" > Connectors > Datarails > Connect).
+If any tool call fails with an authentication or connection error, guide
+the user to connect via the Connectors UI ("+" → Connectors → Datarails →
+Connect).
 
-### Step 2: Understand the Request
+### Step 2: Pick the right tool
 
-- **Sample data**: Use `get_sample_records` (max 20 rows)
-- **Filtered records**: Use `get_records_by_filter` (max 500 rows)
-- **Custom query**: Use `execute_query` (max 1000 rows)
+- **Random sample** → `get_sample_records` (max 20 rows). Use to inspect
+  data shape.
+- **Filtered records** → `get_records_by_filter` (max 500 rows). Use for
+  equality / IN-list filters.
+- **Raw page** → `execute_query` (returns up to 1000 rows). The `query`
+  argument is currently ignored — it always returns the first page; do
+  not advertise it as SQL.
+- **Range / comparison / null / pattern** → not supported by the filter
+  API. See "Workarounds" below.
 
 ### Step 3: Execute and Present
 
@@ -35,50 +46,64 @@ Format results as a readable table. Highlight any notable patterns.
 
 | Argument | Description |
 |----------|-------------|
-| `<table_id>` | Required - the table to query |
-| `[filter]` | Filter expression (see syntax below) |
+| `<table_id>` | Required — the table to query |
+| `[filter]` | Filter expression (equality / IN-list, see syntax below) |
 | `--sample` | Get random sample (default 20 rows) |
-| `--limit N` | Limit results (max 500 for filters, 1000 for queries) |
-| `--sql` | Treat filter as raw SQL-like query |
+| `--limit N` | Limit results (max 500 for filters) |
 
 ## Filter Syntax
 
-**Basic equality:**
+The backend filter API has **value-list semantics only**. The only
+supported shapes are:
+
+**Equality (scalar):**
 ```
-field = "value"
-field = 123
+status = "active"
+amount = 12500
 ```
 
-**Comparison:**
+**Equality (list of values — implicit OR):**
 ```
-amount > 1000
-amount >= 1000
-amount < 5000
-posting_date > "2024-01-01"
-```
-
-**Multiple conditions:**
-```
-amount > 1000 AND department = "Sales"
-status = "active" OR status = "pending"
-```
-
-**IN list:**
-```
+status IN ("active", "pending")
 account_code IN ("4000-100", "4000-200", "4000-300")
 ```
 
-**NULL checks:**
+**Exclusion list:**
 ```
-vendor_name IS NULL
-vendor_name IS NOT NULL
+status NOT IN ("archived", "deleted")
 ```
 
-**Pattern matching:**
+**Multiple conditions (implicit AND across fields):**
 ```
-description LIKE "%adjustment%"
-account_code LIKE "4000-%"
+status = "active" AND department IN ("Sales", "Marketing")
 ```
+
+### NOT supported
+
+The following return an explicit `unsupported_filter_operators` error from
+the backend — do not include them in the filter string:
+
+- Comparison: `>`, `<`, `>=`, `<=`, `BETWEEN`
+- Null check: `IS NULL`, `IS NOT NULL`
+- Pattern match: `LIKE`, `ILIKE`
+- Disjunction across different fields (`a = 1 OR b = 2`)
+
+### Workarounds
+
+- **Numeric range** (e.g. "amount between 1000 and 5000"): redirect to
+  `/dr-tables` aggregate flow. `aggregate_table_data` accepts a numeric
+  category bucket field as a dimension and has no row limit.
+- **Null check**: call `aggregate_table_data` with the field as a
+  dimension and COUNT — null/missing rows show up as a separate
+  grouping.
+- **Substring match** (e.g. `LIKE "%adj%"`): fetch distinct values with
+  `get_field_distinct_values`, do the substring filter client-side, then
+  pass the matching subset as an `in` list to `get_records_by_filter`.
+- **Date range**: date fields are stored as epoch integers and rejected
+  by the filter API entirely. Use `aggregate_table_data` with the date
+  field in `dimensions` and filter the response client-side, or call
+  `get_metric_data` / `semantic_aggregate` (both accept top-level
+  `date_start` / `date_end`).
 
 ## Example Interactions
 
@@ -96,95 +121,85 @@ account_code LIKE "4000-%"
 Showing 20 of 125,432 total records
 ```
 
-**User: "/dr-query 11442 amount > 100000"**
+**User: "/dr-query 11442 department = 'Sales'"**
 ```
 📋 Query Results: GL Transactions
-Filter: amount > 100000
-
-| transaction_id | account_code | amount      | posting_date | vendor_name     |
-|----------------|--------------|-------------|--------------|-----------------|
-| 89234          | 4000-100     | 2,150,000   | 2024-01-10   | Acme Corp       |
-| 12345          | 4000-200     | 1,800,000   | 2024-01-08   | Global Supply   |
-| 34567          | 5100-100     | 850,000     | 2024-01-05   | Tech Partners   |
-...
-
-Found 127 records matching filter (showing first 100)
-Use --limit 500 to see more results
-```
-
-**User: "/dr-query 11442 department = 'Sales' AND amount > 50000 --limit 50"**
-```
-📋 Query Results: GL Transactions
-Filter: department = 'Sales' AND amount > 50000
-
-Found 234 records (showing 50)
+Filter: department = "Sales"
 
 | transaction_id | account_code | amount    | posting_date | vendor_name     |
 |----------------|--------------|-----------|--------------|-----------------|
 | 45231          | 4000-100     | 125,000   | 2024-01-15   | ABC Company     |
-...
-```
-
-**User: "/dr-query 11442 --sql SELECT account_code, SUM(amount) as total FROM table GROUP BY account_code ORDER BY total DESC"**
-```
-📋 Custom Query Results
-
-| account_code | total          |
-|--------------|----------------|
-| 4000-100     | 45,231,000.00  |
-| 4000-200     | 32,150,000.00  |
-| 5100-300     | 28,750,000.00  |
+| 67892          | 4000-100     |  85,000   | 2024-01-14   | DEF Industries  |
 ...
 
-Returned 156 rows
+Found 1,247 records matching filter (showing first 100).
+Use --limit 500 to see more, or call /dr-tables aggregate to get totals.
 ```
 
-**User: "/dr-query 11442 posting_date > '2024-01-01' AND vendor_name IS NULL"**
+**User: "/dr-query 11442 account_code IN ('4000-100', '4000-200')"**
 ```
 📋 Query Results: GL Transactions
-Filter: posting_date > '2024-01-01' AND vendor_name IS NULL
+Filter: account_code IN ("4000-100", "4000-200")
 
-Found 892 records with missing vendor_name since Jan 1
-
-| transaction_id | account_code | amount    | posting_date | vendor_id |
-|----------------|--------------|-----------|--------------|-----------|
-| 56789          | 4000-100     | 5,000.00  | 2024-01-12   | V-1234    |
+| transaction_id | account_code | amount    | posting_date | department |
+|----------------|--------------|-----------|--------------|------------|
+| 45231          | 4000-100     | 125,000   | 2024-01-15   | Sales      |
+| 89234          | 4000-200     |  45,000   | 2024-01-10   | Marketing  |
 ...
 
-💡 Note: These records have vendor_id but missing vendor_name
-   Consider joining with vendor master table
+Found 892 records (showing first 100).
+```
+
+**User: "/dr-query 11442 amount > 100000"** (unsupported)
+```
+⚠️ The backend filter API doesn't support numeric comparison.
+
+You have two options:
+1. Use /dr-tables aggregate with a bucket dimension to find the rows.
+2. If you already know which values qualify, pass them as an IN list:
+   /dr-query 11442 amount IN (125000, 150000, 200000)
+
+For a recurring need, /dr-anomalies surfaces large-amount outliers
+without requiring a comparison filter.
 ```
 
 ## Filter Object Format (API)
 
-When using `get_records_by_filter` programmatically:
+When calling `get_records_by_filter` programmatically, supply a dict of
+field → value spec:
 
 ```json
 {
-  "status": "active",                    // Equality
-  "amount": {">": 1000, "<": 5000},      // Range
-  "account_code": {"in": ["A", "B"]},    // IN list
-  "vendor_name": {"is_null": true},      // NULL check
-  "description": {"like": "%adj%"}       // Pattern
+  "status": "active",
+  "amount": [12500, 15000, 20000],
+  "account_code": {"in": ["4000-100", "4000-200"]},
+  "department": {"not_in": ["Archived"]}
 }
 ```
+
+The backend rejects `{">": N}`, `{"<": N}`, `{"is_null": true}`,
+`{"like": "..."}`, `{"between": [...]}` with `unsupported_filter_operators`.
 
 ## Limits
 
 | Method | Max Rows | Use Case |
 |--------|----------|----------|
 | `get_sample_records` | 20 | Quick data inspection |
-| `get_records_by_filter` | 500 | Investigation queries |
-| `execute_query` | 1000 | Complex aggregations |
+| `get_records_by_filter` | 500 | Investigation queries with equality/IN filters |
+| `execute_query` | 1000 | Raw page (no filtering — `query` arg is ignored) |
+| `aggregate_table_data` | none | Use when you need totals or ranges (no row cap) |
 
 ## Tips
 
-- Start with `--sample` to understand data format
-- Use filters to investigate anomalies found by `/dr-anomalies`
-- For aggregations, use `--sql` with GROUP BY
-- If you need more than 500 rows, consider profiling instead
+- Start with `--sample` to understand data shape and which fields exist.
+- For investigation that needs comparison or range, drive it through
+  `/dr-tables` aggregate flow rather than trying to filter raw rows.
+- If you need more than 500 rows of raw data, that's usually a signal
+  you want aggregation, not extraction.
+
 ## Related Skills
 
-- `/dr-tables` - Get schema before querying
-- `/dr-anomalies` - Find issues to investigate
-- `/dr-profile` - Statistical analysis
+- `/dr-tables` — Get schema or aggregate totals (no row cap).
+- `/dr-anomalies` — Find issues to investigate (computes findings
+  client-side from baseline aggregates).
+- `/dr-profile` — Field-level statistics.

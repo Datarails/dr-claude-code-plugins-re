@@ -27,7 +27,9 @@ Essential for SOX 404 compliance, external audits, and internal control assessme
 - Automated control testing
 - Professional PDF audit reports
 - Comprehensive evidence packages
-- Exception identification
+- Exception identification (computed client-side from
+  `aggregate_table_data` results; the MCP `detect_anomalies` tool
+  only returns baseline numeric aggregates)
 - Management response framework
 
 ## Use Cases

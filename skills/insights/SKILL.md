@@ -3,8 +3,11 @@ name: dr-insights
 description: Generate executive-ready insights with trend analysis and visualizations. Creates professional PowerPoint presentations and Excel data books.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__aggregate_table_data
   - mcp__datarails-finance-os__list_finance_tables
+  - mcp__datarails-finance-os__get_table_schema
+  - mcp__datarails-finance-os__aggregate_table_data
+  - mcp__datarails-finance-os__get_field_distinct_values
+  - mcp__datarails-finance-os__get_sample_records
   - Write
   - Read
   - Bash
@@ -108,9 +111,47 @@ Comprehensive workbook includes:
 
 ### Phase 1: Data Collection
 1. Verify authentication
-2. Load client profile
+2. Discover the financials table and its fields — see below
 3. Fetch P&L trends (12 months)
 4. Fetch KPI metrics (4+ quarters)
+
+#### Discover the financials table and its fields
+
+**If you already discovered these earlier in THIS conversation, reuse
+them — skip to fetching data.** Discovery is cheap but not free; do it
+once per conversation, then carry the values forward.
+
+1. `list_finance_tables`. Pick the financials table: the one whose name
+   matches `/financial|cube|p&?l|ledger|gl/i`; if none match, the
+   largest by row count. Call it `<financials_table_id>`. If a separate
+   table looks like a KPI/metrics table (name matches
+   `/kpi|metric|arr|saas/i`), note it as `<kpi_table_id>`.
+
+2. `get_table_schema(<financials_table_id>)`. Bind these by
+   case-insensitive name match (respecting the noted type):
+   - `<amount_field>`       — numeric: `^amount$` → `transaction_amount` → `value`
+   - `<scenario_field>`     — categorical: `^scenario$` → `^version$`
+   - `<date_field>`         — date/timestamp: `reporting_date` → `posting_date` → `^date$`
+   - `<account_l1_field>`   — `dr_acc_l1` → `account_l1` → `account_group_l1`
+   - `<account_l2_field>`   — `dr_acc_l2` → `account_l2` (optional, for detail)
+
+   If `<amount_field>` or `<scenario_field>` has no clear match, ask the
+   user which field to use, then continue.
+
+3. Find the account-category values. The distinct-values API often
+   returns 409, so call `get_sample_records(<financials_table_id>,
+   limit=500)` and collect the distinct `<account_l1_field>` values.
+   Match:
+   - `<revenue_value>` ← `/revenue|sales|income/i`
+   - `<cogs_value>`    ← `/cogs|cost of goods|cost of sales|direct cost/i`
+   - `<opex_value>`    ← `/operating|opex|expense|sg&a/i`
+
+   If a category has several candidates, pick the broadest top-level
+   one; if genuinely ambiguous, ask the user once.
+
+Aggregation-field failures are handled reactively (see Error Handling),
+not pre-probed. On auth/connection failure during discovery: show the
+reconnect message and STOP — do not generate reports without fresh data.
 
 ### Phase 2: Analysis
 1. Calculate growth rates
@@ -285,8 +326,14 @@ Fast processing via efficient MCP aggregation tools.
 **"Not authenticated" error**
 - Connect via Connectors UI ("+" > Connectors > Datarails > Connect)
 
+**Aggregation field rejected (500)**
+- Retry with a sibling account field from the discovered schema
+  (e.g. `DR_ACC_L1.5`). If none works, note which field failed and
+  present what you have.
+
 **"No KPI data found" warning**
-- Agent adapts and focuses on P&L trends
+- No KPI/metrics table was found in the discovery step, or it had no
+  usable data — agent adapts and focuses on P&L trends
 - Recommendations still generated
 
 **"Incomplete data for period" warning**
@@ -326,13 +373,15 @@ Fast processing via efficient MCP aggregation tools.
 
 ## Customization
 
-Insights adapt to client profiles at `${CLAUDE_PLUGIN_DATA}/client-profiles/{env}.json` (or `config/client-profiles/{env}.json`):
+Insights adapt automatically to whatever the discovery step (Phase 1)
+finds in the client's environment:
 - Different account hierarchies
-- Custom KPI definitions
+- Custom KPI definitions (if a KPI/metrics table was found)
 - Department structures
 - Business rules
 
-Modify profile to customize insights.
+No setup or profile file is needed — the skill rediscovers the table
+and fields on each cold session.
 
 ## Data Freshness
 

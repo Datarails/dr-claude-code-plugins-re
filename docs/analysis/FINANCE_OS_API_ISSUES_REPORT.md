@@ -309,6 +309,55 @@ The 409 error on distinct values endpoint should be investigated.
 
 ---
 
+## Metrics-v1 Call-Shape Matrix
+
+> **Bucket-end clipping** is the single most common cause of "engine returned empty" reports. The metrics engine only emits a bucket when `bucket_end <= date_end`. A mid-bucket `date_end` (e.g. today's date with `aggregation_period=month`) silently drops the current bucket — no warning, no row, no signal beyond an empty `data: []`. Round `date_end` up to the end of the bucket, or expect the in-progress period to vanish.
+>
+> Note: for `aggregation_period=year`, the wrapper's retry suggestion assumes calendar-year buckets — if the client's fiscal year ends elsewhere, the suggested `date_end` will be wrong.
+
+`aggregation_period` and `aggregation_type` are independent knobs:
+
+| Knob | What it controls |
+|---|---|
+| `aggregation_period` | Bucket grid size: `day` / `month` / `quarter` / `year` |
+| `aggregation_type` | Roll-up modifier within or across buckets: `DEFAULT` / `MTD` / `QTD` / `YTD` |
+
+So `period=month, type=QTD` = "one row per month, each holding the running cumulative QTD total." `period=quarter, type=QTD` = "one row per quarter, holding the quarter total."
+
+### Recipes for common intents
+
+| User intent | `aggregation_period` | `aggregation_type` | `date_start` | `date_end` | Returned shape |
+|---|---|---|---|---|---|
+| QTD value, mid-quarter\* | `month` | `QTD` | quarter-start of today | **`end_of_month(today)`** | Series of monthly running totals through current month |
+| Full-quarter rollup | `quarter` | `QTD` or `DEFAULT` | quarter-start | quarter-end | 1 row stamped at quarter-end |
+| MTD value, mid-month | `month` | `MTD` | month-start(today) | `end_of_month(today)` | 1 row |
+| YTD value, mid-year | `month` | `YTD` | year-start(today) | `end_of_month(today)` | Series of monthly running YTD totals |
+| Trailing N months for P&L | `month` | `DEFAULT` | today − N months | `end_of_month(today)` | N rows |
+
+\* Latest row's value is partial-quarter-to-date, stamped at month-end — present it as as-of-today, not as-of-stamp-date.
+
+The MCP wrapper detects the clip pattern on empty responses and surfaces a targeted hint with the suggested `date_end`. If you see `wrapper_warning` text containing *"Likely bucket-end clipping"*, follow the suggestion before treating the engine as broken.
+
+### Stamp date semantics
+
+`is_end_of_period: True` rows are stamped at the **bucket** end, not the calendar period:
+
+- `aggregation_period=month` → May bucket stamped `2026-05-31`
+- `aggregation_period=quarter` → Q2 bucket stamped `2026-06-30`
+
+The "period" is the bucket grid (set by `aggregation_period`), not the `aggregation_type`.
+
+### Empty-result triage
+
+When `get_metric_data` returns `status:"success"` with `data:[]`, in priority order:
+
+1. Read the `wrapper_warning` field. If it mentions clipping, retry with the suggested `date_end`.
+2. Check the metric's `health` (`get_metric_definitions`). `needs_mapping` and `errored` metrics will return empty regardless of params.
+3. For CALC metrics, check `base_metrics` for transitively-errored dependencies.
+4. Last: sweep `scenario`, `dimension_filters`, `aggregation_period`. The combinatorics space is small — exhaust it before opening a backend ticket.
+
+---
+
 ## Appendix: Test Configuration
 
 ```

@@ -4,6 +4,8 @@ description: Analyze budget vs forecast vs actual variances. Compares multi-scen
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__aggregate_table_data
+  - mcp__datarails-finance-os__get_table_schema
+  - mcp__datarails-finance-os__list_finance_tables
   - Write
   - Read
   - Bash
@@ -25,6 +27,154 @@ Essential for FP&A reviews, planning adjustments, and performance tracking.
 | `--period <YYYY-MM>` | Specific period to focus on | All year |
 | `--output-xlsx <file>` | Excel output path | `tmp/Forecast_Variance_YYYY_TIMESTAMP.xlsx` |
 | `--output-pptx <file>` | PowerPoint output path | `tmp/Forecast_Summary_YYYY_TIMESTAMP.pptx` |
+
+## Excel Context Mode (Claude in Excel)
+
+When this skill is invoked from within **Claude in Excel** (the task pane add-in), switch to in-sheet enrichment mode instead of generating output files. This mode integrates the row-commentary approach from `datarails-excel-multi-table-analysis` and is the **preferred mode** when the user is working directly in a workbook.
+
+**How to detect the context:** Excel context mode activates when the user has an open workbook and wants in-sheet enrichment — with or without an existing range. This applies in Claude for Excel (task pane), Claude Code with an open workbook, or any context where the user is working directly in a spreadsheet. Do **not** generate `.xlsx` or `.pptx` output files. Write all output directly into the active workbook using whichever Excel cell-write tool is available to you. Never use the `Write` tool to write spreadsheet content in this context. If no cell-write tool is available, fall back to file output mode and tell the user.
+
+### Step 0 — Verify workbook connection (always first in Excel context)
+
+Before any data pull or schema discovery, call `datarails-excel-agent` → `agent.get_session`.
+
+- If `isConnected` (COM) or `isLoggedIn` (Flex) is **false**: the workbook is not connected to Datarails. Ask the user: *"This workbook is not connected to Datarails. Should I connect it now with `connect_file`?"* Wait for explicit confirmation before calling `agent.connect_file` — it is a mutating command and must not be called automatically. Do not proceed with analysis until connected — FinanceOS API results will not be meaningful for this workbook.
+- If connected: note the workspace context for the session. Proceed to Step 1.
+
+**Data refresh — ask only in Excel context:** If `agent.get_session` succeeded above (Excel context confirmed), ask: *"Should I refresh data from Datarails before pulling? (Recommended if you haven't refreshed today.)"* If the user confirms, call `agent.refresh` and wait for it to complete. Skip only if the user explicitly says no. In non-Excel context (no agent bridge), skip entirely — `agent.refresh` is not available.
+
+### Step 1 — Discover client-specific dimensions (always first)
+
+Every Datarails customer structures their Financials table differently. **Never hardcode dimension field names.** Before pulling any data, discover the two key dimensions from the Financials table schema:
+
+**Run `get_table_schema` on the Financials table, then identify:**
+
+| Dimension | What to look for | Common field names |
+|-----------|------------------|--------------------|
+| **Cost Center** | The field that identifies the organizational unit / department incurring the cost | `Cost_Center`, `DR_Cost_Center`, `Department`, `Dept_Name`, `CostCenter` |
+| **Report Field** | The field that identifies the P&L line item / account category as it appears in the customer's report | `Report_Field`, `Report_Line`, `DR_ACC_L1`, `DR_ACC_L2`, `Account_Name`, `Line_Item` |
+
+If multiple candidates exist for either dimension, pick the most specific / granular one. Document both discovered field names — use them in **every aggregation** for this analysis session. These two dimensions are mandatory; omitting either produces commentary that is not actionable.
+
+If the schema genuinely has no identifiable cost center field, flag this in the Read Me block and fall back to the next-best grouping available (e.g., account hierarchy). Never silently drop the dimension.
+
+### Step 2 — Read the active sheet (Phase 0)
+
+Before pulling data, read what is in the active sheet:
+
+- **Enrichment mode**: the user has a range (rows × period columns, variance grid, P&L block). Identify row labels, column headers, data bounds, and the empty space to the right where Commentary + Source Ref columns will go.
+- **Cold-question mode**: the sheet is empty or unrelated. Build a fresh variance block from scratch, including Commentary + Source Ref columns from the start.
+
+Do not assume which mode — read the sheet first.
+
+### Step 3 — Pull data using the discovered dimensions (in parallel)
+
+Issue all scenario pulls in a single turn (concurrent tool calls). For each pull, always include the discovered **cost center** and **report field** dimensions alongside the period dimension:
+
+```
+dimensions: [System_Quarter (or System_Month), <cost_center_field>, <report_field>]
+metrics:    [SUM(Amount)]
+filters:    [System_Year = <year>, Scenario = <scenario>, DR_ACC_L0 = "P&L",
+             GAAP/Non GAAP ≠ "Gaap"]
+```
+
+Assign each distinct pull a Source ID: `S1`, `S2`, `S3`, ...
+
+| Source ID | Scenario |
+|-----------|----------|
+| S1 | Actuals |
+| S2 | Budget |
+| S3 | Forecast (if in scope) |
+
+**Also pull HeadCount** whenever compensation lines are in scope. Comp $ alone cannot distinguish volume (headcount change) from rate (salary / bonus change) — always decompose. See the HC inference trap in `datarails-excel-multi-table-analysis`.
+
+**Verify data freshness** for each table before quoting period boundaries. If a table is short of the requested period, narrow the window and flag it in the Read Me block and in each affected commentary row.
+
+### Step 4 — Write per-row commentary and source refs
+
+Add two columns to the right of the user's range (or include them in the fresh block):
+
+| ... existing columns ... | Commentary | Source Ref |
+|--------------------------|------------|------------|
+
+**Commentary cell rules:**
+- One sentence per row, quantified (Δ$ and Δ%)
+- Always call out **both** the cost center and the report field in the sentence — these are the two dimensions that make commentary actionable
+- End with inline source refs: `[S1, S2]`
+- If a decomposition applies (e.g., HC volume vs rate), include it
+- If data freshness is a caveat, name it inline
+
+**Example commentary cells:**
+> `Marketing expense +$120K (+14%) vs Budget, driven by Events cost center (+$95K, DR_ACC_L2: T&E); remaining $25K in Digital/Software. [S1, S2]`
+
+> `R&D compensation +$280K (+18%) vs Budget: $230K (82%) is rate-driven (Q4 bonus accrual on flat HC of 23), $50K (18%) is volume (2 new hires in Oct). [S1, S2, S3]`
+
+**Source Ref cell:** bracketed refs only — `[S1, S2]`. No commentary in this cell.
+
+### Step 5 — Build the Sources sheet and Read Me block
+
+**Sources sheet** (`Sources` tab — create if it doesn't exist):
+
+| Source ID | Table | Table ID | Dimensions | Metrics | Filters | Period Window | Rows | Freshness Note |
+|-----------|-------|----------|------------|---------|---------|---------------|------|----------------|
+
+One row per distinct Source ID. Every `[S#]` cited in Commentary must have a matching row here.
+
+**Read Me block** (top of the analysis sheet, above the data):
+
+```
+SCOPE & FILTERS
+  Period:    <e.g., Q1–Q3 2025>
+  Scenarios: Actuals vs Budget vs Forecast
+  Accounts:  DR_ACC_L0 = "P&L", GAAP excluded
+  Cost Center field:  <discovered field name>
+  Report Field:       <discovered field name>
+
+SOURCE TABLES (full detail in Sources sheet)
+  S1 — Financials: Actuals by period × cost center × report field
+  S2 — Financials: Budget by period × cost center × report field
+  S3 — HeadCount: FTE by month × cost center (if applicable)
+
+DATA FRESHNESS
+  Financials: <latest loaded period>
+  HeadCount:  <latest loaded period, or "N/A">
+```
+
+### Step 6 — Drill-down menu (mandatory in Excel context — do not skip)
+
+**Excel context + enrichment mode only.** Two conditions must both be true:
+1. `agent.get_session` succeeded in Step 0 (Excel context confirmed).
+2. You are in **enrichment mode** — the user's sheet had existing DR.GET formula cells that you added commentary alongside.
+
+If either condition is false, skip this step entirely and state why:
+- Non-Excel context → `agent.drill_down` not available.
+- **Cold-question mode** → data cells were written as **raw values** from the FinanceOS API (`aggregate_table_data`), not as DR.GET formulas. `agent.drill_down` targets DR.GET formula cells — it has nothing to act on. Tell the user drill-down is unavailable in this mode.
+
+If both conditions are true: after writing commentary, you **MUST** output a **Drill-Down Menu** block directly in chat. Do not end the response without it.
+
+The block must list every row where |variance| > 10% or flagged unfavorable, one row per line with its Δ$ and Δ%:
+
+```
+📋 Drill-Down Menu — rows with |variance| > 10%
+  1. <Row label>  Δ$X.XM  (ΔY%)
+  2. <Row label>  Δ$X.XM  (ΔY%)
+  ...
+```
+
+Then explicitly ask: *"Which rows would you like me to drill into for a cell-level breakdown? I'll call `agent.drill_down` on each selected row."*
+
+Only invoke `agent.drill_down` after the user selects rows — do not drill automatically.
+
+### Anti-patterns (Excel context)
+
+- **Never omit the cost center dimension** from commentary — "R&D over budget" is insufficient; name the cost center
+- **Never omit the report field dimension** — "expenses up" is insufficient; name the line item
+- **Never hardcode dimension field names** — always discover from schema; they vary by client
+- **Never write commentary without a `[S#]` ref** — every claim must be auditable
+- **Never overwrite the user's existing data** — add columns to the right only
+- **Never imply freshness you don't have** — flag any missing periods explicitly
+
+---
 
 ## Variance Analysis
 
@@ -222,6 +372,12 @@ Works with:
 - `/dr-insights` - Contextual trend analysis
 - `/dr-reconcile` - Validate scenario consistency
 - `/dr-dashboard` - Current performance view
+- `datarails-excel-agent` - In Excel context:
+  - `agent.get_session` — verify workbook is connected before analysis (Step 0)
+  - `agent.connect_file` — connect workbook if not yet connected
+  - `agent.refresh` — refresh stale data before pulling from FinanceOS API
+  - `agent.drill_down` — cell-level breakdown on large-variance rows after analysis
+  - `agent.publish_to_dashboard` — publish summary range to a Datarails dashboard
 
 ## Related Skills
 
@@ -229,3 +385,4 @@ Works with:
 - `/dr-insights` - Understand drivers of variances
 - `/dr-reconcile` - Validate data consistency
 - `/dr-dashboard` - Real-time performance
+- `datarails-excel-multi-table-analysis` - Row-commentary pattern used in Excel context mode (per-row attribution, source refs, Sources sheet, HC decomposition)

@@ -135,7 +135,9 @@ _Where is money going?_
 
 **Claude Code:**
 ```
-/dr-query TABLE_ID amount > 100000
+# /dr-query filters are equality / IN-list only. For range or
+# threshold questions, drive it through /dr-tables aggregate:
+/dr-tables TABLE_ID aggregate --group-by department --metric Amount:SUM
 ```
 
 ### 3b. Revenue Trends
@@ -182,31 +184,16 @@ This step configures your environment profile, which enables the advanced skills
 
 This tests which API fields work with your environment and reports compatibility.
 
-### Claude Code Track
-
-First, discover your table structure and create a profile:
-
-```
-/dr-learn
-```
-
-Then test field compatibility and update the profile:
-
-```
-/dr-test
-```
-
 ### Why This Matters
 
-The client profile tells advanced skills (like `/dr-intelligence`) which fields work and which alternatives to use. Without it, those skills won't know how to query your specific environment.
+Skills discover your financials table and field names automatically each session, so there's no setup step. `/dr-test` is optional — it reports which fields work as aggregation dimensions up front, but skills also retry a sibling field on their own when an aggregation rejects one.
 
 ### Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
 | Many fields failing | Some environments have restricted fields - this is normal |
-| "No profile found" | Run `/dr-learn` first to create the base profile |
-| Profile looks wrong | Run `/dr-learn --force` to recreate from scratch |
+| Skill picked the wrong table/field | Tell it which table or field to use; it will continue from there |
 
 ---
 
@@ -294,7 +281,7 @@ You're up and running. Here's where to go from here:
 | **Check data quality** | `/datarails-finance-os:data-check` | `/dr-anomalies` |
 | **Full intelligence report** | Ask Claude directly | `/dr-intelligence --year 2025` |
 | **Export to Excel** | Ask Claude directly | `/dr-extract --year 2025` |
-| **Set up environment** | `/datarails-finance-os:test-api` | `/dr-learn` + `/dr-test` |
+| **Check field compatibility (optional)** | `/datarails-finance-os:test-api` | `/dr-test` |
 
 ---
 

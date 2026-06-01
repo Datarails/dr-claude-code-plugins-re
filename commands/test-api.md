@@ -95,8 +95,7 @@ Show a clear diagnostic report:
 > - Fields that fail will use alternative fields or fall back to slower pagination
 >
 > ### Next Steps
-> - These results should be saved to your client profile
-> - Run `/dr-learn` to auto-save these results
+> - Note any failed fields and their suggested alternatives — skills retry a sibling field automatically when an aggregation rejects a dimension
 > - Re-run this test any time after Datarails platform updates
 
 ## Tips

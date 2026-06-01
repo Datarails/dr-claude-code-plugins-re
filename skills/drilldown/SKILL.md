@@ -1,6 +1,6 @@
 ---
 name: dr-drilldown
-description: Drill down on a cell in the Datarails Excel Add-in to see underlying detail. Resolves DR.GET formulas (direct or through formula chains), reads hidden "dr control" sheet filters, queries Datarails for breakdown data, and validates totals before presenting results.
+description: Drill down on a cell in the Datarails Excel Add-in to see underlying detail. Resolves DR.GET formulas (direct or through formula chains), reads hidden "dr control" sheet filters, queries Datarails for breakdown data, and validates totals before presenting results. Self-contained — discovers the client's financials table and fields on its own, no profile or setup step required.
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__list_finance_tables
@@ -11,6 +11,7 @@ allowed-tools:
   - mcp__datarails-finance-os__aggregate_table_data
   - mcp__datarails-finance-os__execute_query
   - Read
+  - Write
   - Bash
   - Glob
   - Grep
@@ -170,9 +171,34 @@ Store all active filters - they must be applied to the drill-down query in Phase
 
 Now build and execute the aggregation query using the resolved DR.GET parameters + global filters from the control sheet.
 
-#### Step 3.1 - Determine the Table ID
+#### Step 3.1 - Discover the financials table and its fields
 
-Load the client profile from `${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json` (or fallback to `config/client-profiles/<env>.json`) and use `tables.financials.id`. If no profile exists, call `list_finance_tables` to discover the financials table and ask the user to confirm.
+This skill is **self-contained**: it discovers the table and the field
+mappings it needs inline. **If you already discovered them earlier in THIS
+conversation, reuse them — skip to Step 3.2.** Discovery is cheap but not
+free; do it once per conversation, then carry the values forward.
+
+1. `list_finance_tables`. Pick the financials table: the one whose name
+   matches `/financial|cube|p&?l|ledger|gl/i`; if none match, the largest by
+   row count. Call it `<financials_table_id>`.
+
+2. `get_table_schema(<financials_table_id>)`. From the fields, bind the ones
+   this skill uses by case-insensitive name match (respecting the noted
+   type):
+   - `<amount_field>` — numeric: `^amount$` → `transaction_amount` → `value`
+     (the metric the breakdown sums)
+   - the categorical fields you'll break down by (see Step 3.2)
+
+   The DR.GET dimension names parsed from the workbook formula in Phase 1 are
+   already the client's literal field names, so use them as-is in the
+   aggregation `filters`; only fall back to schema matching if one isn't an
+   exact field name.
+
+**Aggregation-field failures are handled reactively, not pre-probed.** If the
+Step 3.3 `aggregate_table_data` call 500s on a dimension field, re-inspect
+the schema for a sibling (e.g. `DR_ACC_L1.5` when `DR_ACC_L1` fails, or
+`account_group_l1`) and retry — this is also a likely cause of a total
+mismatch in Phase 4.
 
 #### Step 3.2 - Determine Drill-Down Dimensions
 
@@ -180,7 +206,7 @@ If the user supplied `--by <fields>`:
 - Use those fields as the `dimensions` for the aggregation query.
 
 If no `--by` was supplied:
-- Use the Datarails table schema to find all categorical fields that are NOT already pinned by the DR.GET parameters.
+- Use the table schema from Step 3.1 to find all categorical fields that are NOT already pinned by the DR.GET parameters.
 - Common useful drill-down dimensions: `Account Full`, `Account Name`, `Report_Field`, `DR_ACC_L2`, `Vendor`, `Department L1`, `Department L2`, `Reporting Unit`, `Entity`.
 - Ask the user which fields they want to break down by, suggesting the most useful ones.
 
@@ -190,7 +216,7 @@ Combine:
 1. **DR.GET dimension filters** (from Phase 1) - these become `filters` on the aggregation
 2. **Global filters from dr control** (from Phase 2) - these become additional `filters`
 3. **Drill-down dimensions** (from Step 3.2) - these become `dimensions` on the aggregation
-4. **Metric:** `SUM` on `Amount` (or the appropriate value field)
+4. **Metric:** `SUM` on `<amount_field>` (the value field discovered in Step 3.1)
 
 Build a filters list:
 - For each DR.GET parameter: `{"name": "<dim>", "values": ["<value>"], "is_excluded": false}`
@@ -206,7 +232,7 @@ Then call `aggregate_table_data`:
     aggregate_table_data(
         table_id="<financials_table_id>",
         dimensions=["<drill-down-field-1>", "<drill-down-field-2>"],
-        metrics=[{"field": "Amount", "agg": "SUM"}],
+        metrics=[{"field": "<amount_field>", "agg": "SUM"}],
         filters=<combined_filters>
     )
 
@@ -307,7 +333,7 @@ Show each component table plus how they combine:
 | Cell has no formula | Tell user: "This cell contains a static value (no formula). Cannot drill down." |
 | No DR.GET found in formula chain | Tell user: "This cell formula does not reference any DR.GET cells. Cannot drill down." |
 | No control sheet found | Warn: "No dr control sheet found. Proceeding without global filters - totals may not match if filters are applied in the add-in." |
-| Table not found in Datarails | Ask user to run `/dr-learn` to set up the client profile |
+| Table not found in Datarails | No table matched the financials pattern — list the tables found and ask the user which one holds their P&L / financial data |
 | Total mismatch after retries | Report the mismatch clearly and offer partial results flagged as unvalidated |
 
 ## Examples

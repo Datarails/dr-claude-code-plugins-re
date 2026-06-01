@@ -1,11 +1,12 @@
 ---
 name: dr-test
-description: Test API field compatibility and performance. Discovers which fields work with aggregation, suggests alternatives for failed fields, and updates the client profile automatically.
+description: Test API field compatibility and performance. Discovers which fields work with aggregation and suggests sibling alternatives for failed fields, then reports the results. Self-contained — discovers the client's financials table and candidate fields on its own, no profile or setup step required.
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__list_finance_tables
   - mcp__datarails-finance-os__get_table_schema
   - mcp__datarails-finance-os__aggregate_table_data
+  - mcp__datarails-finance-os__get_field_distinct_values
   - mcp__datarails-finance-os__get_sample_records
   - Write
   - Read
@@ -15,33 +16,54 @@ argument-hint: ""
 
 # API Diagnostic & Field Compatibility Test
 
-Test which fields work with the aggregation API for a specific environment. Discovers field compatibility, suggests alternatives for failed fields, and updates the client profile with `aggregation` hints.
+Test which fields work with the aggregation API for a specific environment.
+Discovers field compatibility and suggests sibling alternatives for failed
+fields, then reports the results to the user.
+
+This skill is **self-contained**: discovering which fields work as
+aggregation dimensions is its whole job, so it finds the financials table and
+its candidate fields itself (inline, Step 2). It does not depend on
+a saved profile, a learn step, or any prior setup — and it does **not**
+write its findings to disk; it reports them in-conversation so the current
+session (and any skill that reuses the discovered table/fields) can act on
+them.
 
 ## Purpose
 
-The Datarails aggregation API works for most fields (~212/220) but some fields fail per-client (500 errors). This skill:
-1. Tests each mapped field from the client profile against aggregation
-2. Reports pass/fail with timing
-3. Discovers alternative fields for those that fail
-4. Updates the client profile's `aggregation` section automatically
+The Datarails aggregation API works for most fields (~212/220) but some
+fields fail per-client (500 errors). This skill:
+1. Discovers the financials table and its candidate categorical fields
+2. Tests each candidate field against aggregation
+3. Reports pass/fail with timing
+4. Discovers sibling alternatives for those that fail
+5. Reports the full compatibility result to the user (which fields work as
+   dimensions, which 500, and the suggested sibling for each failure)
 
 ## Arguments
 
 No arguments required. Uses the currently authenticated environment.
 
-## Client Profile System
+## What this skill discovers and reports
 
-This skill reads AND writes to client profiles at `${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json`.
+This skill discovers everything it needs inline and **reports** the result —
+it does not persist anything to disk.
 
-### What It Reads
-- `tables.financials.id` - Table to test against
-- `field_mappings.*` - Fields to test
+### What It Discovers (inline, Step 2)
+- The financials table to test against (`list_finance_tables`)
+- The candidate categorical fields to test (`get_table_schema`)
 
-### What It Writes
-- `aggregation.supported` - Whether aggregation works at all
-- `aggregation.failed_fields` - List of actual field names that fail
-- `aggregation.field_alternatives` - Map of semantic name to working alternative
-- `aggregation.tested_at` - When the test was run
+### What It Reports (to the user, Phase 5)
+- Whether aggregation works at all for this table
+- Which fields PASS as aggregation dimensions and which FAIL (500)
+- The suggested sibling alternative for each failed field (e.g.
+  `DR_ACC_L1` → `DR_ACC_L1.5`)
+- When the test was run
+
+Run this skill whenever a downstream skill reports an unexpected aggregation
+failure, after a schema change, or to learn the field-compatibility map for
+an environment up front. The reported map applies to the current session;
+other skills handle field failures reactively (swap to a sibling and retry)
+on their own.
 
 ## Workflow
 
@@ -55,18 +77,20 @@ If any Datarails tool call fails with an authentication or connection error, tel
 
 Then STOP — do not retry until the user has reconnected.
 
-#### Step 2: Load Client Profile
-```
-Read: ${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json
+#### Step 2: Discover the financials table
 
-If profile exists:
-  - Load table IDs and field mappings
-  - Continue to testing
+**If you already discovered the financials table earlier in THIS
+conversation, reuse it — skip to Phase 2.** Discovery is cheap but not free;
+do it once per conversation.
 
-If profile does NOT exist:
-  - Inform user: "No profile found for '<env>'. Run '/dr-learn --env <env>' first."
-  - Stop execution
-```
+1. `list_finance_tables`. Pick the financials table: the one whose name
+   matches `/financial|cube|p&?l|ledger|gl/i`; if none match, the largest by
+   row count. Call it `<financials_table_id>`. (If nothing matches, list the
+   tables you found and ask the user which one holds their financial data.)
+
+This skill's whole purpose is to probe which of this table's fields work as
+aggregation dimensions, so the candidate field list is built directly from
+the live schema in Phase 2 — there's no saved profile to read from.
 
 ### Phase 2: Discovery
 
@@ -76,21 +100,30 @@ Use: mcp__datarails-finance-os__get_table_schema
 table_id: <financials_table_id>
 ```
 
-Build a list of all categorical/string fields to test. Include:
-- All fields from `field_mappings` in the profile
-- Any additional categorical fields from the schema not yet mapped
+From the schema, also bind the two fields the probe call itself needs (by
+case-insensitive name match, respecting type):
+- `<amount_field>`   — numeric metric: `^amount$` → `transaction_amount` → `value`
+- `<scenario_field>` — categorical filter: `^scenario$` → `^version$`
+
+Then build the list of candidate categorical/string fields to test —
+**every** categorical/string field in the schema is a candidate. Don't skip
+any; discovering which ones work is the point.
 
 #### Step 4: Build Test Plan
 
-Create a list of fields to test. Priority order:
-1. `scenario` field (from profile)
-2. `date` field
-3. `account_l0` field
-4. `account_l1` field
-5. `account_l2` field
-6. `department_l1` field
-7. `cost_center` field (if mapped)
-8. Any other categorical fields from schema (look for fields with "L1.5", "L1_5", similar names that might be alternatives)
+Order the candidate fields so the most useful ones are probed first (the test
+still covers all of them):
+1. `<scenario_field>`
+2. the date field (`reporting_date` → `posting_date` → `^date$`)
+3. account-hierarchy fields, matched case-insensitively from the schema —
+   e.g. `DR_ACC_L0`, `DR_ACC_L1`, `DR_ACC_L2`, and any sibling/alternate
+   levels such as `DR_ACC_L1.5` / `L1_5`
+4. department / cost-center fields if present
+5. every other categorical field from the schema
+
+When a primary account level is in the list, make sure its likely siblings
+(e.g. `DR_ACC_L1.5` for `DR_ACC_L1`) are also in the candidate list so Step 6
+can suggest a working alternative.
 
 ### Phase 3: Aggregation Testing
 
@@ -113,73 +146,56 @@ Parameters:
   ]
 ```
 
-Record for each field:
+The `"Actuals"` filter value is just a common default to keep each probe
+cheap; the probe is testing whether the *dimension* field aggregates, not the
+filter. If a probe returns empty (rather than 500) for every field, the
+scenario value may differ for this client — drop the filter and re-probe, or
+use a scenario value seen in a quick `get_sample_records` pull.
+
+Record for each field (in memory, for the session — nothing is written to
+disk):
 - **Status:** PASS or FAIL
 - **Groups returned:** Number of distinct values (if PASS)
 - **Error:** Error message (if FAIL)
 
 #### Step 6: Identify Alternatives
 
-For each failed field (especially account_l1, account_l2):
-- Look for similar fields in the schema (e.g., "DR_ACC_L1.5", "Account L1 Alt")
-- Test those alternatives
-- If an alternative works, record the mapping
+For each failed field (especially account-hierarchy levels like `DR_ACC_L1`,
+`DR_ACC_L2`):
+- Look for sibling fields in the schema (e.g., `DR_ACC_L1.5`, `Account L1 Alt`)
+- Probe those siblings the same way
+- If a sibling works, note it as the suggested alternative for the failed
+  field (this goes into the report in Phase 5, not into any file)
 
-### Phase 4: Profile Update
+### Phase 4: Report the Results
 
-#### Step 7: Update Client Profile
+This skill **does not persist anything** — no profile, no disk cache. It
+reports the compatibility map directly to the user (and optionally drops a
+diagnostic text file in `tmp/`). The in-conversation report is the deliverable:
+the current session and any sibling skill reusing the discovered table/fields
+can act on it immediately, and other skills already fall back reactively
+(swap to a sibling and retry) when a field 500s.
 
-Read the current profile, add/update the `aggregation` section:
+#### Step 7: (Optional) Save a Diagnostic File
 
-```json
-{
-  "aggregation": {
-    "supported": true,
-    "failed_fields": ["<actual_field_1>", "<actual_field_2>"],
-    "field_alternatives": {
-      "account_l1": "account_l1_5",
-      "account_l2": "account_l1_5"
-    },
-    "tested_at": "<ISO 8601 timestamp>"
-  }
-}
-```
-
-If new alternative fields are discovered, also add them to `field_mappings`:
-```json
-{
-  "field_mappings": {
-    "account_l1_5": "DR_ACC_L1.5"
-  }
-}
-```
-
-Write the updated profile:
-```
-Use: Write
-file_path: ${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json
-content: <updated_profile_json>
-```
-
-#### Step 8: Generate Diagnostic Report
-
-Save a detailed report to `tmp/`:
+For the user's records, you may write a plain-text copy of the results to
+`tmp/` (gitignored session artifact — not a profile, not read back by any
+skill):
 
 ```
 Use: Write
-file_path: tmp/API_Diagnostic_<env>_<timestamp>.txt
+file_path: tmp/API_Diagnostic_<table_name>_<timestamp>.txt
 ```
 
 ### Phase 5: Present Results
 
-#### Step 9: Show Summary
+#### Step 8: Show Summary
 
 Display results:
 
 ```
 API Diagnostic Results
 ======================
-Environment: <env> (<display_name>)
 Table: <table_name> (ID: <table_id>)
 
 Aggregation Tests:
@@ -194,30 +210,36 @@ Aggregation Tests:
 
 Result: 6/8 fields work (75%)
 
-Alternatives Discovered:
-  account_l1 -> account_l1_5 (DR_ACC_L1.5, 18 groups)
-  account_l2 -> account_l1_5 (DR_ACC_L1.5, 18 groups)
+Suggested Sibling Alternatives (for the failed fields):
+  DR_ACC_L1 -> DR_ACC_L1.5 (18 groups)
+  DR_ACC_L2 -> DR_ACC_L1.5 (18 groups)
 
-Profile updated: ${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json
-Report saved: tmp/API_Diagnostic_<env>_<timestamp>.txt
+Diagnostic file (optional): tmp/API_Diagnostic_<table_name>_<timestamp>.txt
 
-Impact:
-  - /dr-intelligence will use DR_ACC_L1.5 instead of DR_ACC_L1 (~5s vs ~10min)
-  - /datarails-finance-os:financial-summary will show real aggregated totals
-  - All commands will prefer aggregation where fields are supported
+What to do with this:
+  - When a skill 500s on DR_ACC_L1 / DR_ACC_L2, use DR_ACC_L1.5 instead
+    (~5s aggregation vs ~10min pagination).
+  - Fields marked PASS are safe to use directly as aggregation dimensions.
+  - This map applies to the current environment/session; nothing is saved to
+    disk, so re-run /dr-test after a schema change.
 ```
+
+Present this same content as the in-conversation answer (a markdown table of
+PASS/FAIL per field plus the suggested siblings works well). The report —
+not a file write — is the deliverable.
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| No profile found | Run `/dr-learn` first |
-| All fields fail | Aggregation API may not work in this environment; commands will use pagination |
-| Auth expires during testing | Tests run sequentially, each ~5s; re-auth if needed |
-| New fields not detected | Re-run `/dr-learn` to refresh the schema, then `/dr-test` |
+| No table matches the financials pattern | List the tables found and ask the user which one holds their financial data |
+| All fields fail | Aggregation API may not work in this environment; skills will fall back to pagination |
+| Every probe returns empty (not 500) | The default `"Actuals"` scenario value may not exist for this client — drop the scenario filter or use a value from `get_sample_records`, then re-probe |
+| Auth expires during testing | Tests run sequentially, each ~5s; reconnect via Connectors UI if needed |
 
 ## Related Skills
 
-- `/dr-learn` - Creates the profile that this skill tests
-- Connect via Connectors UI before testing
-- `/dr-intelligence` - Uses the aggregation hints from the profile
+- Connect via Connectors UI before testing.
+- `/dr-intelligence`, `/dr-financial-summary`, and other aggregation skills
+  benefit from the compatibility map this skill reports — they discover the
+  table/fields themselves and handle field failures reactively.

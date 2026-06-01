@@ -230,14 +230,8 @@ tmp/Comprehensive_FPA_Report_2025_20260204_231959.xlsx  (7.5 KB - full dataset)
 /dr-intelligence --year 2025
 ```
 
-### "No profile found" Error
-```
-# Solution: Create profile first
-/dr-learn --env app
-
-# Then generate report
-/dr-intelligence --year 2025 --env app
-```
+### Skill picked the wrong table or fields
+`/dr-intelligence` discovers your financials table and field names automatically each run — no profile or setup step. If it guesses the wrong table or field, tell it which one to use and it will continue.
 
 ### Report is empty or has few records
 ```bash
@@ -273,7 +267,7 @@ ls -la /path/to/custom/output.xlsx
 - Reference Data Quality Report when explaining variance
 - Use Reconciliation sheet to validate against other sources
 - Keep generated reports for historical comparison
-- Document any profile changes in `config/client-profiles/app.json`
+- If a skill repeatedly picks the wrong table or field, tell it the correct one (no profile file to edit)
 
 ### ❌ DON'T
 
@@ -312,7 +306,6 @@ ls -la /path/to/custom/output.xlsx
 |------|----------|
 | **Report Generator** | `scripts/comprehensive_fpna_report.py (in dr-datarails-mcp-re repo)` |
 | **Generated Reports** | `tmp/Comprehensive_FPA_Report_*.xlsx` |
-| **Client Profile** | `config/client-profiles/app.json` |
 | **Documentation** | `docs/analysis/FPA_IMPLEMENTATION_SUMMARY.md` |
 | **This Guide** | `docs/guides/COMPREHENSIVE_FPA_REPORT_GUIDE.md` |
 | **Data Analysis** | `docs/analysis/TABLE_STRUCTURE_ANALYSIS.md` |
