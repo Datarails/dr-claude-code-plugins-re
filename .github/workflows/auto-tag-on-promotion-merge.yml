@@ -1,0 +1,71 @@
+# Canonical source: dr-internal-plugins/tools/public-workflows/auto-tag-on-promotion-merge.yml
+# Install location: Datarails/dr-claude-code-plugins-re/.github/workflows/auto-tag-on-promotion-merge.yml
+#
+# This workflow lives on the public mirror. The dr-internal-plugins publish
+# script intentionally does NOT sync .github/ to public, so updates to this
+# file must be applied to the public repo manually.
+#
+# Trigger: a PR from branch promote/v<version>-from-internal merges into main.
+# Action: tag the merge commit as v<version> on this repo, push it (using a
+# GitHub App token so the existing Release Plugin workflow fires; the default
+# GITHUB_TOKEN cannot trigger other workflows).
+
+name: Auto-tag promotion merges
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read   # write is granted via the App token, not the default token
+
+jobs:
+  tag:
+    if: |
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'promote/v') &&
+      endsWith(github.event.pull_request.head.ref, '-from-internal')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse version from branch name
+        id: parse
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          VERSION="${BRANCH#promote/v}"
+          VERSION="${VERSION%-from-internal}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::branch '$BRANCH' does not encode a valid semver — aborting"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Tag and push
+        run: |
+          TAG="${{ steps.parse.outputs.tag }}"
+          MERGE_SHA="${{ github.event.pull_request.merge_commit_sha }}"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::warning::tag $TAG already exists on this repo; skipping push"
+            exit 0
+          fi
+
+          git config user.name "dr-internal-plugins[bot]"
+          git config user.email "dr-internal-plugins[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$MERGE_SHA" -m "Promotion v${{ steps.parse.outputs.version }} from dr-internal-plugins (PR #${{ github.event.pull_request.number }})"
+          git push origin "$TAG"
+          echo "::notice title=Tag pushed::$TAG → $MERGE_SHA. The Release Plugin workflow should now build and publish."
