@@ -274,7 +274,6 @@ You're up and running. Here's where to go from here:
 | Resource | Location |
 |----------|----------|
 | Full skill reference | [README.md](../../README.md) |
-| API limitations | [FINANCE_OS_API_ISSUES_REPORT.md](../analysis/FINANCE_OS_API_ISSUES_REPORT.md) |
 | Setup & troubleshooting | [SETUP.md](../../SETUP.md) |
 | Plugin architecture | [CLAUDE.md](../../CLAUDE.md) |
 

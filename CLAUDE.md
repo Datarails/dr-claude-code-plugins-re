@@ -32,8 +32,6 @@ git tag vX.Y.Z && git push origin main --tags
 
 ### Two-Tier Data Access
 
-Read `docs/analysis/FINANCE_OS_API_ISSUES_REPORT.md` before building new features.
-
 | Tier | Method | Speed | Use When |
 |------|--------|-------|----------|
 | 1 | Aggregation API (async polling) | ~5 seconds | Summaries, totals, grouped data |
@@ -66,7 +64,7 @@ Located at `${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json` (persistent across
 
 ## Git Guidelines
 
-**Commit:** Skills, commands, agents, plugin config, schemas, docs (`docs/analysis/`, `docs/guides/`), notebooks.
+**Commit:** Skills, commands, agents, plugin config, schemas, docs (`docs/guides/`), notebooks.
 
 **Never commit:** Client profiles (`config/client-profiles/*.json`), output files (`tmp/`), credentials, `.env.local`.
 
