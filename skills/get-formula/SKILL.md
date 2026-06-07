@@ -76,11 +76,35 @@ If no profile exists for the target environment:
 
 | Rule | Detail |
 |------|--------|
-| **Function name** | Always `Value` (no brackets, no quotes) |
+| **Function name** | Always `Value` (no brackets, no quotes) — and the workbook must define the name `Value` (see below) |
 | **Dimension names** | In square brackets inside double quotes: `"[Reporting Date]"` |
 | **Dimension values** | Always **cell references**, never hardcoded strings |
 | **Pair structure** | Every dimension is a `"[DimensionName]", CellRef` pair |
 | **Cell references** | Use `$A$1` (absolute), `$A1` (mixed), or `A1` (relative) as appropriate |
+
+### CRITICAL: Pin the `Value` token with a defined name
+
+`Value` is a bare identifier, so Excel parses it as a **defined-name
+reference**. Workbooks authored by the Datarails Add-in resolve it; a
+workbook generated from scratch does not — and Excel autocorrects the
+unknown token to its built-in `VALUE` function, silently turning
+`=DR.GET(Value, …)` into Excel's `VALUE` formula and breaking it for the
+add-in.
+
+Neutralize this by creating a workbook-scoped defined name `Value` that
+refers to the string constant `"Value"`, immediately after constructing the
+workbook:
+
+```python
+from openpyxl.workbook.defined_name import DefinedName
+wb = openpyxl.Workbook()
+wb.defined_names.add(DefinedName("Value", attr_text='"Value"'))  # openpyxl >= 3.1
+```
+
+With the name defined the token resolves, Excel has nothing to autocorrect,
+and the formula text is preserved exactly as the add-in expects. Never skip
+this step, and never quote the token in the formula instead — `"Value"` as a
+string literal diverges from the canonical form the add-in recognizes.
 
 ### Date Dimension
 
@@ -100,6 +124,7 @@ Store the serial number as the cell value and apply `'MMM-YY'` number format so 
 
 | Mistake | Correct Approach |
 |---------|-----------------|
+| Writing formulas without the `Value` defined name | Add the workbook-scoped name `Value` = `"Value"` first — otherwise Excel autocorrects the token to its `VALUE()` function |
 | Hardcoding values in DR.GET: `"Actuals"` | Always reference a cell: `$B$1` |
 | Using text month: `"January 2026"` | Use EOM serial number: `46053` |
 | Using `[Account]` or `[Month]` | Use actual field names from profile |
@@ -253,6 +278,12 @@ When generating Excel or PowerPoint files, apply Datarails brand styling:
 
 Use Bash to run a Python script (inline or from file) that generates the workbook using openpyxl.
 
+**First line of workbook setup — before writing any formula:** add the
+`Value` defined name (`wb.defined_names.add(DefinedName("Value",
+attr_text='"Value"'))`, see the Syntax Reference). Without it, Excel
+autocorrects `Value` to its built-in `VALUE` function on open and every
+DR.GET formula in the file breaks.
+
 **Workbook Structure by Report Type:**
 
 ##### `--type summary` (Summary P&L)
@@ -339,9 +370,25 @@ These P&L lines are always Excel formulas referencing other rows:
 
 ### Phase 4: Save & Report
 
-#### Step 8: Save Output
+#### Step 8: Save Output & Verify
 
 Save to `tmp/DR_GET_<type>_<YEAR>.xlsx` or the user-specified `--output` path.
+
+Then re-open the saved file and verify it before reporting success:
+
+```python
+check = openpyxl.load_workbook(out_path)
+assert "Value" in check.defined_names, "defined name 'Value' is missing — Excel will autocorrect the token to VALUE()"
+for ws in check.worksheets:
+    for row in ws.iter_rows():
+        for c in row:
+            if isinstance(c.value, str) and "DR.GET" in c.value:
+                assert c.value.replace(" ", "").startswith("=DR.GET(Value,"), \
+                    f"bad DR.GET formula in {ws.title}!{c.coordinate}"
+```
+
+If either assertion fails, fix the workbook and re-save — do not hand the
+user a file that fails verification.
 
 #### Step 9: Report to User
 
@@ -390,6 +437,14 @@ Report what was generated:
 
 **"No profile found" error**
 - Run `/dr-learn` to create a client profile first
+
+**`Value` turned into Excel's `VALUE` function after opening the workbook**
+- The workbook was generated without the `Value` defined name, so Excel
+  autocorrected the unknown token to its built-in `VALUE()` function.
+- Regenerate with this skill — it now always writes the defined name and
+  verifies it after saving. To repair an existing file instead: add a
+  workbook-scoped name `Value` referring to `="Value"`, then restore each
+  formula's first argument to the bare token `Value`.
 
 **DR.GET formulas return 0 or errors when opened in Excel**
 - Verify the Datarails Excel Add-in is active
