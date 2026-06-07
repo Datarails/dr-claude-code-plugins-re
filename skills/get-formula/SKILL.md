@@ -125,8 +125,10 @@ Store the serial number as the cell value and apply `'MMM-YY'` number format so 
 | Mistake | Correct Approach |
 |---------|-----------------|
 | Writing formulas without the `Value` defined name | Add the workbook-scoped name `Value` = `"Value"` first — otherwise Excel autocorrects the token to its `VALUE()` function |
+| Transliterating an MCP/API call into the formula: `=DR.GET(Value,"financials","Amount","SUM",...)` | DR.GET takes no table/field/aggregation arguments — only `"[Dimension]", CellRef` pairs after `Value` |
 | Hardcoding values in DR.GET: `"Actuals"` | Always reference a cell: `$B$1` |
 | Using text month: `"January 2026"` | Use EOM serial number: `46053` |
+| Writing API epoch timestamps as date headers | Compute EOM serials from the calendar (see Date Dimension) — raw epochs land a day early with a time component |
 | Using `[Account]` or `[Month]` | Use actual field names from profile |
 | Using Report_Field without scoping | Always include `[DR_ACC_L2]` alongside `[Report_Field]` |
 | Inventing or guessing dimension values | Validate against actual distinct values first |

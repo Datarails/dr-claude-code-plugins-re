@@ -139,6 +139,34 @@ Apply the same brand styling block as `/dr-insights` and `/dr-intelligence`:
 
 **Variance coloring:** YoY Δ% cells use green (`2ECC71`) for favorable, red (`E74C3C`) for unfavorable. For expenses, lower is favorable; for revenue/margin, higher is favorable.
 
+## DR.GET Formulas — Authoring Contract
+
+If asked to add live / refreshable Datarails formulas (DR.GET) to a generated
+workbook, the only valid form is:
+
+```
+=DR.GET(Value, "[DimensionName]", CellRef, "[DimensionName]", CellRef, ...)
+```
+
+- **Never transliterate an MCP/API call into a formula.** DR.GET takes no
+  table, field, or aggregation arguments — `=DR.GET(Value,"financials","Amount","SUM",...)`
+  is invented syntax that the Datarails Add-in cannot parse or refresh.
+- Dimension names go in square brackets inside quotes (`"[Scenario]"`).
+  Dimension values are **always cell references**, never hardcoded strings.
+- Date cells referenced by formulas hold end-of-month **date serials**
+  computed from the calendar — never raw epoch timestamps from API responses
+  (epochs land a day early with a time component and never match).
+- Before writing any formula, create the workbook-scoped defined name `Value`
+  referring to the string constant `"Value"`
+  (`wb.defined_names.add(DefinedName("Value", attr_text='"Value"'))`) —
+  otherwise Excel autocorrects the bare token to its built-in `VALUE()` and
+  the formula breaks.
+- Bare `=DR.GET(...)` only — never wrapped in IFERROR/IF/ROUND.
+
+The get-formula skill (`/dr-get-formula`) is the full reference — parameter
+cells, validated dimension values, report layouts. Prefer it for whole formula
+workbooks; apply this contract when adding DR.GET formulas to a workbook here.
+
 ## Step 5: Output
 
 - **Claude.ai web / ChatGPT**: present the xlsx as a downloadable artifact.
