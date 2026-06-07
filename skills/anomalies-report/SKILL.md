@@ -137,6 +137,7 @@ workbook, the only valid form is:
 The get-formula skill (`/dr-get-formula`) is the full reference — parameter
 cells, validated dimension values, report layouts. Prefer it for whole formula
 workbooks; apply this contract when adding DR.GET formulas to a workbook here.
+<!-- end:drget-authoring-contract -->
 
 **Phase 3: Report Generation**
 1. Categorize findings by severity
