@@ -157,6 +157,10 @@ git push origin main --tags
 
 MIT License - see LICENSE file.
 
+## Privacy
+
+This plugin connects to the Datarails Finance OS service to analyze your financial data. See the [Datarails Privacy Policy](https://www.datarails.com/privacy-policy/) for details on how your data is collected, used, and protected.
+
 ## Support
 
 - GitHub Issues: https://github.com/Datarails/dr-claude-code-plugins-re/issues
