@@ -1,0 +1,12 @@
+{
+  "name": "ship-it",
+  "version": "1.0.0",
+  "description": "Hand the current branch off to bar-ai-coder: opens an auto-coder/managed PR; the review loop iterates on CI + bot comments, then auto-merges or pings you for manual approval.",
+  "author": {
+    "name": "Datarails"
+  },
+  "homepage": "https://github.com/Datarails/dr-claude-code-plugins-re",
+  "repository": "https://github.com/Datarails/dr-claude-code-plugins-re",
+  "license": "MIT",
+  "keywords": ["ship-it", "auto-coder", "bar-ai-coder", "ci", "pull-request", "devops"]
+}

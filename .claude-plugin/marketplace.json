@@ -15,6 +15,14 @@
       "author": {
         "name": "Datarails"
       }
+    },
+    {
+      "name": "ship-it",
+      "source": "./ship-it",
+      "description": "Hand the current branch off to bar-ai-coder: opens an auto-coder/managed PR; the review loop iterates on CI + bot comments, then auto-merges or pings you for manual approval.",
+      "author": {
+        "name": "Datarails"
+      }
     }
   ]
 }
