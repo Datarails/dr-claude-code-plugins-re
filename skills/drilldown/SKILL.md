@@ -55,23 +55,23 @@ Then STOP — do not retry until the user has reconnected.
 
 Decide which path to take **before** opening any file.
 
-Detect Excel context by delegating to the connector: **`/dr-excel-context guard`**
-(per the global Excel Context Contract — do not probe `agent.get_session` inline).
+Detect Excel context via the **guard** delegation point of the global Excel Context
+Contract (see CLAUDE.md — do not probe `agent.get_session` inline).
 
 - **Excel context active** (guard returns `excel_context: true` — live workbook + add-in bridge):
   **Delegate DR formula cells to the add-in agent drill-down. Do NOT use the openpyxl/MCP path below.**
   1. Resolve the target cell address (`sheetName` + `cellAddress`) from the user's reference / current selection.
   2. Confirm the cell holds a DR formula (`DR.GET`/`DR.QTD`/`DR.YTD`/`DR.MTD`/… — any DR function), directly or via a formula chain whose precedents are DR cells. If it's a static value or a non-DR formula with no DR precedents → tell the user drill-down needs a DR cell; stop.
-  3. Fire the add-in agent drill-down (via `datarails-excel-agent`):
+  3. Fire the add-in agent drill-down (via the Excel Add-In bridge — see the Excel Context Contract in CLAUDE.md):
      - **default / list breakdown** → `drilldown_list` (`sheetName`, `cellAddress`; `timeoutMs: 180000`)
      - **break down by a field** (`--by` / pivot) → `drilldown_by_pivot` (`sheetName`, `cellAddress`, `rowField`; optional `targetTemplateId`/`targetTemplateName`). **`rowField` is exactly one field** — if `--by` listed several, pass the first and tell the user a pivot drills one field at a time.
   4. The add-in resolves `dr_control` filters, dates (EOMONTH), and totals **natively** — do not re-derive them. Present what the bridge returns (cite `data.sources[]`). **Skip Phases 0–5.**
 
-  **Connection:** `drilldown_*` requires the workbook connected. **Let `/dr-excel-context` handle this gate** — its Connection requirement checks `isConnected` (a COM-only field; no gate on Flex) and prompts for explicit `connect_file` confirmation when needed. Do not probe or branch on `isConnected` here.
+  **Connection:** `drilldown_*` requires the workbook connected. **Let the Excel-context connector handle this gate** (per the Excel Context Contract) — its Connection requirement checks `isConnected` (a COM-only field; no gate on Flex) and prompts for explicit `connect_file` confirmation when needed. Do not probe or branch on `isConnected` here.
 
 - **No Excel context** (guard returns `excel_context: false` — Claude Code with `--file`, no bridge): use the MCP/openpyxl workflow (Phases 0–5 below).
 
-See `datarails-excel-agent` (bridge protocol) and `/dr-excel-context` (connector) for the drill-down commands and gating.
+See the **Excel Context Contract** (CLAUDE.md) for the bridge protocol, drill-down commands, and gating.
 
 ### Phase 0 - Open the Workbook
 
