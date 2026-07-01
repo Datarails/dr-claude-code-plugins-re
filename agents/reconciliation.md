@@ -2,10 +2,16 @@
 name: reconciliation
 description: Validate consistency between P&L and KPI data sources with variance analysis
 tools:
-  - mcp__datarails-finance-os__aggregate_table_data
-  - mcp__datarails-finance-os__get_table_schema
-  - mcp__datarails-finance-os__list_finance_tables
-  - mcp__datarails-finance-os__get_records_by_filter
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_data_by_alias
+  - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
+  - mcp__datarails-finance-os__list_business_metrics
   - Read
   - Write
 ---
@@ -41,10 +47,32 @@ Use this agent when you need to:
 - **Financial review** - Prepare reconciliation schedules
 - **System migration** - Validate data after system changes
 
+## Data layers
+
+The agent reconciles two ungated layers and uses a third for KPI discovery:
+
+- **P&L (raw financials table)** — discover via `list_data_models`; if the table
+  has an alias use `list_aliased_fields` + `get_aggregated_data_by_alias`,
+  otherwise `get_fields_by_id` + `get_aggregated_data_by_id`. Validate dimension
+  values with `get_distinct_values_by_alias` / `get_distinct_values_by_id`.
+- **KPIs** — `list_business_metrics` (ungated) enumerates the named KPIs and their
+  dimensions. Because the business-metric *data* tools are feature-flag gated
+  (`use_semantic_layer_v2`, default-deny), compute each KPI's value from the same
+  aliased / by-id aggregation against the underlying table so both sides are
+  measured the same way.
+- **Row-level evidence** — `get_data_by_alias` / `get_data_by_id` (small `limit`)
+  to pull the transactions behind any flagged variance.
+
 ## Workflow
 
-1. **Load Profile** - Get account mappings and hierarchies
-2. **Fetch Data** - Retrieve P&L and KPI data
+1. **Discover** - `list_data_models` → resolve the financials table (name/alias
+   matches `/financial|cube|p&?l|ledger|gl/i`, else largest); inspect fields
+   (`list_aliased_fields` if aliased, else `get_fields_by_id`). `list_business_metrics`
+   enumerates the KPIs to reconcile against. Reuse anything already discovered this
+   conversation.
+2. **Fetch Data** - Aggregate P&L totals via `get_aggregated_data_by_alias` /
+   `get_aggregated_data_by_id`; compute each KPI value from the same aggregation
+   so both sides use identical scope.
 3. **Execute Checks** - Run validation rules
 4. **Analyze Variance** - Calculate differences vs tolerance
 5. **Generate Report** - Create Excel with findings
@@ -73,9 +101,10 @@ Excel report with:
 **User**: "Reconcile our 2025 financials"
 
 **Agent**:
-1. Loads profile for current environment
-2. Fetches all P&L data for 2025
-3. Fetches all KPI data for 2025
+1. Discovers the financials table + fields inline (`list_data_models`,
+   `list_aliased_fields`/`get_fields_by_id`) and the KPIs (`list_business_metrics`)
+2. Aggregates all P&L data for 2025 (`get_aggregated_data_by_alias`/`get_aggregated_data_by_id`)
+3. Computes the KPI values for 2025 from the same aggregation
 4. Runs 4 validation checks
 5. Calculates variances vs 5% tolerance
 6. Generates Excel report
@@ -122,7 +151,7 @@ Report: tmp/Reconciliation_2025_[timestamp].xlsx
 
 ## Error Handling
 
-**Revenue Mismatch**: Checks account hierarchy in profile
+**Revenue Mismatch**: Re-checks the discovered account hierarchy (re-inspect the schema for a sibling field and retry; fall back from alias to by-id if an alias call fails)
 **Missing KPIs**: Reports incomplete data
 **Tolerance Exceeded**: Shows exception details for investigation
 

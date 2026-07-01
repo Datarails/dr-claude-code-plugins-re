@@ -3,8 +3,16 @@ name: dr-insights
 description: Generate executive-ready insights with trend analysis and visualizations. Creates professional PowerPoint presentations and Excel data books.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__aggregate_table_data
-  - mcp__datarails-finance-os__list_finance_tables
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_data_by_alias
+  - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
+  - mcp__datarails-finance-os__list_business_metrics
   - Write
   - Read
   - Bash
@@ -108,9 +116,60 @@ Comprehensive workbook includes:
 
 ### Phase 1: Data Collection
 1. Verify authentication
-2. Load client profile
-3. Fetch P&L trends (12 months)
-4. Fetch KPI metrics (4+ quarters)
+2. Discover the financials table and its fields — see below
+3. Fetch P&L trends (12 months) via `get_aggregated_data_by_alias` (or by-id)
+4. Fetch KPI metrics (4+ quarters) — discover named KPIs via
+   `list_business_metrics`, then compute their values by aggregating the
+   financials table (`get_aggregated_data_by_alias` / `get_aggregated_data_by_id`)
+
+#### Discover the financials table and its fields
+
+**If you already discovered these earlier in THIS conversation, reuse
+them — skip to fetching data.** Discovery is cheap but not free; do it
+once per conversation, then carry the values forward.
+
+1. `list_data_models`. Pick the financials table: the one whose name
+   (or alias) matches `/financial|cube|p&?l|ledger|gl/i`; if none match,
+   the largest by row count. Note **both** its numeric `id`
+   (`<financials_table_id>`) and its `alias` (the alias may be empty).
+   **Prefer the alias path when an alias exists** — friendlier field
+   names, far fewer tokens. For named KPIs (ARR, churn, LTV/CAC, etc.),
+   also call `list_business_metrics` and keep the flat list — each entry
+   carries `id`, `name`, `description`, `category`, `kind`,
+   `dimensions[]`, `status_info{}`.
+
+2. Fields. If the table has an alias, `list_aliased_fields(<alias>)`;
+   otherwise `get_fields_by_id(<financials_table_id>)` (capture each
+   field's numeric `id` — the by-id tools address fields by id). Bind
+   these by case-insensitive match on the field alias/name (respecting
+   the noted type):
+   - `<amount_field>`       — numeric: `^amount$` → `transaction_amount` → `value`
+   - `<scenario_field>`     — categorical: `^scenario$` → `^version$`
+   - `<date_field>`         — date/timestamp: `reporting_date` → `posting_date` → `^date$`
+   - `<account_l1_field>`   — `dr_acc_l1` → `account_l1` → `account_group_l1`
+   - `<account_l2_field>`   — `dr_acc_l2` → `account_l2` (optional, for detail)
+
+> **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
+
+   If `<amount_field>` or `<scenario_field>` has no clear match, ask the
+   user which field to use, then continue.
+
+3. Find the account-category values:
+   `get_distinct_values_by_alias(<alias>, <account_l1_field>)` (or
+   `get_distinct_values_by_id(<financials_table_id>, <account_l1_field_id>)`).
+   If the distinct call errors, fall back to
+   `get_data_by_alias(<alias>, select=[<account_l1_field>], limit=500)`
+   (or the by-id twin) and collect the distinct values. Match:
+   - `<revenue_value>` ← `/revenue|sales|income/i`
+   - `<cogs_value>`    ← `/cogs|cost of goods|cost of sales|direct cost/i`
+   - `<opex_value>`    ← `/operating|opex|expense|sg&a/i`
+
+   If a category has several candidates, pick the broadest top-level
+   one; if genuinely ambiguous, ask the user once.
+
+Aggregation-field failures are handled reactively (see Error Handling),
+not pre-probed. On auth/connection failure during discovery: show the
+reconnect message and STOP — do not generate reports without fresh data.
 
 ### Phase 2: Analysis
 1. Calculate growth rates
@@ -314,8 +373,15 @@ Fast processing via efficient MCP aggregation tools.
 **"Not authenticated" error**
 - Connect via Connectors UI ("+" > Connectors > Datarails > Connect)
 
+**Aggregation field rejected (500)**
+- Retry with a sibling account field from the discovered schema
+  (e.g. `DR_ACC_L1.5`). If none works, note which field failed and
+  present what you have.
+
 **"No KPI data found" warning**
-- Agent adapts and focuses on P&L trends
+- `list_business_metrics` returned no named KPIs, or the financials
+  table had no usable data to compute them — agent adapts and focuses
+  on P&L trends
 - Recommendations still generated
 
 **"Incomplete data for period" warning**
@@ -355,13 +421,15 @@ Fast processing via efficient MCP aggregation tools.
 
 ## Customization
 
-Insights adapt to client profiles at `${CLAUDE_PLUGIN_DATA}/client-profiles/{env}.json` (or `config/client-profiles/{env}.json`):
+Insights adapt automatically to whatever the discovery step (Phase 1)
+finds in the client's environment:
 - Different account hierarchies
-- Custom KPI definitions
+- Custom KPI definitions (whatever `list_business_metrics` surfaces)
 - Department structures
 - Business rules
 
-Modify profile to customize insights.
+No setup or profile file is needed — the skill rediscovers the table
+and fields on each cold session.
 
 ## Data Freshness
 

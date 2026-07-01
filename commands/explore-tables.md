@@ -8,15 +8,18 @@ Discover what tables and data are available in your Datarails Finance OS account
 
 ## Step 1: Verify Connection
 
-Start by calling `list_finance_tables` to verify the connection is active.
+Start by calling `list_data_models` to verify the connection is active.
 
 **If the tool call fails:** The Datarails connector isn't connected. Tell the user to click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. Then STOP.
 
 ## Step 2: List All Tables
 
 ```
-Use: mcp__datarails-finance-os__list_finance_tables
+Use: mcp__datarails-finance-os__list_data_models
 ```
+
+Each entry carries both a numeric `id` and an `alias` (empty when the table has no
+business alias). Note both — they decide which schema/field tools to use in Step 4.
 
 ## Step 3: Present Available Data
 
@@ -51,18 +54,40 @@ Create a friendly overview:
 When user asks about a specific table:
 
 ### Get Schema
+
+If the table has an alias, list its business-friendly field aliases; otherwise
+fetch fields by numeric id (capture each field's `id` — the by-id data tools need
+them).
+
 ```
-Use: mcp__datarails-finance-os__get_table_schema
-Parameters:
-  table_id: <requested_table_id>
+Aliased table:
+  Use: mcp__datarails-finance-os__list_aliased_fields
+  Parameters:
+    alias: <requested_table_alias>
+
+No alias:
+  Use: mcp__datarails-finance-os__get_fields_by_id
+  Parameters:
+    table_id: <requested_table_id>
 ```
 
 ### Get Sample Data
+
+Pull a few rows to show what the data looks like. Use the alias path when the
+table has an alias, otherwise the by-id twin.
+
 ```
-Use: mcp__datarails-finance-os__get_sample_records
-Parameters:
-  table_id: <requested_table_id>
-  n: 10
+Aliased table:
+  Use: mcp__datarails-finance-os__get_data_by_alias
+  Parameters:
+    alias: <requested_table_alias>
+    limit: 10
+
+No alias:
+  Use: mcp__datarails-finance-os__get_data_by_id
+  Parameters:
+    table_id: <requested_table_id>
+    limit: 10
 ```
 
 ### Present Table Details

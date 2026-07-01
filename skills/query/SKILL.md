@@ -1,190 +1,158 @@
 ---
 name: dr-query
-description: Query Datarails Finance OS tables with filters. Fetch specific records, get samples, or run custom queries for investigation.
+description: Query Datarails Finance OS tables with filters. Fetch specific records or page through rows for investigation. The filter API supports value-list AND advanced operators — comparisons, ranges, text matching, null checks, and date ranges all work.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__get_table_schema
-  - mcp__datarails-finance-os__get_records_by_filter
-  - mcp__datarails-finance-os__get_sample_records
-  - mcp__datarails-finance-os__execute_query
-  - mcp__datarails-finance-os__get_field_distinct_values
-argument-hint: "<table_id> [filter_expression] [--sample] [--limit N]"
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_data_by_alias
+  - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
+argument-hint: "<table or alias> [filter_expression] [--sample] [--limit N]"
 ---
 
 # Datarails Data Query
 
-Query Finance OS tables - fetch records by filter, get samples, or run custom queries.
+Query Finance OS tables — fetch records by filter, sample rows, or page through
+data. The filter API supports both value-list and advanced (comparison / range /
+text / null / date-range) operators, so most questions can be answered with a
+single `get_data_by_*` call.
 
 ## Workflow
 
 ### Step 1: Verify Authentication
 
-If any tool call fails with an authentication or connection error, guide the user to connect via the Connectors UI ("+" > Connectors > Datarails > Connect).
+If any tool call fails with an authentication or connection error, guide
+the user to connect via the Connectors UI ("+" → Connectors → Datarails →
+Connect).
 
-### Step 2: Understand the Request
+### Step 2: Resolve the table and its fields
 
-- **Sample data**: Use `get_sample_records` (max 20 rows)
-- **Filtered records**: Use `get_records_by_filter` (max 500 rows)
-- **Custom query**: Use `execute_query` (max 1000 rows)
+`list_data_models` to find the table by name or alias. **Prefer the alias path**
+when the table has an alias: `list_aliased_fields(<alias>)` gives friendly field
+names and you query with `get_data_by_alias`. Otherwise `get_fields_by_id(<id>)`
+gives numeric field ids and you query with `get_data_by_id` (`select` and
+`filters` are field-id based). Always `select` only the columns you need — raw
+tables are ~200 columns wide.
 
-### Step 3: Execute and Present
+> **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
 
-Format results as a readable table. Highlight any notable patterns.
+### Step 3: Pick the right tool
+
+- **Sample / quick look** → `get_data_by_alias` / `get_data_by_id` with a small
+  `limit` (e.g. 20) and no filters.
+- **Filtered records** → `get_data_by_alias` / `get_data_by_id` with `filters`
+  (≤500 rows/page; use `offset` to page).
+- **Totals / grouped** → `get_aggregated_data_by_alias` / `get_aggregated_data_by_id`
+  (no row cap). Use this when you want a sum/count rather than individual rows.
+
+### Step 4: Execute and Present
+
+Format results as a readable table. Highlight any notable patterns. If a result
+is empty, say so plainly (it may be a too-narrow filter, not missing data).
 
 ## Arguments
 
 | Argument | Description |
 |----------|-------------|
-| `<table_id>` | Required - the table to query |
+| `<table or alias>` | Required — the table id or alias to query |
 | `[filter]` | Filter expression (see syntax below) |
-| `--sample` | Get random sample (default 20 rows) |
-| `--limit N` | Limit results (max 500 for filters, 1000 for queries) |
-| `--sql` | Treat filter as raw SQL-like query |
+| `--sample` | Fetch a small unfiltered page (default 20 rows) |
+| `--limit N` | Limit results (max 500 per page; use offset to page further) |
 
-## Filter Syntax
+## Filter syntax
 
-**Basic equality:**
-```
-field = "value"
-field = 123
-```
+`filters` is a list of per-field objects. Address the field by **alias** (`name`)
+for the by-alias tools, or by numeric **field id** (`field_id`) for the by-id
+tools. Two forms:
 
-**Comparison:**
+**Value list** — match any of the listed values (set membership / IN):
+```json
+{"name": "payment_status", "values": ["Paid", "Pending"]}
 ```
-amount > 1000
-amount >= 1000
-amount < 5000
-posting_date > "2024-01-01"
-```
+Set `"is_excluded": true` to exclude the listed values (NOT IN).
 
-**Multiple conditions:**
-```
-amount > 1000 AND department = "Sales"
-status = "active" OR status = "pending"
+**Advanced** — a condition tree for comparisons, ranges, text matching, and null:
+```json
+{"name": "amount", "values": {"type": "advanced", "val": [
+    {"condition": "gte", "value": "1000"},
+    {"condition": "lt",  "value": "5000", "operator": "and"}
+]}}
 ```
 
-**IN list:**
-```
-account_code IN ("4000-100", "4000-200", "4000-300")
-```
+Each `val` entry is `{condition, value, operator?}`:
+- **condition**: `equals`, `dn_equals` (does not equal), `contains`,
+  `dn_contains`, `bw` (begins with), `ew` (ends with), `gt`, `gte`, `lt`, `lte`,
+  `in`, `range` (exclusive between), `total_range` (inclusive between), `is null`.
+- **value**: a string for scalar conditions; a list of strings for `in`; a
+  two-item `[from, to]` list for `range`/`total_range`. Numbers and dates are
+  passed as strings (dates as epoch seconds, e.g. `"1750000000"`); the backend
+  casts per field. For `is null`, set `value` to `""`.
+- **operator**: how this condition chains with the previous one — `and` (default)
+  or `or` to start an alternative branch.
 
-**NULL checks:**
-```
-vendor_name IS NULL
-vendor_name IS NOT NULL
-```
+`is_excluded` applies to value lists only, not advanced filters.
 
-**Pattern matching:**
-```
-description LIKE "%adjustment%"
-account_code LIKE "4000-%"
-```
+### Common patterns (all natively supported now)
+
+- **Numeric range:** advanced `total_range` on the amount field, e.g.
+  `{"condition": "total_range", "value": ["1000", "5000"]}`.
+- **Comparison:** advanced `gt`/`gte`/`lt`/`lte` (e.g. amount over 100000).
+- **Substring match:** advanced `contains` / `bw` / `ew` (e.g. account name
+  contains "adj"). No need to pre-fetch distinct values.
+- **Null check:** advanced `is null` (with `value: ""`).
+- **Date range:** advanced `total_range` on the date field with epoch-second
+  strings — date filters are accepted (no longer rejected as epoch ints). You can
+  still add the date as an aggregation dimension and filter client-side if you
+  prefer.
 
 ## Example Interactions
 
-**User: "/dr-query 11442 --sample"**
+**User: "/dr-query financials --sample"**
 ```
-📋 Sample: GL Transactions (20 random records)
+📋 Sample: financials (20 rows)
 
-| transaction_id | account_code | amount    | posting_date | department |
-|----------------|--------------|-----------|--------------|------------|
-| 45231          | 4000-100     | 12,500.00 | 2024-01-15   | Sales      |
-| 67892          | 5100-200     | -3,200.00 | 2024-01-14   | Operations |
-| 23456          | 4000-300     | 45,000.00 | 2024-01-13   | Marketing  |
-...
-
-Showing 20 of 125,432 total records
-```
-
-**User: "/dr-query 11442 amount > 100000"**
-```
-📋 Query Results: GL Transactions
-Filter: amount > 100000
-
-| transaction_id | account_code | amount      | posting_date | vendor_name     |
-|----------------|--------------|-------------|--------------|-----------------|
-| 89234          | 4000-100     | 2,150,000   | 2024-01-10   | Acme Corp       |
-| 12345          | 4000-200     | 1,800,000   | 2024-01-08   | Global Supply   |
-| 34567          | 5100-100     | 850,000     | 2024-01-05   | Tech Partners   |
-...
-
-Found 127 records matching filter (showing first 100)
-Use --limit 500 to see more results
-```
-
-**User: "/dr-query 11442 department = 'Sales' AND amount > 50000 --limit 50"**
-```
-📋 Query Results: GL Transactions
-Filter: department = 'Sales' AND amount > 50000
-
-Found 234 records (showing 50)
-
-| transaction_id | account_code | amount    | posting_date | vendor_name     |
-|----------------|--------------|-----------|--------------|-----------------|
-| 45231          | 4000-100     | 125,000   | 2024-01-15   | ABC Company     |
+| account_code | amount    | reporting_date | department |
+|--------------|-----------|----------------|------------|
+| 4000-100     | 12,500.00 | 2024-01-15     | Sales      |
+| 5100-200     | -3,200.00 | 2024-01-14     | Operations |
 ...
 ```
 
-**User: "/dr-query 11442 --sql SELECT account_code, SUM(amount) as total FROM table GROUP BY account_code ORDER BY total DESC"**
+**User: "/dr-query financials department = 'Sales'"**
 ```
-📋 Custom Query Results
-
-| account_code | total          |
-|--------------|----------------|
-| 4000-100     | 45,231,000.00  |
-| 4000-200     | 32,150,000.00  |
-| 5100-300     | 28,750,000.00  |
-...
-
-Returned 156 rows
+get_data_by_alias(alias="financials", select=["account_code","amount","department"],
+  filters=[{"name": "department", "values": ["Sales"]}], limit=100)
 ```
 
-**User: "/dr-query 11442 posting_date > '2024-01-01' AND vendor_name IS NULL"**
+**User: "/dr-query financials amount > 100000"**
 ```
-📋 Query Results: GL Transactions
-Filter: posting_date > '2024-01-01' AND vendor_name IS NULL
-
-Found 892 records with missing vendor_name since Jan 1
-
-| transaction_id | account_code | amount    | posting_date | vendor_id |
-|----------------|--------------|-----------|--------------|-----------|
-| 56789          | 4000-100     | 5,000.00  | 2024-01-12   | V-1234    |
-...
-
-💡 Note: These records have vendor_id but missing vendor_name
-   Consider joining with vendor master table
-```
-
-## Filter Object Format (API)
-
-When using `get_records_by_filter` programmatically:
-
-```json
-{
-  "status": "active",                    // Equality
-  "amount": {">": 1000, "<": 5000},      // Range
-  "account_code": {"in": ["A", "B"]},    // IN list
-  "vendor_name": {"is_null": true},      // NULL check
-  "description": {"like": "%adj%"}       // Pattern
-}
+get_data_by_alias(alias="financials", select=["account_code","amount","department"],
+  filters=[{"name": "amount", "values": {"type": "advanced",
+    "val": [{"condition": "gt", "value": "100000"}]}}], limit=100)
 ```
 
 ## Limits
 
 | Method | Max Rows | Use Case |
 |--------|----------|----------|
-| `get_sample_records` | 20 | Quick data inspection |
-| `get_records_by_filter` | 500 | Investigation queries |
-| `execute_query` | 1000 | Complex aggregations |
+| `get_data_by_alias` / `get_data_by_id` | 500/page (use `offset`) | Row-level records, samples, filtered queries |
+| `get_aggregated_data_by_alias` / `get_aggregated_data_by_id` | none | Totals, grouped breakdowns (no row cap) |
 
 ## Tips
 
-- Start with `--sample` to understand data format
-- Use filters to investigate anomalies found by `/dr-anomalies`
-- For aggregations, use `--sql` with GROUP BY
-- If you need more than 500 rows, consider profiling instead
+- Start with a small unfiltered page to learn the data shape and field names.
+- If you need a total rather than rows, use the aggregate tools — no row cap.
+- If you need more than a few hundred rows of raw data, that's usually a signal
+  you want aggregation, not extraction.
+
 ## Related Skills
 
-- `/dr-tables` - Get schema before querying
-- `/dr-anomalies` - Find issues to investigate
-- `/dr-profile` - Statistical analysis
+- `/dr-tables` — discover tables / fields and aggregate totals (no row cap).
+- `/dr-anomalies` — find issues to investigate (computes findings client-side
+  from baseline aggregates).
+- `/dr-profile` — field-level statistics.

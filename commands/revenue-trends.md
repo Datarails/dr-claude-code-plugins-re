@@ -8,24 +8,30 @@ Analyze revenue patterns over time using real aggregated data. Shows growth tren
 
 ## Step 1: Verify Connection
 
-Start by calling `list_finance_tables` to verify the connection is active.
+Start by calling `list_data_models` to verify the connection is active.
 
 **If the tool call fails:** The Datarails connector isn't connected. Tell the user to click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. Then STOP.
 
 ## Step 2: Find Financial Data
 
 ```
-Use: mcp__datarails-finance-os__list_finance_tables
+Use: mcp__datarails-finance-os__list_data_models
 ```
 
 Identify:
-- Main financials/P&L table
+- Main financials/P&L table — note **both** its numeric `id` and its `alias` (the alias may be empty). **Prefer the alias path when an alias exists.**
 - KPI table (often contains ARR, MRR metrics)
 
 ## Step 3: Understand Revenue Structure
 
 ```
-Use: mcp__datarails-finance-os__get_table_schema
+# If the table has an alias (preferred):
+Use: mcp__datarails-finance-os__list_aliased_fields
+Parameters:
+  alias: <financials_alias>
+
+# Otherwise, by id (capture each field's numeric id — the by-id tools need ids):
+Use: mcp__datarails-finance-os__get_fields_by_id
 Parameters:
   table_id: <financials_table_id>
 ```
@@ -40,19 +46,31 @@ Look for:
 Use aggregation for complete monthly revenue data:
 
 **Aggregation rules:**
-- Date fields (`Reporting Date`, `Reporting Month`, etc.) must ALWAYS go in `dimensions`, never in `filters`. Date filters silently return empty results.
-- To limit to a specific period, include the date as a dimension and filter the results client-side after the response.
-- Only text fields (`Scenario`, `Account Group L0`, etc.) go in `filters`.
+- Put the date field (`Reporting Date`, `Reporting Month`, etc.) in `dimensions` to get a row per month.
+- To scope to a specific period you can either add the date as a dimension and filter client-side, or pass an **advanced** date filter directly (epoch seconds as strings): `{"name": "<date_field>", "values": {"type": "advanced", "val": [{"condition": "total_range", "value": ["<start_epoch>", "<end_epoch>"]}]}}`.
+- Text fields (`Scenario`, `Account Group L0`, etc.) go in `filters` as value lists.
 
 ```
-Use: mcp__datarails-finance-os__aggregate_table_data
+# Alias path (preferred):
+Use: mcp__datarails-finance-os__get_aggregated_data_by_alias
 Parameters:
-  table_id: <financials_table_id>
+  alias: <financials_alias>
   dimensions: ["<date_field>"]
   metrics: [{"field": "<amount_field>", "agg": "SUM"}]
   filters: [
     {"name": "<account_l1_field>", "values": ["<revenue_category>"], "is_excluded": false},
     {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false}
+  ]
+
+# By-id fallback (no alias):
+Use: mcp__datarails-finance-os__get_aggregated_data_by_id
+Parameters:
+  table_id: <financials_table_id>
+  dimensions: [<date_field_id>]
+  metrics: [{"field_id": <amount_field_id>, "agg": "SUM"}]
+  filters: [
+    {"field_id": <account_l1_field_id>, "values": ["<revenue_category>"]},
+    {"field_id": <scenario_field_id>, "values": ["Actuals"]}
   ]
 ```
 
@@ -63,31 +81,54 @@ This returns real monthly revenue totals in ~5 seconds.
 For revenue composition breakdown:
 
 ```
-Use: mcp__datarails-finance-os__aggregate_table_data
+# Alias path (preferred):
+Use: mcp__datarails-finance-os__get_aggregated_data_by_alias
 Parameters:
-  table_id: <financials_table_id>
+  alias: <financials_alias>
   dimensions: ["<account_l2_field>"]
   metrics: [{"field": "<amount_field>", "agg": "SUM"}]
   filters: [
     {"name": "<account_l1_field>", "values": ["<revenue_category>"], "is_excluded": false},
     {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false}
   ]
+
+# By-id fallback (no alias):
+Use: mcp__datarails-finance-os__get_aggregated_data_by_id
+Parameters:
+  table_id: <financials_table_id>
+  dimensions: [<account_l2_field_id>]
+  metrics: [{"field_id": <amount_field_id>, "agg": "SUM"}]
+  filters: [
+    {"field_id": <account_l1_field_id>, "values": ["<revenue_category>"]},
+    {"field_id": <scenario_field_id>, "values": ["Actuals"]}
+  ]
 ```
 
-**If the L2 field fails:** Try a different field level, or skip this step and show only top-level revenue.
+**If the L2 field fails:** Try a different field level (a sibling from the Step 3 schema), or skip this step and show only top-level revenue.
 
 ## Step 6: Check KPI Metrics (if available)
 
-If a KPI table exists:
+For named KPIs, start with the business-metrics catalog:
 
 ```
-Use: mcp__datarails-finance-os__get_sample_records
+Use: mcp__datarails-finance-os__list_business_metrics
+```
+
+Scan the returned flat list for ARR, MRR, Net New ARR, Churn metrics. If you need the underlying values, aggregate them from the KPI table via the aliased/by-id tools (discover the table the same way as Step 2):
+
+```
+# Small sample to inspect the KPI table's structure (alias path preferred):
+Use: mcp__datarails-finance-os__get_data_by_alias
+Parameters:
+  alias: <kpi_alias>
+  limit: 20
+
+# By-id fallback (no alias):
+Use: mcp__datarails-finance-os__get_data_by_id
 Parameters:
   table_id: <kpi_table_id>
-  n: 20
+  limit: 20
 ```
-
-Look for ARR, MRR, Net New ARR, Churn metrics.
 
 ## Step 7: Analyze and Present
 
@@ -146,8 +187,9 @@ Create a compelling revenue story with real numbers:
 ## Handling Aggregation Failures
 
 If aggregation fails for a specific field:
-1. Try using a broader field (L1 instead of L2)
-2. If all aggregation fails, fall back to `get_records_by_filter` and note the data is partial
+1. Try using a broader field (L1 instead of L2), or a sibling field from the Step 3 schema
+2. If an alias call errors, retry the by-id twin (`get_aggregated_data_by_id`)
+3. If all aggregation fails, fall back to `get_data_by_alias` / `get_data_by_id` and note the data is partial
 
 ## Follow-up Options
 

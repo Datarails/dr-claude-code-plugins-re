@@ -1,5 +1,5 @@
 ---
-description: Test API field compatibility and performance - discover which fields work with aggregation and update your profile
+description: Test API field compatibility and performance - discover which fields work with aggregation and report the compatibility map
 ---
 
 # API Diagnostic Test
@@ -8,22 +8,32 @@ Run a quick diagnostic to test which fields work with the aggregation API in you
 
 ## Step 1: Verify Connection
 
-Start by calling `list_finance_tables` to verify the connection is active.
+Start by calling `list_data_models` to verify the connection is active.
 
 **If the tool call fails:** The Datarails connector isn't connected. Tell the user to click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. Then STOP.
 
 ## Step 2: Find Financial Data
 
 ```
-Use: mcp__datarails-finance-os__list_finance_tables
+Use: mcp__datarails-finance-os__list_data_models
 ```
 
-Identify the main financials table.
+Identify the main financials table. Note **both** its numeric `id` and its `alias` (the alias may be empty). **Prefer the alias path when an alias exists** — friendlier field names, far fewer tokens.
 
 ## Step 3: Get Table Schema
 
+If the table has an alias, list its fields by alias:
+
 ```
-Use: mcp__datarails-finance-os__get_table_schema
+Use: mcp__datarails-finance-os__list_aliased_fields
+Parameters:
+  alias: <financials_alias>
+```
+
+Otherwise list fields by id (capture each field's numeric `id` — the by-id tools address fields by id):
+
+```
+Use: mcp__datarails-finance-os__get_fields_by_id
 Parameters:
   table_id: <financials_table_id>
 ```
@@ -37,16 +47,31 @@ Identify key fields to test:
 
 ## Step 4: Test Each Field with Aggregation
 
-For each key field, run a simple aggregation test:
+For each key field, run a simple aggregation test.
+
+When the table has an alias, use the alias-path probe:
 
 ```
-Use: mcp__datarails-finance-os__aggregate_table_data
+Use: mcp__datarails-finance-os__get_aggregated_data_by_alias
+Parameters:
+  alias: <financials_alias>
+  dimensions: ["<field_alias_to_test>"]
+  metrics: [{"field": "<amount_field_alias>", "agg": "SUM"}]
+  filters: [
+    {"name": "<scenario_field_alias>", "values": ["Actuals"], "is_excluded": false}
+  ]
+```
+
+When the table has no alias, use the by-id probe (`dimensions`, `metrics`, and `filters` are all field-id based):
+
+```
+Use: mcp__datarails-finance-os__get_aggregated_data_by_id
 Parameters:
   table_id: <financials_table_id>
-  dimensions: ["<field_to_test>"]
-  metrics: [{"field": "<amount_field>", "agg": "SUM"}]
+  dimensions: [<field_id_to_test>]
+  metrics: [{"field_id": <amount_field_id>, "agg": "SUM"}]
   filters: [
-    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false}
+    {"field_id": <scenario_field_id>, "values": ["Actuals"]}
   ]
 ```
 
@@ -95,8 +120,7 @@ Show a clear diagnostic report:
 > - Fields that fail will use alternative fields or fall back to slower pagination
 >
 > ### Next Steps
-> - These results should be saved to your client profile
-> - Run `/dr-learn` to auto-save these results
+> - Note any failed fields and their suggested alternatives — skills retry a sibling field automatically when an aggregation rejects a dimension
 > - Re-run this test any time after Datarails platform updates
 
 ## Tips

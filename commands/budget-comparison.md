@@ -8,22 +8,28 @@ Compare your actual financial results against budget using real aggregated total
 
 ## Step 1: Verify Connection
 
-Start by calling `list_finance_tables` to verify the connection is active.
+Start by calling `list_data_models` to verify the connection is active.
 
 **If the tool call fails:** The Datarails connector isn't connected. Tell the user to click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. Then STOP.
 
 ## Step 2: Find Financial Data
 
 ```
-Use: mcp__datarails-finance-os__list_finance_tables
+Use: mcp__datarails-finance-os__list_data_models
 ```
 
-Identify the financials table that contains both Actuals and Budget scenarios.
+Identify the financials table that contains both Actuals and Budget scenarios. Note **both** its numeric `id` and its `alias` (the alias may be empty). **Prefer the alias path when an alias exists** — friendlier field names, far fewer tokens.
 
 ## Step 3: Understand the Structure
 
 ```
-Use: mcp__datarails-finance-os__get_table_schema
+# If the table has an alias:
+Use: mcp__datarails-finance-os__list_aliased_fields
+Parameters:
+  alias: <financials_alias>
+
+# Otherwise (no alias), use the by-id schema (capture each field's numeric id):
+Use: mcp__datarails-finance-os__get_fields_by_id
 Parameters:
   table_id: <financials_table_id>
 ```
@@ -33,14 +39,15 @@ Identify key fields: Scenario, Amount, Account hierarchy, Date.
 ## Step 4: Get Actuals Totals via Aggregation
 
 **Aggregation rules:**
-- Date fields (`Reporting Date`, `Reporting Month`, etc.) must ALWAYS go in `dimensions`, never in `filters`. Date filters silently return empty results.
-- To limit to a specific period, include the date as a dimension and filter the results client-side after the response.
-- Only text fields (`Scenario`, `Account Group L0`, etc.) go in `filters`.
+- Text fields (`Scenario`, `Account Group L0`, etc.) go in `filters` as value lists.
+- To limit to a specific period, pass an **advanced** date filter directly (`total_range` with epoch-second strings), or add the date as a dimension and filter the results client-side. Both work — date filtering is no longer rejected.
+
+Alias path (preferred):
 
 ```
-Use: mcp__datarails-finance-os__aggregate_table_data
+Use: mcp__datarails-finance-os__get_aggregated_data_by_alias
 Parameters:
-  table_id: <financials_table_id>
+  alias: <financials_alias>
   dimensions: ["<account_l1_field>"]
   metrics: [{"field": "<amount_field>", "agg": "SUM"}]
   filters: [
@@ -48,12 +55,25 @@ Parameters:
   ]
 ```
 
+By-id fallback (no alias):
+
+```
+Use: mcp__datarails-finance-os__get_aggregated_data_by_id
+Parameters:
+  table_id: <financials_table_id>
+  dimensions: [<account_l1_field_id>]
+  metrics: [{"field_id": <amount_field_id>, "agg": "SUM"}]
+  filters: [
+    {"field_id": <scenario_field_id>, "values": ["Actuals"]}
+  ]
+```
+
 ## Step 5: Get Budget Totals via Aggregation
 
 ```
-Use: mcp__datarails-finance-os__aggregate_table_data
+Use: mcp__datarails-finance-os__get_aggregated_data_by_alias
 Parameters:
-  table_id: <financials_table_id>
+  alias: <financials_alias>
   dimensions: ["<account_l1_field>"]
   metrics: [{"field": "<amount_field>", "agg": "SUM"}]
   filters: [
@@ -68,9 +88,9 @@ Both calls complete in ~5 seconds each, giving complete totals for both scenario
 For a month-by-month comparison:
 
 ```
-Use: mcp__datarails-finance-os__aggregate_table_data
+Use: mcp__datarails-finance-os__get_aggregated_data_by_alias
 Parameters:
-  table_id: <financials_table_id>
+  alias: <financials_alias>
   dimensions: ["<date_field>", "<account_l1_field>"]
   metrics: [{"field": "<amount_field>", "agg": "SUM"}]
   filters: [
@@ -158,17 +178,18 @@ Flag variances that matter:
 ## Handling Aggregation Failures
 
 If aggregation fails for a specific field:
-1. Try a different account hierarchy field
-2. If all aggregation fails, fall back to `get_records_by_filter` (500-row limit per scenario) and note the comparison is based on partial data
+1. Try a different account hierarchy field (re-inspect the Step 3 schema for a sibling)
+2. If the alias call errors, retry the by-id twin (`get_aggregated_data_by_id`)
+3. If all aggregation fails, fall back to `get_data_by_alias` / `get_data_by_id` (500-row limit per scenario) and note the comparison is based on partial data
 
 ## Department-Level Analysis
 
 If the user wants department-level variances, run additional aggregation:
 
 ```
-Use: mcp__datarails-finance-os__aggregate_table_data
+Use: mcp__datarails-finance-os__get_aggregated_data_by_alias
 Parameters:
-  table_id: <financials_table_id>
+  alias: <financials_alias>
   dimensions: ["<department_field>", "<account_l1_field>"]
   metrics: [{"field": "<amount_field>", "agg": "SUM"}]
   filters: [

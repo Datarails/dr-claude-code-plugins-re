@@ -1,37 +1,44 @@
 ---
 name: dr-drilldown
-description: Drill down on a cell in the Datarails Excel Add-in to see underlying detail. Resolves DR.GET formulas (direct or through formula chains), reads hidden "dr control" sheet filters, queries Datarails for breakdown data, and validates totals before presenting results.
+description: Drill down on a cell in the Datarails Excel Add-in to see underlying detail — also the skill to use when the user asks to "explain the variance", "explain this number", "what's driving this", "what's behind this cell", or break a figure into its line items. In a live Excel context (add-in agent bridge available) DR formula cells drill through the add-in's own drill-down; otherwise (Claude Code with an .xlsx file) it resolves DR.GET formulas, reads hidden "dr control" filters, queries Datarails, and validates totals. Self-contained — discovers the client's financials table and fields on its own, no profile or setup step required.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__list_finance_tables
-  - mcp__datarails-finance-os__get_table_schema
-  - mcp__datarails-finance-os__get_field_distinct_values
-  - mcp__datarails-finance-os__get_sample_records
-  - mcp__datarails-finance-os__get_records_by_filter
-  - mcp__datarails-finance-os__aggregate_table_data
-  - mcp__datarails-finance-os__execute_query
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_data_by_alias
+  - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
+  - mcp__datarails-finance-os__list_business_metrics
   - Read
+  - Write
   - Bash
   - Glob
   - Grep
   - AskUserQuestion
+  - execute_office_js
 argument-hint: "<cell-reference> [--by <field1,field2,...>] [--file <path-to-xlsx>]"
 ---
 
 # DR.GET Drill-Down
 
 Drill into any cell that contains Datarails data to see the underlying line-item detail. Works with:
-- Cells containing a **DR.GET formula** directly
-- Cells containing an **Excel formula** (SUM, +, -, etc.) whose precedents are DR.GET cells
+- Cells containing a **DR formula** directly (`DR.GET`/`DR.QTD`/`DR.YTD`/`DR.MTD`/… — any DR function)
+- Cells containing an **Excel formula** (SUM, +, -, etc.) whose precedents are DR formula cells
 
-**Requirements:** This skill requires Python with openpyxl to read Excel formulas. If openpyxl is not installed, run `pip install openpyxl` first. This skill works in Claude Code only (not Cowork).
+**Two paths.** In a **live Excel context** (add-in agent bridge available — Claude for Excel / an open workbook with the add-in), drilling a DR formula cell goes through the **add-in's own drill-down** via the agent bridge (Step 0 below) — the add-in resolves filters, dates, and totals natively. (Excel context is about the bridge being present, not whether the workbook is connected.) The MCP/openpyxl workflow (Phases 0–5) is the **fallback** for Claude Code with an `.xlsx` file and no bridge.
+
+**Requirements (fallback path only):** the MCP/openpyxl workflow requires Python with openpyxl to read Excel formulas. If not installed, run `pip install openpyxl`. The fallback path runs in Claude Code (not Cowork). The Excel-context path needs no Python.
 
 ## Arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `<cell-reference>` | The cell to drill down on, e.g. `B6` or `Sheet1!B6` | **Required** |
-| `--by <fields>` | Comma-separated list of fields to break down by (e.g. `Account Full,Vendor`) | All available fields |
+| `--by <fields>` | Fields to break down by (e.g. `Account Full,Vendor`). **MCP/openpyxl fallback** accepts a comma-separated list (multiple `dimensions`). **Excel-context agent pivot** (`drilldown_by_pivot`) takes **exactly one** field — pass the single field as `rowField`; if multiple are given, use the first and tell the user the others aren't supported in one pivot. | All available fields (fallback) / first field (agent pivot) |
 | `--file <path>` | Path to the `.xlsx` workbook file | Ask user |
 
 ## Verify Connection
@@ -43,6 +50,28 @@ If any Datarails tool call fails with an authentication or connection error, tel
 Then STOP — do not retry until the user has reconnected.
 
 ## Workflow
+
+### Step 0 - Excel context routing (ALWAYS FIRST)
+
+Decide which path to take **before** opening any file.
+
+Detect Excel context by delegating to the connector: **`/dr-excel-context guard`**
+(per the global Excel Context Contract — do not probe `agent.get_session` inline).
+
+- **Excel context active** (guard returns `excel_context: true` — live workbook + add-in bridge):
+  **Delegate DR formula cells to the add-in agent drill-down. Do NOT use the openpyxl/MCP path below.**
+  1. Resolve the target cell address (`sheetName` + `cellAddress`) from the user's reference / current selection.
+  2. Confirm the cell holds a DR formula (`DR.GET`/`DR.QTD`/`DR.YTD`/`DR.MTD`/… — any DR function), directly or via a formula chain whose precedents are DR cells. If it's a static value or a non-DR formula with no DR precedents → tell the user drill-down needs a DR cell; stop.
+  3. Fire the add-in agent drill-down (via `datarails-excel-agent`):
+     - **default / list breakdown** → `drilldown_list` (`sheetName`, `cellAddress`; `timeoutMs: 180000`)
+     - **break down by a field** (`--by` / pivot) → `drilldown_by_pivot` (`sheetName`, `cellAddress`, `rowField`; optional `targetTemplateId`/`targetTemplateName`). **`rowField` is exactly one field** — if `--by` listed several, pass the first and tell the user a pivot drills one field at a time.
+  4. The add-in resolves `dr_control` filters, dates (EOMONTH), and totals **natively** — do not re-derive them. Present what the bridge returns (cite `data.sources[]`). **Skip Phases 0–5.**
+
+  **Connection:** `drilldown_*` requires the workbook connected. **Let `/dr-excel-context` handle this gate** — its Connection requirement checks `isConnected` (a COM-only field; no gate on Flex) and prompts for explicit `connect_file` confirmation when needed. Do not probe or branch on `isConnected` here.
+
+- **No Excel context** (guard returns `excel_context: false` — Claude Code with `--file`, no bridge): use the MCP/openpyxl workflow (Phases 0–5 below).
+
+See `datarails-excel-agent` (bridge protocol) and `/dr-excel-context` (connector) for the drill-down commands and gating.
 
 ### Phase 0 - Open the Workbook
 
@@ -170,9 +199,40 @@ Store all active filters - they must be applied to the drill-down query in Phase
 
 Now build and execute the aggregation query using the resolved DR.GET parameters + global filters from the control sheet.
 
-#### Step 3.1 - Determine the Table ID
+#### Step 3.1 - Discover the financials table and its fields
 
-Load the client profile from `${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json` (or fallback to `config/client-profiles/<env>.json`) and use `tables.financials.id`. If no profile exists, call `list_finance_tables` to discover the financials table and ask the user to confirm.
+This skill is **self-contained**: it discovers the table and the field
+mappings it needs inline. **If you already discovered them earlier in THIS
+conversation, reuse them — skip to Step 3.2.** Discovery is cheap but not
+free; do it once per conversation, then carry the values forward.
+
+1. `list_data_models`. Pick the financials table: the one whose name (or
+   alias) matches `/financial|cube|p&?l|ledger|gl/i`; if none match, the
+   largest by row count. Note **both** its numeric `id` (call it
+   `<financials_table_id>`) and its `alias` (may be empty). **Prefer the alias
+   path when an alias exists** — friendlier field names, far fewer tokens.
+
+2. Fields. If the table has an alias, `list_aliased_fields(<alias>)`;
+   otherwise `get_fields_by_id(<financials_table_id>)` (capture each field's
+   numeric `id` — the by-id tools address fields by id). From the fields, bind
+   the ones this skill uses by case-insensitive match on the alias/name
+   (respecting the noted type):
+   - `<amount_field>` — numeric: `^amount$` → `transaction_amount` → `value`
+     (the metric the breakdown sums)
+   - the categorical fields you'll break down by (see Step 3.2)
+
+> **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
+
+   The DR.GET dimension names parsed from the workbook formula in Phase 1 are
+   already the client's literal field names, so use them as-is in the
+   aggregation `filters`; only fall back to schema matching if one isn't an
+   exact field name.
+
+**Aggregation-field failures are handled reactively, not pre-probed.** If the
+Step 3.3 aggregation call 500s on a dimension field, re-inspect the schema for
+a sibling (e.g. `DR_ACC_L1.5` when `DR_ACC_L1` fails, or `account_group_l1`)
+and retry — this is also a likely cause of a total mismatch in Phase 4. If an
+alias call fails, fall back to the by-id twin.
 
 #### Step 3.2 - Determine Drill-Down Dimensions
 
@@ -180,7 +240,7 @@ If the user supplied `--by <fields>`:
 - Use those fields as the `dimensions` for the aggregation query.
 
 If no `--by` was supplied:
-- Use the Datarails table schema to find all categorical fields that are NOT already pinned by the DR.GET parameters.
+- Use the fields from Step 3.1 to find all categorical fields that are NOT already pinned by the DR.GET parameters.
 - Common useful drill-down dimensions: `Account Full`, `Account Name`, `Report_Field`, `DR_ACC_L2`, `Vendor`, `Department L1`, `Department L2`, `Reporting Unit`, `Entity`.
 - Ask the user which fields they want to break down by, suggesting the most useful ones.
 
@@ -190,27 +250,39 @@ Combine:
 1. **DR.GET dimension filters** (from Phase 1) - these become `filters` on the aggregation
 2. **Global filters from dr control** (from Phase 2) - these become additional `filters`
 3. **Drill-down dimensions** (from Step 3.2) - these become `dimensions` on the aggregation
-4. **Metric:** `SUM` on `Amount` (or the appropriate value field)
+4. **Metric:** `SUM` on `<amount_field>` (the value field discovered in Step 3.1)
 
-Build a filters list:
+Build a filters list (alias path):
 - For each DR.GET parameter: `{"name": "<dim>", "values": ["<value>"], "is_excluded": false}`
 - For each active global filter: `{"name": "<Name>", "values": <Values>, "is_excluded": <IsExcluded>}`
 
+(By-id path: use `{"field_id": <int>, "values": [...]}` instead.)
+
 **Aggregation rules:**
-- Date fields (`Reporting Date`, `Reporting Month`, etc.) must ALWAYS go in `dimensions`, never in `filters`. Date filters silently return empty results.
-- To limit to a specific period, include the date as a dimension and filter the results client-side after the response.
-- Only text fields (`Scenario`, `Account Group L0`, etc.) go in `filters`.
+- Date fields (`Reporting Date`, `Reporting Month`, etc.) can be filtered
+  directly with an **advanced** filter — pass an inclusive range as
+  `{"name": "<Reporting Date>", "values": {"type": "advanced", "val":
+  [{"condition": "total_range", "value": ["<start_epoch>", "<end_epoch>"]}]}}`
+  (epoch seconds as strings). Alternatively, add the date as a `dimension` and
+  filter the results client-side after the response — both work.
+- Text fields (`Scenario`, `Account Group L0`, etc.) use value-list filters.
 
-Then call `aggregate_table_data`:
+Then call `get_aggregated_data_by_alias` (preferred when the table has an alias):
 
-    aggregate_table_data(
-        table_id="<financials_table_id>",
+    get_aggregated_data_by_alias(
+        alias="<financials_alias>",
         dimensions=["<drill-down-field-1>", "<drill-down-field-2>"],
-        metrics=[{"field": "Amount", "agg": "SUM"}],
+        metrics=[{"field": "<amount_field>", "agg": "SUM"}],
         filters=<combined_filters>
     )
 
-**Important:** Use `aggregate_table_data` (not `get_records_by_filter` or `execute_query`) because it has NO row limit and returns properly computed totals. The other tools cap at 500-1000 rows and would return incomplete data.
+By-id fallback (no alias): `get_aggregated_data_by_id(table_id="<financials_table_id>",
+dimensions=[<drill-down-field-id-1>, <drill-down-field-id-2>], metrics=[{"field_id":
+<amount_field_id>, "agg": "SUM"}], filters=<combined_filters>)`.
+
+**Important:** Use `get_aggregated_data_by_alias` / `get_aggregated_data_by_id` (not
+`get_data_by_alias` / `get_data_by_id`) because aggregation has NO row limit and returns
+properly computed totals. The row-fetch tools cap at 500 rows and would return incomplete data.
 
 #### Step 3.4 - Handle Derived Formulas (Multiple DR.GET Sources)
 
@@ -243,7 +315,7 @@ Common causes and fixes:
 | Cause | Diagnosis | Fix |
 |-------|-----------|-----|
 | **Missing global filter** | The dr control sheet has a filter you did not apply | Re-read the control sheet, check for additional filter cells or sheets |
-| **Wrong field mapping** | A dimension name in DR.GET does not match the Datarails field name exactly | Use `get_table_schema` to verify field names; try alternatives (e.g. `DR_ACC_L1.5` vs `DR_ACC_L1`) |
+| **Wrong field mapping** | A dimension name in DR.GET does not match the Datarails field name exactly | Use `list_aliased_fields` / `get_fields_by_id` to verify field names; try alternatives (e.g. `DR_ACC_L1.5` vs `DR_ACC_L1`) |
 | **Date format mismatch** | Reporting Date serial number not matching | Verify the date value and format being sent |
 | **IncludeNullValues not applied** | The global filter includes nulls but the query does not | Add a separate query for NULL values in that field and combine |
 | **Exclusion filter reversed** | IsExcluded true was not handled correctly | Double-check: if excluded, the values should be in the exclusion list |
@@ -307,7 +379,7 @@ Show each component table plus how they combine:
 | Cell has no formula | Tell user: "This cell contains a static value (no formula). Cannot drill down." |
 | No DR.GET found in formula chain | Tell user: "This cell formula does not reference any DR.GET cells. Cannot drill down." |
 | No control sheet found | Warn: "No dr control sheet found. Proceeding without global filters - totals may not match if filters are applied in the add-in." |
-| Table not found in Datarails | Ask user to run `/dr-learn` to set up the client profile |
+| Table not found in Datarails | No table matched the financials pattern — list the tables found and ask the user which one holds their P&L / financial data |
 | Total mismatch after retries | Report the mismatch clearly and offer partial results flagged as unvalidated |
 
 ## Examples

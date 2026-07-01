@@ -2,9 +2,16 @@
 name: forecast
 description: Multi-scenario financial analysis — budget vs forecast vs actual variance tracking
 tools:
-  - mcp__datarails-finance-os__aggregate_table_data
-  - mcp__datarails-finance-os__get_table_schema
-  - mcp__datarails-finance-os__list_finance_tables
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_data_by_alias
+  - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
+  - mcp__datarails-finance-os__list_business_metrics
   - Read
   - Write
   - Bash

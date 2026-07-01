@@ -3,7 +3,16 @@ name: dr-dashboard
 description: Generate executive KPI dashboard with real-time metrics. Creates Excel dashboards and PowerPoint one-pagers.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__aggregate_table_data
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_data_by_alias
+  - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
+  - mcp__datarails-finance-os__list_business_metrics
   - Write
   - Read
   - Bash

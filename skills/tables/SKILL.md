@@ -3,10 +3,14 @@ name: dr-tables
 description: List and explore Datarails Finance OS tables. Use to discover available data, view schemas, and understand table structure.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__list_finance_tables
-  - mcp__datarails-finance-os__get_table_schema
-  - mcp__datarails-finance-os__get_field_distinct_values
-  - mcp__datarails-finance-os__profile_table_summary
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
+  - mcp__datarails-finance-os__profile_numeric_fields
+  - mcp__datarails-finance-os__profile_categorical_fields
+  - mcp__datarails-finance-os__list_business_metrics
 argument-hint: "[table_id] [--schema] [--field <field_name>]"
 ---
 
@@ -23,19 +27,29 @@ If any Datarails tool call fails with an authentication or connection error, tel
 ### Step 2: Handle Request
 
 **List all tables (no arguments):**
-- Use `mcp__datarails-finance-os__list_finance_tables`
-- Present tables in a formatted list with IDs and names
+- Use `mcp__datarails-finance-os__list_data_models`
+- Each entry carries both a numeric `id` and an `alias` (empty when the table has
+  no business alias) — note both, they drive which schema/field tools to use next
+- Present tables in a formatted list with IDs, aliases, and names
 - Group by category if available
 
 **View specific table (with table_id):**
-- Use `mcp__datarails-finance-os__get_table_schema` to get columns and types
-- Use `mcp__datarails-finance-os__profile_table_summary` for quick overview
+- If the table has an alias, use `mcp__datarails-finance-os__list_aliased_fields`
+  (business-friendly field aliases); otherwise use
+  `mcp__datarails-finance-os__get_fields_by_id` (capture each field's numeric `id`)
+- For a quick data overview, run `mcp__datarails-finance-os__profile_numeric_fields`
+  (stats per numeric field) and `mcp__datarails-finance-os__profile_categorical_fields`
+  (cardinality/top values per categorical field)
 - Present schema in a readable table format
 
+> **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
+
 **Explore field values (with --field):**
-- Use `mcp__datarails-finance-os__get_field_distinct_values`
+- Use `mcp__datarails-finance-os__get_distinct_values_by_alias` (aliased tables) or
+  `mcp__datarails-finance-os__get_distinct_values_by_id` (by-id fallback)
 - Show unique values with counts
 - Useful for understanding categorical data
+- If a distinct-values call errors, fall back to sampling rows and dedupe client-side
 
 ## Arguments
 
@@ -93,9 +107,9 @@ Found 156 unique values:
 ## Tips
 
 - Use this skill first when starting analysis to understand available data
-- Table IDs are needed for other skills like `/dr-profile` and `/dr-anomalies`
+- Table IDs (and aliases) are needed for other skills like `/dr-profile` and `/dr-anomalies`
 - Check distinct values to understand categorical field cardinality
-- The profile summary gives a quick data quality overview
+- The numeric/categorical field profiles give a quick data quality overview
 ## Related Skills
 
 - Connect via Connectors UI
