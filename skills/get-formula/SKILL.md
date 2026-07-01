@@ -1,17 +1,23 @@
 ---
 name: dr-get-formula
-description: Generate Excel workbooks with DR.GET formulas that pull live financial data from Datarails. Creates P&L templates, budget models, and variance reports with validated dimension values.
+description: Generate Excel workbooks with DR.GET formulas that pull live financial data from Datarails. Creates P&L templates, budget models, and variance reports with validated dimension values. Self-contained — discovers the client's financials table and fields on its own, no profile or setup step required.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__list_finance_tables
-  - mcp__datarails-finance-os__get_table_schema
-  - mcp__datarails-finance-os__get_field_distinct_values
-  - mcp__datarails-finance-os__get_sample_records
-  - mcp__datarails-finance-os__get_records_by_filter
-  - mcp__datarails-finance-os__aggregate_table_data
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_data_by_alias
+  - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
+  - mcp__datarails-finance-os__list_business_metrics
+  - mcp__datarails-finance-os__list_xl_functions
   - Write
   - Read
   - Bash
+  - execute_office_js
 argument-hint: "[--type summary|detail|budget|variance] [--year <YYYY>] [--output <file>]"
 ---
 
@@ -21,6 +27,16 @@ Generate Excel workbooks containing DR.GET formulas that pull live financial dat
 
 **DR.GET** is a custom Excel function that bridges Datarails' centralized financial database and Excel-based models. Formulas auto-refresh when the workbook is opened with the add-in active.
 
+> **⚠️ Excel context — refresh through the agent after writing formulas.** If this skill runs
+> in a **live Excel context** (add-in agent bridge available) and writes `=DR.GET(...)` formulas
+> into the open workbook, the cells show **"Loading…" / `#BUSY!` / `#N/A`** until refreshed.
+> You **MUST** fire an agent refresh afterward — `refresh_selected_cells_ribbon` (written range)
+> or `refresh_ribbon` (whole workbook) via `datarails-excel-agent` (connector mode
+> `/dr-excel-context refresh-after-insert`) — and **never** report a value before that refresh,
+> and **never** substitute a native Excel recalc (it won't pull Datarails data). Writing DR.GET
+> formulas and refreshing them is one atomic step. (File-output mode in Claude Code is exempt —
+> the formulas populate when the user opens the file with the add-in.)
+
 ## Arguments
 
 | Argument | Description | Default |
@@ -29,40 +45,14 @@ Generate Excel workbooks containing DR.GET formulas that pull live financial dat
 | `--year <YYYY>` | Calendar year for date headers | Current year |
 | `--output <file>` | Output file path | `tmp/DR_GET_<type>_<YEAR>.xlsx` |
 
-## Client Profile System
+## Adapting to the client's environment
 
-This skill uses **client profiles** to adapt to different Datarails environments. Each client has different table IDs, field names, account hierarchies, and dimension values.
-
-### Profile Location
-Profiles are stored at: `${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json`
-
-### First-Time Setup
-If no profile exists for the target environment:
-1. Inform the user: "No profile found for this environment. Run `/dr-learn` first to configure."
-2. Guide them to run `/dr-learn --env <env>`
-
-### Required Profile Fields
-```json
-{
-  "tables": {
-    "financials": { "id": "<table_id>" }
-  },
-  "field_mappings": {
-    "amount": "Amount",
-    "date": "Reporting Date",
-    "scenario": "Scenario",
-    "account_l0": "DR_ACC_L0",
-    "account_l1_5": "DR_ACC_L1.5",
-    "account_l2": "DR_ACC_L2",
-    "report_field": "Report_Field",
-    "scenario_cycle": "Scenario Cycle",
-    "planning_scenario": "Planning Scenario"
-  },
-  "account_hierarchy": {
-    "pnl_filter": "P&L"
-  }
-}
-```
+This skill is **self-contained**: every Datarails environment names its
+financials table and fields differently, so it discovers the table, the
+field mappings, and the valid dimension values it needs **inline**, as the
+first data step of its own workflow (Phase 1, Step 2). It does not depend on
+a saved profile, a learn step, or any prior setup. Every value written into
+a DR.GET formula is validated against the live table during discovery.
 
 ---
 
@@ -129,7 +119,7 @@ Store the serial number as the cell value and apply `'MMM-YY'` number format so 
 | Hardcoding values in DR.GET: `"Actuals"` | Always reference a cell: `$B$1` |
 | Using text month: `"January 2026"` | Use EOM serial number: `46053` |
 | Writing API epoch timestamps as date headers | Compute EOM serials from the calendar (see Date Dimension) — raw epochs land a day early with a time component |
-| Using `[Account]` or `[Month]` | Use actual field names from profile |
+| Using `[Account]` or `[Month]` | Use the actual field names discovered in Step 2 |
 | Using Report_Field without scoping | Always include `[DR_ACC_L2]` alongside `[Report_Field]` |
 | Inventing or guessing dimension values | Validate against actual distinct values first |
 | Using `Scenario="Budget"` | Use `Scenario="Forecast"` + `Scenario Cycle` + `Planning Scenario` |
@@ -163,19 +153,65 @@ RIGHT:  =DR.GET(Value, "[Scenario]", $B$1, "[DR_ACC_L1.5]", $A6, "[Reporting Dat
 If any tool call fails with a connection error, guide the user to connect via Connectors UI.
 ```
 
-#### Step 2: Load Client Profile
-```
-Read: ${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json
+#### Step 2: Discover the financials table and its fields
 
-If profile exists:
-  - Load table IDs and field mappings
-  - Extract field names for: account_l1_5, account_l2, report_field, scenario, date, etc.
-  - Continue to Phase 2
+**If you already discovered the financials table and its field mappings
+earlier in THIS conversation, reuse them — skip to Phase 2.** Discovery is
+cheap but not free; do it once per conversation, then carry the values
+forward.
 
-If profile does NOT exist:
-  - Inform user: "No profile found. Run '/dr-learn' first."
-  - Stop execution
-```
+1. `list_data_models`. Pick the financials table: the one whose name (or
+   alias) matches `/financial|cube|p&?l|ledger|gl/i`; if none match, the
+   largest by row count. Note **both** its numeric `id` (call it
+   `<financials_table_id>`) and its `alias` (call it `<financials_alias>`; the
+   alias may be empty). **Prefer the alias path when an alias exists** —
+   friendlier field names, far fewer tokens.
+
+2. Fields. If the table has an alias, `list_aliased_fields(<financials_alias>)`;
+   otherwise `get_fields_by_id(<financials_table_id>)` (capture each field's
+   numeric `id` — the by-id tools address fields by id). From the fields, bind
+   these by case-insensitive match on the field alias/name (respecting the
+   noted type). Only the fields this skill actually puts into formulas are
+   needed:
+   - `<amount_field>`     — numeric: `^amount$` → `transaction_amount` → `value`
+   - `<scenario_field>`   — categorical: `^scenario$` → `^version$`
+   - `<date_field>`       — date/timestamp: `reporting_date` → `posting_date` → `^date$`
+   - `<account_l1_5_field>` — `dr_acc_l1.5` → `dr_acc_l1_5` → `account_l1_5` → `dr_acc_l1` → `account_l1`
+   - `<account_l2_field>` — `dr_acc_l2` → `account_l2`
+   - `<report_field>`     — `report_field` → `report field`
+   - `<cycle_field>`      — `scenario cycle` → `scenario_cycle`
+   - `<planning_field>`   — `planning scenario` → `planning_scenario`
+
+> **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
+
+   If `<amount_field>` or `<scenario_field>` has no clear match, ask the user
+   which field to use, then continue. The cycle / planning / report fields
+   are only needed for `--type budget`, `--type variance`, and `--type
+   detail`; if they're absent and the requested report type doesn't use them,
+   ignore them.
+
+3. Discover the DR.GET function token. `list_xl_functions`. Each entry's
+   `name` is the exact token DR.GET expects as its **first** argument
+   (`=DR.GET(<FunctionName>, "[Dimension]", CellRef, …)`), and its
+   `template.id` is the owning table — match the function whose `template`
+   resolves to `<financials_table_id>`, and bind its `name` as
+   `<value_function>`. Most environments name it `Value`; do not assume that —
+   use the discovered token. (If `list_xl_functions` returns nothing usable,
+   fall back to `Value`, the canonical default the add-in resolves.) Wherever
+   this skill writes the literal `Value` token below, substitute
+   `<value_function>`; the defined-name guidance in the Syntax Reference
+   applies to whatever token you use.
+
+The valid dimension **values** for these fields (account categories,
+scenarios, cycles, planning scenarios) are discovered and validated in
+Phase 2 below — every value written into a DR.GET formula must come from the
+live table.
+
+**Aggregation-field failures are handled reactively, not pre-probed.** If a
+later aggregation call (used in Phase 2 for value discovery) 500s on a
+dimension field, re-inspect the Step 2 schema for a sibling (e.g.
+`DR_ACC_L1.5` when `DR_ACC_L1` fails, or `account_group_l1`) and retry with
+it; if an alias call fails, fall back to the by-id twin.
 
 ### Phase 2: Dimension Discovery & Validation
 
@@ -183,28 +219,44 @@ If profile does NOT exist:
 
 #### Step 3: Discover Account Hierarchy
 
-Use the financials table ID from the profile.
+Use the financials table (alias or id) and the fields discovered in Step 2.
 
+Discover the account values directly from the distinct-values API:
 ```
-# Get distinct values for the account dimensions we'll use
-get_field_distinct_values(table_id, field_name=<account_l1_5_field>)
-get_field_distinct_values(table_id, field_name=<account_l2_field>)
+# Alias path (preferred)
+get_distinct_values_by_alias(<financials_alias>, <account_l1_5_field>)
+get_distinct_values_by_alias(<financials_alias>, <account_l2_field>)
+# By-id fallback (no alias)
+get_distinct_values_by_id(<financials_table_id>, <account_l1_5_field_id>)
+```
+If a distinct call errors, fall back to sampling rows and collect the values
+client-side:
+```
+get_data_by_alias(<financials_alias>, select=[<account_l1_5_field>, <account_l2_field>], limit=500)
+#   (or get_data_by_id(<financials_table_id>, select=[<account_l1_5_field_id>, ...], limit=500))
+#   → distinct <account_l1_5_field> values, distinct <account_l2_field> values
 ```
 
-If `get_field_distinct_values` returns a 409 error (known broken endpoint), fall back to:
+If you need exact totals or a fuller value set, aggregation also surfaces the
+distinct values as group keys:
 ```
-# Fetch sample records and extract unique values
-get_sample_records(table_id, n=20)
-# Or use aggregation to discover values:
-aggregate_table_data(table_id, dimensions=[<account_l1_5_field>], metrics=[{"field": "Amount", "agg": "SUM"}])
+get_aggregated_data_by_alias(<financials_alias>, dimensions=[<account_l1_5_field>], metrics=[{"field": <amount_field>, "agg": "SUM"}])
+#   (or get_aggregated_data_by_id(<financials_table_id>, dimensions=[<account_l1_5_field_id>], metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}]))
 ```
+(If this 500s on `<account_l1_5_field>`, swap to a sibling per Step 2's
+reactive-retry note; if the alias call fails, fall back to the by-id twin.)
 
 #### Step 4: Discover Scenario Values
 
+Collect the distinct values for the scenario dimensions with
+`get_distinct_values_by_alias(<financials_alias>, <scenario_field>)` (or the
+by-id twin). For `--type budget` / `--type variance` you also need
+`<cycle_field>` and `<planning_field>` values; do the same distinct call for
+each, or confirm them via aggregation:
 ```
-get_field_distinct_values(table_id, field_name=<scenario_field>)
-get_field_distinct_values(table_id, field_name=<scenario_cycle_field>)
-get_field_distinct_values(table_id, field_name=<planning_scenario_field>)
+get_aggregated_data_by_alias(<financials_alias>, dimensions=[<scenario_field>], metrics=[{"field": <amount_field>, "agg": "SUM"}])
+#   (or get_aggregated_data_by_id(<financials_table_id>, dimensions=[<scenario_field_id>], metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}]))
+# and likewise for <cycle_field>, <planning_field> when the report type uses them
 ```
 
 #### Step 5: Map Parent-Child Relationships (for detail reports)
@@ -212,12 +264,16 @@ get_field_distinct_values(table_id, field_name=<planning_scenario_field>)
 For `--type detail`, discover which child values belong to which parent:
 ```
 # For each L1.5 value, find which L2 values belong to it
-aggregate_table_data(
-  table_id,
+get_aggregated_data_by_alias(
+  <financials_alias>,
   dimensions=[<account_l1_5_field>, <account_l2_field>],
-  metrics=[{"field": "Amount", "agg": "COUNT"}],
+  metrics=[{"field": <amount_field>, "agg": "COUNT"}],
   filters=[{"name": <scenario_field>, "values": ["Actuals"], "is_excluded": false}]
 )
+#   (by-id twin: get_aggregated_data_by_id(<financials_table_id>,
+#    dimensions=[<account_l1_5_field_id>, <account_l2_field_id>],
+#    metrics=[{"field_id": <amount_field_id>, "agg": "COUNT"}],
+#    filters=[{"field_id": <scenario_field_id>, "values": ["Actuals"]}]))
 ```
 
 For Report_Field detail, also map L2 → Report_Field relationships.
@@ -437,8 +493,14 @@ Report what was generated:
 **"Not authenticated" error**
 - Connect via Connectors UI ("+" > Connectors > Datarails > Connect)
 
-**"No profile found" error**
-- Run `/dr-learn` to create a client profile first
+**No table matches the financials pattern in Step 2**
+- List the tables you found and ask the user which one holds their P&L /
+  financial data, then continue with that table.
+
+**A field can't be bound in Step 2 (e.g. no scenario cycle / planning field)**
+- For report types that don't use it, ignore it. For `--type budget` /
+  `--type variance`, ask the user which field to use, or fall back to a
+  single-scenario formula pattern.
 
 **`Value` turned into Excel's `VALUE` function after opening the workbook**
 - The workbook was generated without the `Value` defined name, so Excel
@@ -453,8 +515,10 @@ Report what was generated:
 - Check that dimension values match exactly (case-sensitive, exact spelling)
 - Re-run the skill to re-validate values against live data
 
-**`get_field_distinct_values` returns 409**
-- Known API issue. The skill falls back to aggregation or sample records for value discovery.
+**A distinct-values call errors**
+- Use `get_distinct_values_by_alias` / `get_distinct_values_by_id`. If a call
+  errors, the skill falls back to sampling rows (`get_data_by_alias` /
+  `get_data_by_id`, small limit) or aggregation group keys for value discovery.
 
 **Missing dimension values**
 - The live data may not contain all expected categories

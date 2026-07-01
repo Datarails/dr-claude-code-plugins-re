@@ -3,8 +3,16 @@ name: dr-reconcile
 description: Reconcile P&L vs KPI data sources. Validates consistency and identifies discrepancies with variance analysis.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__aggregate_table_data
-  - mcp__datarails-finance-os__list_finance_tables
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_data_by_alias
+  - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
+  - mcp__datarails-finance-os__list_business_metrics
   - Write
   - Read
   - Bash
@@ -16,6 +24,55 @@ argument-hint: "--year <YYYY> [--scenario <name>] [--tolerance-pct <#>] [--outpu
 Validate consistency between P&L and KPI data sources. Identifies discrepancies and explains variances.
 
 Essential for month-end close and financial validation.
+
+## How it pulls the two sides
+
+This skill is **self-contained** — it discovers the client's financials table,
+fields, and account categories inline (every Datarails environment names them
+differently; there is no saved profile). Do discovery once per conversation,
+then carry the values forward.
+
+1. **Discover the financials table and fields.** `list_data_models` → pick the
+   table whose name/alias matches `/financial|cube|p&?l|ledger|gl/i`, else the
+   largest by row count; note **both** its numeric `id` and its `alias` (alias
+   may be empty — prefer the alias path when present). Then
+   `list_aliased_fields(<alias>)` if it has an alias, else
+   `get_fields_by_id(<id>)` (capture each field's numeric `id`). Bind by
+   case-insensitive match: `amount` (`^amount$` → `transaction_amount` →
+   `value`), `scenario` (`^scenario$` → `^version$`), `date` (`reporting_date` →
+   `posting_date` → `^date$`), `account_l1` (`dr_acc_l1` → `account_l1` →
+   `account_group_l1`).
+
+> **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
+
+2. **Discover the account categories.**
+   `get_distinct_values_by_alias(<alias>, <account_field>)` (or
+   `get_distinct_values_by_id(<id>, <account_field_id>)`); if that errors, fall
+   back to `get_data_by_alias(<alias>, select=[<account_field>], limit=500)` (or
+   the by-id twin) and dedupe. Match `revenue` `/revenue|sales|income/i`, `cogs`
+   `/cogs|cost of goods|cost of sales|direct cost/i`, `opex`
+   `/operating|opex|expense|sg&a/i`.
+
+3. **P&L side — real totals by category.**
+   `get_aggregated_data_by_alias(<alias>, dimensions=[<account_field>],
+   metrics=[{"field": <amount_field>, "agg": "SUM"}], filters=[{"name":
+   <scenario_field>, "values": [<--scenario> or "Actuals"], "is_excluded":
+   false}])` (preferred), or the by-id twin
+   `get_aggregated_data_by_id(<id>, dimensions=[<account_field_id>],
+   metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}], filters=[{"field_id":
+   <scenario_field_id>, "values": [...]}])`. Scope the year with an **advanced**
+   date filter — `{"name": <date_field>, "values": {"type": "advanced", "val":
+   [{"condition": "total_range", "value": ["<jan1_epoch>", "<dec31_epoch>"]}]}}`
+   (epoch seconds as strings) — or add `<date_field>` as a dimension and filter
+   client-side.
+
+4. **KPI side — named metrics.** `list_business_metrics` returns the flat KPI
+   catalog (each entry: `id`, `name`, `description`, `category`, `kind`,
+   `dimensions[]`, `status_info{}`). Match the revenue / expense KPIs by name and
+   compute their values from the **same aggregated data** (`get_aggregated_data_by_alias`
+   / `get_aggregated_data_by_id`) so both sides are reconciled against the same
+   underlying rows. Reconciliation then compares the P&L total against the KPI
+   value for each line.
 
 ## Arguments
 
@@ -176,7 +233,7 @@ Reconcile with strict tolerance:
 
 ## Error Handling
 
-**"Revenue not found"** - Check P&L vs KPI account names in profile
+**"Revenue not found"** - Re-run discovery (`list_data_models` → `list_aliased_fields`/`get_fields_by_id` → `get_distinct_values_by_alias`/`get_distinct_values_by_id`) and confirm the P&L account category and the matching KPI metric name. There is no profile — discovery happens inline.
 
 **"Variance exceeds tolerance"** - Review exception sheet for details
 

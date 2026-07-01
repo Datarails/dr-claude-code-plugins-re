@@ -1,13 +1,18 @@
 ---
 name: dr-intelligence
-description: Generate comprehensive FP&A intelligence workbooks with auto-detected insights, recommendations, and professional Excel formatting. The most powerful financial analysis skill.
+description: Generate comprehensive FP&A intelligence workbooks with auto-detected insights, recommendations, and professional Excel formatting. The most powerful financial analysis skill. Self-contained — discovers the client's tables and fields on its own, no profile or setup step required.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__list_finance_tables
-  - mcp__datarails-finance-os__get_table_schema
-  - mcp__datarails-finance-os__aggregate_table_data
-  - mcp__datarails-finance-os__get_records_by_filter
-  - mcp__datarails-finance-os__detect_anomalies
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_data_by_alias
+  - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
+  - mcp__datarails-finance-os__list_business_metrics
   - mcp__datarails-finance-os__profile_numeric_fields
   - mcp__datarails-finance-os__profile_categorical_fields
   - Write
@@ -49,35 +54,104 @@ If any Datarails tool call fails with an authentication or connection error, tel
 
 Then STOP — do not retry until the user has reconnected.
 
-### Step 2: Load Client Profile
+### Step 2: Discover the financials table, its fields, and (if present) a KPI table
 
-Read the client profile to discover the correct table IDs and field mappings:
+**If you already discovered these earlier in THIS conversation, reuse them —
+skip to Step 3.** Discovery is cheap but not free; do it once per
+conversation, then carry the values forward.
 
-```
-Read: ${CLAUDE_PLUGIN_DATA}/client-profiles/{env}.json
-   (fall back to: config/client-profiles/{env}.json)
-```
+1. `list_data_models`. Pick the **financials** table: the one whose name (or
+   alias) matches `/financial|cube|p&?l|ledger|gl/i`; if none match, the largest
+   by row count. Note **both** its numeric `id` (`<financials_table_id>`) and its
+   `alias` (`<financials_alias>`; the alias may be empty). **Prefer the alias
+   path when an alias exists** — friendlier field names, far fewer tokens. Also
+   note any **KPI / metrics** table — name (or alias) matches `/kpi|metric|saas/i`
+   — as `<kpis_table_id>` / `<kpis_alias>` if one exists. If you found a
+   KPI/metrics table, the SaaS Metrics sheet pulls from it; otherwise build it
+   from whatever metrics live in the financials table.
 
-If no profile exists, tell the user to run `/dr-learn` first and STOP.
+2. Fields. If the table has an alias, `list_aliased_fields(<financials_alias>)`;
+   otherwise `get_fields_by_id(<financials_table_id>)` (capture each field's
+   numeric `id` — the by-id tools address fields by id). Bind these by
+   case-insensitive match on the field alias/name (respecting the noted type) —
+   bind only those the sheets use:
+   - `<amount_field>`     — numeric: `^amount$` → `transaction_amount` → `value`
+   - `<scenario_field>`   — categorical: `^scenario$` → `^version$`
+   - `<month_field>`      — date/period: `reporting_date` → `posting_date` → `^month$` → `^date$`
+   - `<account_l1_field>` — `dr_acc_l1` → `account_l1` → `account_group_l1`
+   - `<account_l2_field>` — `dr_acc_l2` → `account_l2` → `account_group_l2`
+   - `<vendor_field>`     — `^vendor$` → `vendor_name` → `supplier` (Vendor Analysis sheet)
+   - `<cost_center_field>` — `cost_center` → `department` → `dr_cost_center` (Cost Center P&L sheet)
 
-The profile provides:
-- `tables.financials.id` and `tables.kpis.id`
-- `field_mappings` (semantic name → actual API field, e.g. `account_l1` → `Cost_Center__c`)
-- `account_hierarchy` (Revenue / COGS / OpEx categories)
-- `aggregation.failed_fields` and `aggregation.field_alternatives` (substitute when an aggregation field is known to fail)
+> **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
+
+   If `<kpis_table_id>` exists, `list_aliased_fields(<kpis_alias>)` (or
+   `get_fields_by_id(<kpis_table_id>)`) and bind:
+   - `<metric_name_field>` — `^metric$` → `metric_name` → `kpi_name`
+   - `<quarter_field>`     — `^quarter$` → `quarter` → the KPI table's date field
+   - `<kpi_value_field>`   — numeric: `^value$` → `^amount$`
+
+   If `<amount_field>` or `<scenario_field>` has no clear match, ask the user
+   which field to use. A missing `<vendor_field>` or `<cost_center_field>`
+   just omits that sheet — don't block on it.
+
+3. Find the account category values the insight rules and filters need. Call
+   `get_distinct_values_by_alias(<financials_alias>, <account_l1_field>)` (or
+   `get_distinct_values_by_id(<financials_table_id>, <account_l1_field_id>)`). If
+   the distinct call errors, fall back to
+   `get_data_by_alias(<financials_alias>, select=[<account_l1_field>], limit=500)`
+   (or the by-id twin) and collect the distinct values. Match:
+   - `<revenue_value>` ← `/revenue|sales|income/i`
+   - `<cogs_value>`    ← `/cogs|cost of goods|cost of sales|direct cost/i`
+   - `<opex_value>`    ← `/operating|opex|expense|sg&a/i`
+
+   If a category has several candidates, pick the broadest top-level one; if
+   genuinely ambiguous, ask the user once.
+
+Aggregation-field failures are handled reactively, not pre-probed (see Step 3).
 
 ### Step 3: Fetch Data via MCP
 
-Run these data pulls in parallel where possible. Use `aggregate_table_data` first; fall back to `get_records_by_filter` only if aggregation is marked unsupported in the profile.
+Run these data pulls in parallel where possible. Use the aggregation tools
+first (`get_aggregated_data_by_alias` when the table has an alias, else
+`get_aggregated_data_by_id`); fall back to row fetches (`get_data_by_alias` /
+`get_data_by_id`) only if aggregation fails outright.
 
-1. **Monthly P&L** — `aggregate_table_data` grouped by `[account_l1, month]`, summed by `amount`, filtered to `--year`.
-2. **Monthly P&L by L2** — same, grouped by `[account_l1, account_l2, month]`. Used for top-20 expense drilldown and cost center P&L.
-3. **Vendor spend** — `aggregate_table_data` grouped by `[vendor]`, summed by `amount`, filtered to OpEx accounts in `--year`.
-4. **Cost center spend** — `aggregate_table_data` grouped by `[cost_center, month]`.
-5. **KPIs** — `aggregate_table_data` on the KPIs table grouped by `[metric_name, quarter]` for the year and one prior.
-6. **Anomalies** — `detect_anomalies` on the financials table; `profile_numeric_fields` for outlier statistics if needed.
+Aggregation call shapes:
+- Alias path: `get_aggregated_data_by_alias(alias=<financials_alias>,
+  dimensions=[<field_aliases>], metrics=[{"field": <amount_field>, "agg": "SUM"}],
+  filters=[...])`.
+- By-id path: `get_aggregated_data_by_id(table_id=<financials_table_id>,
+  dimensions=[<field_ids>], metrics=[{"field_id": <amount_field_id>, "agg":
+  "SUM"}], filters=[...])`.
 
-If a field listed in `aggregation.failed_fields` appears in a query, substitute via `aggregation.field_alternatives` before calling.
+1. **Monthly P&L** — aggregate on the financials table grouped by
+   `[<account_l1_field>, <month_field>]`, summed by `<amount_field>`. Scope
+   `--year` either by an advanced date filter on `<month_field>` (see below) or
+   by keeping `<month_field>` as a dimension and filtering client-side.
+2. **Monthly P&L by L2** — same, grouped by `[<account_l1_field>, <account_l2_field>, <month_field>]`. Used for top-20 expense drilldown and cost center P&L.
+3. **Vendor spend** — only if `<vendor_field>` was found: aggregate grouped by `[<vendor_field>]`, summed by `<amount_field>`, filtered to the `<opex_value>` accounts (from Step 2.3) for `--year`.
+4. **Cost center spend** — only if `<cost_center_field>` was found: aggregate grouped by `[<cost_center_field>, <month_field>]`.
+5. **KPIs** — only if `<kpis_table_id>` was found: aggregate on it grouped by `[<metric_name_field>, <quarter_field>]`, summed by `<kpi_value_field>`, for the year and one prior. For named-KPI questions you can also discover canonical KPIs via `list_business_metrics` (flat list — id, name, category, dimensions) and compute their values from the aggregated financials/KPI table here.
+6. **Anomalies** — `profile_numeric_fields` for baseline MIN/MAX/AVG/COUNT per
+   numeric field. This tool does NOT return outliers, std dev, or percentiles —
+   it returns baseline aggregates. There is no server-side anomaly tool; compute
+   outlier flags client-side using the σ-rule below applied to the monthly P&L
+   time series pulled in step 1.
+
+**Scoping by year (date filter):** date ranges now filter directly via an
+**advanced** filter — no epoch workaround. Pass
+`{"name": <month_field>, "values": {"type": "advanced", "val": [{"condition":
+"total_range", "value": ["<jan1_epoch>", "<dec31_epoch>"]}]}}` (by-alias) or the
+`{"field_id": <month_field_id>, ...}` form (by-id); epoch seconds go in as
+strings. Keeping `<month_field>` as a dimension and filtering client-side still
+works and is optional.
+
+**If an aggregation call fails on a dimension field with a 500:** that field
+isn't usable as a dimension for this client. Re-inspect the Step 2 schema for
+a sibling (e.g. `DR_ACC_L1.5` when `DR_ACC_L1` fails, or `account_group_l1`)
+and retry with it. If the alias call errors, retry the by-id twin. If no
+sibling works, tell the user which field failed.
 
 ### Step 4: Calculate Insights
 
@@ -120,7 +194,11 @@ Order matters — the dashboard is sheet 1, raw data is sheet 10.
 2. **Expense Deep Dive** — Top 20 expense accounts: amount, % of total OpEx, MoM Δ%, YoY Δ%. Color the % cells with a green→red color scale.
 3. **Variance Waterfall** — Current period vs. prior period: contribution to total variance line by line. Use a bar chart.
 4. **Trend Analysis** — 12-month rolling P&L: Revenue, COGS, Gross Profit, OpEx, Net Income. One line per metric, secondary axis for margin %.
-5. **Anomaly Report** — Auto-detected outliers from `detect_anomalies` + the σ-based rule above. Severity column, drill-down hint per row.
+5. **Anomaly Report** — Outlier rows identified by applying the σ-based
+   rule to the monthly P&L series. Use `profile_numeric_fields` for the
+   field-level baselines that feed the computation (there is no server-side
+   anomaly tool — the findings are computed client-side). Severity column,
+   drill-down hint per row.
 6. **Vendor Analysis** — Top 20 vendors: spend, % of OpEx, MoM Δ. Concentration risk flag column. Pie chart for top-10.
 7. **SaaS Metrics** — ARR, Net New ARR, NRR, GRR, CAC, LTV, LTV/CAC, Magic Number, Burn Multiple, CAC Payback. Quarterly columns; YoY column at right.
 8. **Sales Performance** — Rep-level: bookings, win rate, ACV, ramp status. Cohort table by hire quarter.
@@ -229,25 +307,29 @@ This workbook answers the **Top 10 Business Questions**:
 - Small datasets (1-2 years): ~1-2 minutes
 - Large datasets (3+ years): ~3-5 minutes
 
-Aggregation-first strategy keeps round-trips small. Pagination is the fallback only when the profile marks aggregation unsupported.
+Aggregation-first strategy keeps round-trips small. Pagination is the fallback only when aggregation fails outright.
 
 ## Troubleshooting
 
 **"Not authenticated" error**
 - Connect via Connectors UI ("+" → Connectors → Datarails → Connect).
 
-**"Profile not found"**
-- Run `/dr-learn` first to create a profile for the environment.
+**No table matches the financials pattern (Step 2)**
+- List the tables you found and ask the user which one holds their P&L /
+  financial data, then continue.
 
 **openpyxl not available locally**
 - Claude Code: `pip install openpyxl`.
 - Claude.ai / ChatGPT analysis tools have it preinstalled — if it's missing, the sandbox is unavailable; tell the user the skill needs a code-execution-capable client.
 
 **Aggregation fails on a field**
-- The profile's `aggregation.failed_fields` should already redirect to alternatives. If a new field fails, run `/dr-test` to refresh.
+- Swap to a sibling field from the Step 2 schema and retry (see Step 3). If
+  no sibling works, tell the user which field failed.
 
 **Missing data in sheets**
-- Check profile's field mappings. Run `/dr-learn` to refresh.
+- Re-check the fields bound in Step 2; a sheet whose source field
+  (`<vendor_field>`, `<cost_center_field>`, KPI table) wasn't found is
+  omitted by design.
 
 ## Related Skills
 
@@ -255,4 +337,3 @@ Aggregation-first strategy keeps round-trips small. Pagination is the fallback o
 - `/dr-insights` — Executive PowerPoint + Excel combo.
 - `/dr-anomalies-report` — Focused on data quality issues.
 - `/dr-reconcile` — P&L vs KPI validation.
-- `/dr-learn` — Build/refresh the client profile this skill depends on.

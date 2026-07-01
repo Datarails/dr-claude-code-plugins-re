@@ -3,7 +3,16 @@ name: dr-audit
 description: Generate SOX compliance audit reports with evidence packages. Creates professional PDF audit reports and Excel evidence workbooks.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__aggregate_table_data
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_data_by_alias
+  - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
+  - mcp__datarails-finance-os__list_business_metrics
   - Write
   - Read
   - Bash

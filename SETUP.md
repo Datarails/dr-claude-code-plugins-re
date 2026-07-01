@@ -54,21 +54,15 @@ claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp
 
 A browser window will open for OAuth login when you first use a Datarails tool.
 
-### Step 3: Create Client Profile (First Time)
-
-```
-/dr-learn
-```
-
-This discovers your table structure and creates a client profile (stored in plugin data directory, persistent across updates).
-
-### Step 4: Test
+### Step 3: Try a skill
 
 ```
 /dr-tables                             # List tables
-/dr-query <table_id> --sample          # Get sample data
+/dr-financial-summary                  # Quick revenue/expense/margin snapshot
 /dr-intelligence --year 2025           # Generate intelligence workbook
 ```
+
+No setup or profile step is needed — every skill discovers your financials table and field names on its own, each session.
 
 ---
 
@@ -98,7 +92,6 @@ A browser window opens for login. Tokens are managed and refreshed automatically
 
 | Skill | Description |
 |-------|-------------|
-| `/dr-learn` | Create client profile |
 | `/dr-test` | Test API field compatibility |
 | `/dr-tables` | List all Finance OS tables |
 | `/dr-tables <id>` | View schema for a specific table |

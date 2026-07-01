@@ -8,7 +8,7 @@ Help the user drill into a Datarails financial number to see the underlying line
 
 ## Step 1: Verify Connection
 
-Start by calling `list_finance_tables` to verify the connection is active.
+Start by calling `list_data_models` to verify the connection is active.
 
 **If the tool call fails:** The Datarails connector isn't connected. Tell the user to click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. Then STOP.
 
@@ -31,7 +31,7 @@ Extract each `"[DimensionName]"` and its corresponding value (the next argument)
 The user says something like: "Break down January 2026 Actuals Revenue"
 
 Map their description to dimension filters:
-- Use `get_table_schema` to find the correct field names
+- Resolve the financials table with `list_data_models` (note both its numeric `id` and its `alias`). If it has an alias, use `list_aliased_fields(<alias>)` to find field names; otherwise use `get_fields_by_id(<id>)` (capture each field's numeric `id`).
 - Common mappings: "Revenue" → account field, "Actuals" → Scenario field, "January 2026" → Reporting Date field
 - Ask clarifying questions if the description is ambiguous
 
@@ -56,25 +56,35 @@ Ask the user what they want to break down by. Suggest useful options:
 >
 > Or tell me the specific field names if you know them.
 
-Use `get_table_schema` to validate that the chosen fields exist.
+Use `list_aliased_fields(<alias>)` (or `get_fields_by_id(<id>)` for a table without an alias) to validate that the chosen fields exist.
 
 ## Step 5: Run the Aggregation
 
 **Aggregation rules:**
-- Date fields (`Reporting Date`, `Reporting Month`, etc.) must ALWAYS go in `dimensions`, never in `filters`. Date filters silently return empty results.
-- To limit to a specific period, include the date as a dimension and filter the results client-side after the response.
-- Only text fields (`Scenario`, `Account Group L0`, etc.) go in `filters`.
+- Text fields (`Scenario`, `Account Group L0`, etc.) go in `filters` as value lists.
+- Date fields filter directly now — pass an **advanced** filter, e.g. `{"name": <date_field>, "values": {"type": "advanced", "val": [{"condition": "total_range", "value": ["<start_epoch>", "<end_epoch>"]}]}}` (epoch seconds as strings). You can still add the date as a dimension and filter client-side if you prefer — both work.
 
+Alias path (preferred — use when the table has an alias):
 ```
-Use: mcp__datarails-finance-os__aggregate_table_data
+Use: mcp__datarails-finance-os__get_aggregated_data_by_alias
 Parameters:
-  table_id: <financials_table_id from list_finance_tables>
-  dimensions: [<chosen drill-down fields>]
-  metrics: [{"field": "Amount", "agg": "SUM"}]
+  alias: <financials_alias from list_data_models>
+  dimensions: [<chosen drill-down field aliases>]
+  metrics: [{"field": <amount_alias>, "agg": "SUM"}]
   filters: [<DR.GET dimension filters + any global filters>]
 ```
 
-**Important:** Use `aggregate_table_data` (not `get_records_by_filter`) because it has no row limit and returns properly computed totals.
+By-id fallback (table has no alias):
+```
+Use: mcp__datarails-finance-os__get_aggregated_data_by_id
+Parameters:
+  table_id: <financials_table_id from list_data_models>
+  dimensions: [<chosen drill-down field ids>]
+  metrics: [{"field_id": <amount_field_id>, "agg": "SUM"}]
+  filters: [<DR.GET dimension filters + any global filters, by field_id>]
+```
+
+**Important:** Use the aggregation tools (not `get_data_by_alias` / `get_data_by_id`) because they have no row limit and return properly computed totals.
 
 ## Step 6: Validate and Present
 

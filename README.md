@@ -51,7 +51,7 @@ Once the Datarails connector is connected, explore your data:
 
 ```
 /dr-tables                             # List available tables
-/dr-learn                              # Create client profile (first time)
+/dr-financial-summary                  # Quick revenue/expense/margin snapshot
 /dr-intelligence --year 2025           # Generate FP&A intelligence workbook
 ```
 
@@ -66,14 +66,20 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 ### Data Access & Setup
 | Skill | Description |
 |-------|-------------|
-| `/dr-learn` | Discover table structure and create client profile |
 | `/dr-tables` | List and explore tables |
 | `/dr-profile` | Profile field statistics |
-| `/dr-query` | Query and filter records |
+| `/dr-query` | Query and filter records (equality / IN-list filters) |
 | `/dr-extract` | Extract financial data to Excel |
-| `/dr-test` | Test API field compatibility and update profile |
+| `/dr-test` | Test API field compatibility and report which fields work as dimensions |
 | `/dr-anomalies` | Detect anomalies in a specific table |
 | `/dr-drilldown` | Drill down on DR.GET formula cells to see underlying detail |
+
+### Quick Views
+| Skill | Description |
+|-------|-------------|
+| `/dr-financial-summary` | Morning-check snapshot: revenue, expenses, gross margin |
+| `/dr-revenue-trends` | Revenue trends, growth rates, and composition |
+| `/dr-expense-analysis` | Top expense categories, concentration, and monthly trend |
 
 ### Financial Analysis
 | Skill | Description | Output |
@@ -132,7 +138,7 @@ Authentication is handled automatically via **OAuth 2.0 + PKCE** when you connec
 |---------|----------|
 | Tools not available | Connect via Connectors UI ("+" > Connectors > Datarails > Connect) |
 | "Not authenticated" | Disconnect and reconnect via Connectors UI |
-| "No profile found" | Run `/dr-learn` first |
+| Skill picked the wrong table/fields | Skills discover your financials table and fields automatically; if it guesses wrong, tell it which table/field to use and it will continue |
 | Skills not showing | Restart Claude Desktop / Claude Code |
 | Slow extraction | Normal for raw data (~90 rec/sec). Summaries use aggregation (~5s) |
 

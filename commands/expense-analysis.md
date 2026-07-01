@@ -8,22 +8,32 @@ Help the user understand where their money is going. Uses aggregation for comple
 
 ## Step 1: Verify Connection
 
-Start by calling `list_finance_tables` to verify the connection is active.
+Start by calling `list_data_models` to verify the connection is active.
 
 **If the tool call fails:** The Datarails connector isn't connected. Tell the user to click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**. Then STOP.
 
 ## Step 2: Find Financial Data
 
 ```
-Use: mcp__datarails-finance-os__list_finance_tables
+Use: mcp__datarails-finance-os__list_data_models
 ```
 
-Identify the main financials/P&L table.
+Identify the main financials/P&L table. Each entry carries both a numeric `id` and an `alias` (empty if the table has no alias). **Prefer the alias path when an alias exists** — friendlier field names, far fewer tokens.
 
 ## Step 3: Understand the Structure
 
+If the table has an alias, list its fields by alias:
+
 ```
-Use: mcp__datarails-finance-os__get_table_schema
+Use: mcp__datarails-finance-os__list_aliased_fields
+Parameters:
+  alias: <financials_alias>
+```
+
+Otherwise (no alias) list fields by id — capture each field's numeric `id`, the by-id tools address fields by id:
+
+```
+Use: mcp__datarails-finance-os__get_fields_by_id
 Parameters:
   table_id: <financials_table_id>
 ```
@@ -39,19 +49,34 @@ Look for:
 Use aggregation to get real totals (not estimates from 500-row samples):
 
 **Aggregation rules:**
-- Date fields (`Reporting Date`, `Reporting Month`, etc.) must ALWAYS go in `dimensions`, never in `filters`. Date filters silently return empty results.
-- To limit to a specific period, include the date as a dimension and filter the results client-side after the response.
-- Only text fields (`Scenario`, `Account Group L0`, etc.) go in `filters`.
+- Text fields (`Scenario`, `Account Group L0`, etc.) go in `filters` as value lists.
+- Date fields can be filtered directly via an **advanced** filter (e.g. `total_range` with epoch-second strings), or added to `dimensions` and filtered client-side — both work.
+
+Alias path (preferred):
 
 ```
-Use: mcp__datarails-finance-os__aggregate_table_data
+Use: mcp__datarails-finance-os__get_aggregated_data_by_alias
 Parameters:
-  table_id: <financials_table_id>
+  alias: <financials_alias>
   dimensions: ["<account_l1_field>", "<account_l2_field>"]
   metrics: [{"field": "<amount_field>", "agg": "SUM"}]
   filters: [
     {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false},
     {"name": "<account_l1_field>", "values": ["<revenue_category>"], "is_excluded": true}
+  ]
+```
+
+By-id fallback (no alias — fields addressed by numeric id):
+
+```
+Use: mcp__datarails-finance-os__get_aggregated_data_by_id
+Parameters:
+  table_id: <financials_table_id>
+  dimensions: [<account_l1_field_id>, <account_l2_field_id>]
+  metrics: [{"field_id": <amount_field_id>, "agg": "SUM"}]
+  filters: [
+    {"field_id": <scenario_field_id>, "values": ["Actuals"]},
+    {"field_id": <account_l1_field_id>, "values": ["<revenue_category>"], "is_excluded": true}
   ]
 ```
 
@@ -62,9 +87,9 @@ This excludes revenue and gives complete expense breakdown in ~5 seconds.
 ## Step 5: Get Monthly Expense Trend
 
 ```
-Use: mcp__datarails-finance-os__aggregate_table_data
+Use: mcp__datarails-finance-os__get_aggregated_data_by_alias
 Parameters:
-  table_id: <financials_table_id>
+  alias: <financials_alias>
   dimensions: ["<date_field>", "<account_l1_field>"]
   metrics: [{"field": "<amount_field>", "agg": "SUM"}]
   filters: [
@@ -72,6 +97,8 @@ Parameters:
     {"name": "<account_l1_field>", "values": ["<revenue_category>"], "is_excluded": true}
   ]
 ```
+
+(By-id twin: `mcp__datarails-finance-os__get_aggregated_data_by_id` with `table_id` and field ids, as in Step 4.)
 
 ## Step 6: Analyze and Present
 
@@ -118,11 +145,12 @@ Different organizations structure their data differently. Adapt based on what yo
 
 **If account hierarchy uses different names:**
 - Look for fields containing "Account", "Category", "Cost Center", "Department"
-- Use `get_table_schema` to discover available fields
+- Use `list_aliased_fields` (aliased table) or `get_fields_by_id` (by-id) to discover available fields
 
-**If aggregation fails for a field:**
+**If aggregation fails for a field (500 error):**
 - Try a different hierarchy level (L1 instead of L2, or L1.5)
-- If all aggregation fails, fall back to `get_records_by_filter` with limit 500 and note the totals are partial
+- If an alias call errors, retry the by-id twin
+- If all aggregation fails, fall back to `get_data_by_alias` (or `get_data_by_id`) with limit 500 and note the totals are partial
 
 ## Follow-up Questions to Offer
 

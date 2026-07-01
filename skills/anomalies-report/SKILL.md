@@ -1,14 +1,20 @@
 ---
 name: dr-anomalies-report
-description: Generate comprehensive anomaly detection report with Excel deliverables. Discovers data quality issues without requiring configuration.
+description: Generate a comprehensive data-quality Excel workbook from Finance OS tables. The MCP tools return baseline aggregates only; this skill derives findings, severity buckets, and the Data Quality Score client-side, then writes a multi-sheet workbook. Self-contained — pass --table-id to target a table directly, or it discovers the financials table on its own; no profile or setup step required.
 user-invocable: true
 allowed-tools:
-  - mcp__datarails-finance-os__list_finance_tables
-  - mcp__datarails-finance-os__get_table_schema
+  - mcp__datarails-finance-os__list_data_models
+  - mcp__datarails-finance-os__list_aliased_fields
+  - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__get_data_by_alias
+  - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__profile_numeric_fields
   - mcp__datarails-finance-os__profile_categorical_fields
-  - mcp__datarails-finance-os__detect_anomalies
-  - mcp__datarails-finance-os__get_records_by_filter
+  - mcp__datarails-finance-os__list_business_metrics
   - Write
   - Read
   - Bash
@@ -17,23 +23,31 @@ argument-hint: "[--table-id <id>] [--severity <level>] [--output <file>]"
 
 # Anomaly Detection Report
 
-Generate comprehensive data quality assessment report with automated anomaly detection.
+Generate a comprehensive data-quality Excel workbook for a Finance OS
+table. Works with any table — no pre-configuration required.
 
-This skill automatically discovers your data structure and detects issues without requiring pre-configuration. Works with any Datarails Finance OS table.
+> **Tool reality check:** the MCP `profile_numeric_fields` and
+> `profile_categorical_fields` tools are thin wrappers — they return
+> baseline aggregates only (SUM/AVG/MIN/MAX/COUNT for numerics,
+> distinct-value samples capped at 5 fields for categoricals). There is
+> no server-side anomaly tool. **This skill computes every finding,
+> severity bucket, and the Data Quality Score client-side.** See
+> `/dr-anomalies` for the per-category recipes; this skill consumes those
+> same recipes and packages the result as an Excel workbook.
 
 ## Design Principles
 
 **General-Purpose**:
 - ✅ No hardcoded table IDs or field names
 - ✅ Adapts to any client structure
-- ✅ Works with and without client profiles
-- ✅ Falls back to discovery mode if profile missing
+- ✅ Pass `--table-id` to target any table directly (zero discovery)
+- ✅ Otherwise discovers the financials table inline
 
 ## Arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--table-id <id>` | Specific table to analyze | Uses profile or discovers automatically |
+| `--table-id <id>` | Specific table to analyze (used directly, no discovery) | Discovers the financials table |
 | `--severity <level>` | Filter results: critical, high, medium, low | All |
 | `--output <file>` | Output filename | `tmp/Anomaly_Report_TIMESTAMP.xlsx` |
 
@@ -57,22 +71,97 @@ This skill automatically discovers your data structure and detects issues withou
 - Count and context
 
 ### Analysis Sheets
-- **Numeric Analysis**: Min, max, mean, std dev for numeric fields
-- **Categorical Analysis**: Distinct values, cardinality, frequency
-- **Sample Records**: Actual data samples for top anomalies
+- **Numeric Analysis**: SUM, AVG, MIN, MAX, COUNT per numeric field (from
+  `profile_numeric_fields`) plus a skill-derived range-band outlier
+  flag. Std dev and percentiles are not returned by the API and are
+  not reported unless the skill bucketed the field via
+  `get_aggregated_data_by_alias` / `get_aggregated_data_by_id` (note
+  that in the sheet when present).
+- **Categorical Analysis**: Distinct count and sample values from
+  `profile_categorical_fields` (capped at 5 fields per call), plus
+  per-value frequencies derived from `get_aggregated_data_by_alias` /
+  `get_aggregated_data_by_id`.
+- **Sample Records**: Actual data samples for top findings, fetched
+  via `get_data_by_alias` / `get_data_by_id` after the skill identifies
+  the IDs to pull.
 
 ## Workflow
 
 **Phase 1: Discovery**
 1. Verify connection (if tools fail, guide user to Connectors UI)
-2. If no `--table-id`, discover tables or use profile
-3. Load table schema
+2. Resolve the target table (see below) — note **both** its numeric `id` and
+   its `alias` (the alias may be empty)
+3. Load that table's fields — if it has an alias, `list_aliased_fields(<alias>)`
+   (business-friendly aliases); otherwise `get_fields_by_id(<table_id>)`
+   (capture each field's numeric `id` — the by-id tools need ids). **Prefer the
+   alias path when an alias exists.**
 
-**Phase 2: Anomaly Detection**
-1. Run `detect_anomalies` - Automated data quality checks
-2. Profile numeric fields - Statistics and outliers
-3. Profile categorical fields - Cardinality and frequencies
-4. Fetch sample records - Get actual data for investigation
+> **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
+
+**Resolve the target table:**
+
+- **If `--table-id <id>` was passed:** use it directly as `<table_id>`. **No
+  discovery needed** — the user named the table. This works for any table,
+  financial or not; skip straight to loading its fields. (Don't try to
+  name-match or look for category values that may not exist on an arbitrary
+  table.) Resolve its alias via `list_data_models` if you want the alias path.
+
+- **Otherwise (default / no-arg path):** discover the financials table inline.
+  **If you already discovered it earlier in THIS conversation, reuse it.**
+  1. `list_data_models`. Pick the financials table: the one whose name (or
+     alias) matches `/financial|cube|p&?l|ledger|gl/i`; if none match, the
+     largest by row count. Note its numeric `id` and its `alias`.
+  2. Load fields with `list_aliased_fields(<alias>)` (if aliased) or
+     `get_fields_by_id(<table_id>)`. The anomaly analysis is field-agnostic —
+     it profiles whatever numeric and categorical fields the schema exposes —
+     so no semantic field binding is required here. When per-value frequency,
+     null, or duplicate detection needs a grouping dimension, take the
+     categorical fields straight from this schema.
+  3. If category-aware findings (rare-value, future-dated) need the account
+     dimension, collect distinct values via
+     `get_distinct_values_by_alias(<alias>, <account_field>)` (or
+     `get_distinct_values_by_id(<table_id>, <account_field_id>)`). If the
+     distinct call errors, fall back to
+     `get_data_by_alias(<alias>, select=[<account_field>], limit=500)` (or the
+     by-id twin) and dedupe.
+
+Aggregation-field failures are handled reactively, not pre-probed: if
+`get_aggregated_data_by_alias` / `get_aggregated_data_by_id` 500s on a
+dimension field, re-inspect the schema for a sibling and retry; if the alias
+call fails, fall back to the by-id twin; if none works, tell the user which
+field failed.
+
+**Phase 2: Gather baseline aggregates**
+
+1. `profile_numeric_fields(table_id)` — full numeric coverage
+   (SUM/AVG/MIN/MAX/COUNT per numeric field). Treat the result as a
+   starting point, not as classified findings.
+2. `profile_categorical_fields(table_id, fields=[...])` — pass an
+   explicit field list (tool silently caps at 5 per call; loop as
+   needed to cover them all).
+3. For per-value frequencies, null counts, and duplicate detection:
+   `get_aggregated_data_by_alias` (preferred) or
+   `get_aggregated_data_by_id` grouped by the relevant dimension(s) with
+   `COUNT` as the metric — by-alias `metrics=[{"field": <field_alias>,
+   "agg": "COUNT"}]`, by-id `metrics=[{"field_id": <field_id>, "agg":
+   "COUNT"}]`. **This is where the actual findings come from** — the
+   profile tools alone can't produce them.
+4. For top-finding row samples: `get_data_by_alias` /
+   `get_data_by_id`. You can filter directly with an advanced condition
+   tree — e.g. comparison `{"name": <amount_alias>, "values":
+   {"type": "advanced", "val": [{"condition": "gt", "value":
+   "<band>"}]}}` to pull outlier rows, or a value-list IN of the
+   offending IDs (`{"name": <id_alias>, "values": [...]}`). Comparisons,
+   ranges, and `is null` are all supported — no need to pre-identify IDs
+   purely because the filter API can't express a comparison.
+
+**Phase 2b: Derive findings (client-side)**
+
+Apply the recipes from `/dr-anomalies` (range-band outliers, null
+rates, duplicates, rare-category values, future-dated rows) to the
+aggregates from Phase 2. Bucket by severity using the heuristics in
+that skill. Drop categories the API can't support (referential
+integrity, character-level hygiene).
 
 ## Datarails Brand Styling
 
@@ -140,15 +229,20 @@ workbooks; apply this contract when adding DR.GET formulas to a workbook here.
 <!-- end:drget-authoring-contract -->
 
 **Phase 3: Report Generation**
-1. Categorize findings by severity
-2. Generate Excel workbook with multiple sheets
-3. Apply professional formatting
-4. Calculate data quality score
+1. Categorize the skill-derived findings into Critical / High / Medium / Low
+   per the heuristics in `/dr-anomalies` (the skill, not the tool).
+2. Compute the Data Quality Score from those counts (formula below).
+3. Generate the Excel workbook with the sheets described in
+   "What It Reports". Use openpyxl locally — no server-side rendering.
+4. Apply Datarails brand styling (see below).
 
 **Phase 4: Summary**
-1. Display key findings
-2. Show health status
-3. Guide next steps
+1. Display key findings — make clear in the spoken summary that every
+   number was derived from baseline aggregates, not produced by a
+   single tool call.
+2. Show health status (Excellent / Good / Fair / Poor / Critical).
+3. Guide next steps (e.g. "drill into the 23 duplicate transaction_ids
+   via `/dr-query` with an IN list").
 
 ## Examples
 
@@ -163,11 +257,11 @@ Output:
 ✓ Found financials table: TABLE_ID
 
 📊 Analyzing table TABLE_ID...
-  🔬 Running anomaly detection...
-  📈 Profiling numeric fields...
-  📝 Profiling categorical fields...
-  🔍 Fetching sample records...
-  📊 Summarizing results...
+  📈 Profiling numeric fields (SUM/AVG/MIN/MAX/COUNT)...
+  📝 Profiling categorical fields (distinct + samples)...
+  📊 Aggregating per-value counts for duplicate / null detection...
+  🧮 Computing findings + severity buckets client-side...
+  🔍 Fetching sample records for top findings...
   📄 Generating Excel report...
 
 ✅ Report generated: tmp/Anomaly_Report_2026-02-03_143022.xlsx
@@ -216,24 +310,28 @@ Clamped to 0-100 range
 
 ## Adaptive Behavior
 
-### With Client Profile
-- Uses table IDs from `${CLAUDE_PLUGIN_DATA}/client-profiles/<env>.json` (or `config/client-profiles/<env>.json`)
-- Uses discovered field names and mappings
-- Applies business rules from profile notes
+### With `--table-id`
+- Uses the supplied table directly — no discovery, no name-matching
+- Reads the schema and profiles whatever numeric/categorical fields it exposes
+- Works on any table, financial or not
 
-### Without Client Profile
-- Lists available tables
-- Automatically discovers table schema
+### Default (no `--table-id`)
+- Lists available tables and picks the financials table by name pattern (else largest)
+- Automatically reads the table schema
 - Infers field purposes from names and data types
 - Uses general data quality rules
 
-### Fallback Discovery
-If profile incomplete or unavailable:
-1. List all Finance OS tables
-2. Identify likely data tables (those with numeric fields)
-3. Get full schema
-4. Discover field purposes automatically
-5. Run analysis
+### Field discovery
+Whichever path resolved the table:
+1. Get the full field list (`list_aliased_fields` if aliased, else
+   `get_fields_by_id`)
+2. Identify numeric fields (for range-band / outlier checks) and categorical
+   fields (for frequency / null / duplicate checks) from it
+3. For category-aware findings, collect distinct values via
+   `get_distinct_values_by_alias` / `get_distinct_values_by_id` (fall back to
+   sampling rows with `get_data_by_alias` / `get_data_by_id` only if the
+   distinct call errors)
+4. Run analysis
 
 ## Use Cases
 
@@ -281,17 +379,16 @@ Each report includes:
 - Verify you have access to Finance OS
 
 **"Table not found" error**
-- Verify table ID is correct
+- Verify the `--table-id` value is correct
 - Run `/dr-tables` to see available tables
 
-**"Incomplete profile" error**
-- Run `/dr-learn` to refresh profile
-- Or specify `--table-id` to override
+**No table matches the financials pattern (default path)**
+- List the tables you found and ask the user which one to analyze, or have
+  them re-run with `--table-id <id>`.
 
 ## Related Skills
 
 - `/dr-tables` - List and explore available tables
-- `/dr-learn` - Discover and create client profiles
 - `/dr-extract` - Extract validated financial data
 - `/dr-reconcile` - Compare P&L vs KPI data
 
