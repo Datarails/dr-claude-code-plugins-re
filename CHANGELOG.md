@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [3.0.2] — 2026-07-01
+
+### Changed
+- **Made the Excel Add-In bridge internal.** `datarails-excel-agent` (bridge protocol) and `excel-context` (`dr-excel-context`, the orchestrator) are dev/desktop-only — the Add-In bridge is unusable in the public Cowork target — yet they were being carried into the public promotion as regular skills. Renamed both to `*__internal` so the publish pipeline strips them from the public mirror. The explicit cross-references in the public `drilldown` / `get-formula` / `forecast-variance` skills were repointed to the **Excel Context Contract in `CLAUDE.md`** (retained) so no public skill hard-points at a stripped skill; that contract now carries a one-line note that the bridge is internal/desktop-only and dormant in the public target. `drilldown` stays public (it degrades to its MCP/openpyxl path when no Excel bridge is present).
+
 ## [3.0.1] — 2026-07-01
 
 ### Changed

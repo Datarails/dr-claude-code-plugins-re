@@ -194,6 +194,12 @@ in context everywhere else.
 
 ### Excel Context Contract
 
+> **Internal / desktop-only.** The Excel Add-In bridge skills this contract governs —
+> `datarails-excel-agent` and `dr-excel-context` (`*__internal` folders) — are stripped
+> from the public mirror by the publish pipeline. This contract only applies in a live
+> Excel Add-In context (desktop); in the public/Cowork target there is no bridge, so the
+> Excel-context path is dormant and public finance skills fall through to their MCP path.
+
 > **Terminology — "agent" means the `datarails-excel-agent` skill, NOT the MCP connector.**
 > Throughout these skills, **"the agent" / "agent bridge" / "agent refresh" / "agent
 > drill-down" / "agent commands" / "agent mode"** all refer to the **`datarails-excel-agent`

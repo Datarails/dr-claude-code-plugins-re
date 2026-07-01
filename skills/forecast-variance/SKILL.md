@@ -47,7 +47,7 @@ When this skill is invoked from within **Claude in Excel** (the task pane add-in
 Before any data pull or schema discovery, run the `agent.get_session` probe through the
 bridge. **`agent.get_session` is not an MCP tool** — you run it by executing Office.js via
 the `execute_office_js` tool to write the request to the `__dr_agent` sheet and read the
-response (see `datarails-excel-agent` §Transport + §2/§3). Do **not** call the
+response (see the Excel Context Contract in CLAUDE.md, §Transport). Do **not** call the
 `datarails-finance-os` MCP connector for this.
 
 - **Probe fails** (no `execute_office_js` / Office.js tool, or no bridge sheet) → not in Excel context. Fall back to file-output mode. Stop here.
@@ -437,7 +437,7 @@ Works with:
 - `/dr-insights` - Contextual trend analysis
 - `/dr-reconcile` - Validate scenario consistency
 - `/dr-dashboard` - Current performance view
-- `datarails-excel-agent` - In Excel context (see that skill's catalog for exact params/timeouts):
+- **Excel Add-In bridge** - In Excel context (see the Excel Context Contract in CLAUDE.md for exact params/timeouts):
   - `agent.get_session` — verify Excel context + login state (Step 0)
   - `connect_file` — connect workbook; **only** needed for `create_dynamic_range` / `drilldown_*`, confirm with user first
   - `refresh_ribbon` — refresh stale data before pulling (`timeoutMs: 600000`); ask once per session

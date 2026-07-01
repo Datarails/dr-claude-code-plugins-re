@@ -31,8 +31,8 @@ Generate Excel workbooks containing DR.GET formulas that pull live financial dat
 > in a **live Excel context** (add-in agent bridge available) and writes `=DR.GET(...)` formulas
 > into the open workbook, the cells show **"Loading…" / `#BUSY!` / `#N/A`** until refreshed.
 > You **MUST** fire an agent refresh afterward — `refresh_selected_cells_ribbon` (written range)
-> or `refresh_ribbon` (whole workbook) via `datarails-excel-agent` (connector mode
-> `/dr-excel-context refresh-after-insert`) — and **never** report a value before that refresh,
+> or `refresh_ribbon` (whole workbook) via the Excel Add-In bridge (the refresh-after-insert
+> delegation point of the Excel Context Contract in CLAUDE.md) — and **never** report a value before that refresh,
 > and **never** substitute a native Excel recalc (it won't pull Datarails data). Writing DR.GET
 > formulas and refreshing them is one atomic step. (File-output mode in Claude Code is exempt —
 > the formulas populate when the user opens the file with the add-in.)
