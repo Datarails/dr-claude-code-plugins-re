@@ -46,13 +46,10 @@ Skills are installed globally and available from any project.
 
 ### Step 2: Connect to Datarails
 
-Add the Datarails connector:
-
-```
-claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp
-```
-
-A browser window will open for OAuth login when you first use a Datarails tool.
+The connector is **bundled with the plugin** — the server `datarails-finance-os`
+(`https://mcp.datarails.com/mcp`) is registered automatically on install. No
+`claude mcp add` step is needed. A browser window opens for OAuth login the
+first time a Datarails tool is used.
 
 ### Step 3: Try a skill
 
@@ -73,7 +70,7 @@ Authentication is handled automatically via **OAuth 2.0 + PKCE** when you connec
 ### Connecting
 
 - **Claude Desktop / Cowork:** Click "+" > Connectors > Datarails > Connect
-- **Claude Code (terminal):** `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`
+- **Claude Code (terminal):** the connector is bundled with the plugin — a browser window opens for OAuth on first tool use.
 
 A browser window opens for login. Tokens are managed and refreshed automatically.
 
@@ -81,7 +78,7 @@ A browser window opens for login. Tokens are managed and refreshed automatically
 
 | Problem | Solution |
 |---------|----------|
-| Tools not available | Connect via Connectors UI or `claude mcp add` command |
+| Tools not available | Verify the plugin is installed and enabled (`/plugin`); reconnect the Datarails connector if prompted |
 | "Not authenticated" | Disconnect and reconnect via Connectors UI |
 | Browser doesn't open | Check default browser settings |
 | Need different environment | Disconnect and reconnect |
@@ -98,13 +95,16 @@ A browser window opens for login. Tokens are managed and refreshed automatically
 | `/dr-profile <id>` | Profile table statistics |
 | `/dr-anomalies <id>` | Detect data anomalies |
 | `/dr-query <id> --sample` | Get sample records |
+| `/dr-financial-summary` | Revenue/expense/margin snapshot |
+| `/dr-revenue-trends` | Revenue trends and growth rates |
+| `/dr-expense-analysis` | Top expense categories and trends |
 | `/dr-extract --year 2025` | Extract financial data to Excel |
 | `/dr-intelligence --year 2025` | Generate FP&A intelligence workbook |
 | `/dr-insights --year 2025` | Executive insights with PowerPoint |
-| `/dr-reconcile --year 2025` | P&L vs KPI validation |
+| `/dr-reconcile --year 2025` | Independent-source pipeline-consistency checks |
 | `/dr-dashboard` | Executive KPI dashboard |
-| `/dr-forecast-variance --year 2025` | Budget vs actual variance |
-| `/dr-audit --year 2025` | SOX compliance audit |
+| `/dr-forecast-variance --year 2025` | Scenario/plan-vs-actual variance |
+| `/dr-audit --year 2025` | Audit-support evidence package (SOX-oriented reports) |
 | `/dr-departments --year 2025` | Department P&L analysis |
 | `/dr-get-formula` | Generate Excel with DR.GET formulas |
 | `/dr-drilldown` | Drill down on DR.GET formula cells |
@@ -116,8 +116,8 @@ A browser window opens for login. Tokens are managed and refreshed automatically
 
 | Approach | Speed | Use Case |
 |----------|-------|----------|
-| Aggregation API | ~5 seconds | Summaries, totals, grouped data |
-| Pagination | ~10 minutes (50K+ rows) | Raw data extraction, full exports |
+| Aggregation API | Fast — returns in seconds, no row limit | Summaries, totals, grouped data |
+| Pagination | Much slower — capped at 500 rows per page | Raw data extraction, full exports |
 
 Most skills use the aggregation API for fast results. Only `/dr-extract` with raw data needs pagination.
 

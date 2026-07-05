@@ -55,7 +55,7 @@ Once the Datarails connector is connected, explore your data:
 /dr-intelligence --year 2025           # Generate FP&A intelligence workbook
 ```
 
-**Connecting:** In Claude Desktop, click "+" > Connectors > Datarails > Connect. In Claude Code terminal, run `claude mcp add --transport http datarails-mcp https://mcp.datarails.com/mcp`.
+**Connecting:** In Claude Desktop, click "+" > Connectors > Datarails > Connect. In Claude Code, the connector is bundled with the plugin — a browser OAuth window opens the first time a skill uses it; no manual `claude mcp add` step is needed.
 
 New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)** for a hands-on walkthrough (~15 minutes).
 
@@ -63,16 +63,16 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 
 ## Skills
 
-### Data Access & Setup
+### Data Access & Exploration
 | Skill | Description |
 |-------|-------------|
 | `/dr-tables` | List and explore tables |
 | `/dr-profile` | Profile field statistics |
-| `/dr-query` | Query and filter records (equality / IN-list filters) |
+| `/dr-query` | Query and filter records — value-list and advanced filters (comparisons, ranges, text matching, null checks, date ranges) |
 | `/dr-extract` | Extract financial data to Excel |
 | `/dr-test` | Test API field compatibility and report which fields work as dimensions |
 | `/dr-anomalies` | Detect anomalies in a specific table |
-| `/dr-drilldown` | Drill down on DR.GET formula cells to see underlying detail |
+| `/dr-drilldown` | Drill down on a DR.GET value — from a workbook cell, a pasted formula, or a plain-language description (no file needed) |
 
 ### Quick Views
 | Skill | Description |
@@ -87,10 +87,10 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 | `/dr-intelligence` | **Most powerful** - FP&A intelligence workbook with auto-insights | 10-sheet Excel |
 | `/dr-anomalies-report` | Data quality assessment with anomaly detection | Excel report |
 | `/dr-insights` | Trend analysis and executive insights | PowerPoint + Excel |
-| `/dr-reconcile` | P&L vs KPI consistency validation | Excel report |
+| `/dr-reconcile` | Independent-source pipeline-consistency checks (cross-endpoint agreement, balance-sheet identity, roll-ups, scenario/period integrity) — validates the pipeline, not source systems | Excel report |
 | `/dr-dashboard` | Executive KPI monitoring | Excel + PowerPoint |
-| `/dr-forecast-variance` | Budget vs actual variance analysis | Excel + PowerPoint |
-| `/dr-audit` | SOX compliance audit reporting | PDF + Excel |
+| `/dr-forecast-variance` | Scenario/plan-vs-actual variance analysis (scenarios discovered at runtime) | Excel + PowerPoint |
+| `/dr-audit` | Audit-support evidence package (completeness, reconciliation, mapping-integrity, substantive samples) — not a SOX certification; ITGC/access-control evidence out of scope | PDF + Excel |
 | `/dr-departments` | Department P&L analysis | Excel + PowerPoint |
 | `/dr-get-formula` | Generate Excel with DR.GET formulas | Excel workbook |
 
@@ -112,15 +112,15 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 /dr-intelligence --year 2025                    # Full intelligence workbook
 ```
 
-**10 Sheets Generated:**
+**Sheets Generated** (up to 10 — conditional sheets are included only when the org's data sources them, and omitted rather than fabricated):
 1. Insights Dashboard - Top 5 findings with severity
 2. Expense Deep Dive - Top 20 accounts, % of total
 3. Variance Waterfall - What changed and why
 4. Trend Analysis - 12-month trends
 5. Anomaly Report - Auto-detected outliers
-6. Vendor Analysis - Top vendors, concentration risk
-7. SaaS Metrics - ARR, LTV, CAC, Efficiency
-8. Sales Performance - Rep leaderboard
+6. Vendor Analysis - Top vendors, concentration risk *(only when vendor-level data exists)*
+7. SaaS Metrics - ARR, NRR, CAC, LTV *(only when the org's data sources these metrics; omitted otherwise)*
+8. Sales Performance - Rep leaderboard *(only when rep/bookings data exists; omitted otherwise)*
 9. Cost Center P&L - Department detail
 10. Raw Data - Pivot-ready for analysis
 
@@ -140,7 +140,7 @@ Authentication is handled automatically via **OAuth 2.0 + PKCE** when you connec
 | "Not authenticated" | Disconnect and reconnect via Connectors UI |
 | Skill picked the wrong table/fields | Skills discover your financials table and fields automatically; if it guesses wrong, tell it which table/field to use and it will continue |
 | Skills not showing | Restart Claude Desktop / Claude Code |
-| Slow extraction | Normal for raw data (~90 rec/sec). Summaries use aggregation (~5s) |
+| Slow extraction | Raw row extraction pages 500 rows at a time and can take minutes on large tables; summary skills use aggregation, which returns in seconds |
 
 See [SETUP.md](SETUP.md) for detailed setup and troubleshooting.
 
@@ -148,14 +148,8 @@ See [SETUP.md](SETUP.md) for detailed setup and troubleshooting.
 
 ## For Maintainers
 
-### Publishing Updates
-
-```bash
-# Bump version in .claude-plugin/plugin.json first
-git tag v2.5.0
-git push origin main --tags
-# GitHub Actions builds the release ZIP automatically
-```
+This is the published mirror. Development, versioning, and the release/promotion
+flow live in the internal repo (`dr-internal-plugins`) — see its `RELEASING.md`.
 
 ---
 
