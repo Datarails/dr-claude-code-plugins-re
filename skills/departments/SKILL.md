@@ -34,6 +34,25 @@ Creates detailed departmental reports for team leads and management reviews.
 | `--output-xlsx <file>` | Excel output path | `tmp/Department_Analysis_YYYY_TIMESTAMP.xlsx` |
 | `--output-pptx <file>` | PowerPoint output path | `tmp/Department_Review_YYYY_TIMESTAMP.pptx` |
 
+## Data Discovery
+
+Run discovery before any aggregation — table, field, and category names differ per org and are never hardcoded:
+
+1. **Table** — `list_data_models` to find the financials table (id + alias).
+2. **Fields** — `get_fields_by_id` (or `list_aliased_fields`) to identify the department-like dimension (alias/name matching `/department|cost.?center|team|business.?unit/i`), the account-hierarchy level fields, the scenario field, the date field, and the amount field. If no department-like field exists, say so and offer the closest discovered dimension instead.
+
+> **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
+> 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
+> 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+
+Bind the analysis to what discovery returned:
+
+- **Department P&L categories** (revenue / COGS / OpEx-like buckets) come from the account-hierarchy level chosen in item 2 above — build every per-department P&L at that grain, scoped to P&L flows with balance-sheet buckets excluded.
+- **Plan comparisons** use whichever plan side the org actually has: a budget-like scenario if one appears in the discovered scenario domain, otherwise versions of the discovered planning-version-like field. If neither exists, drop the plan-vs-actual sections and tell the user which scenarios do exist.
+- **Period scope** — filter every aggregate to the requested `--year` via the discovered date field (this is the skill's default scope per item 3; never an unscoped all-time total), and label every sheet and slide with the period + scenario (and plan version, if any) it covers.
+
 ## Department Metrics
 
 ### Revenue & Expense
@@ -41,8 +60,10 @@ Creates detailed departmental reports for team leads and management reviews.
 - Expense breakdown
 - Net contribution
 
+Categorized at the discovered account grain — P&L flows only; balance-sheet buckets are never presented as revenue or expense.
+
 ### Performance
-- Budget vs actual
+- Plan vs actual (against the discovered plan side — budget-like scenario or planning version; skipped, with a note, if the org has neither)
 - Variance analysis
 - Year-over-year comparison
 
@@ -70,7 +91,7 @@ When generating Excel or PowerPoint files, apply Datarails brand styling:
 | Favorable | `2ECC71` | Positive variance / good KPI delta |
 | Unfavorable | `E74C3C` | Negative variance / bad KPI delta |
 | Chart 1 | `0C142B` | Actuals (navy) |
-| Chart 2 | `F93576` | Budget (hot pink) |
+| Chart 2 | `F93576` | Budget/Plan (hot pink) |
 | Chart 3 | `00B4D8` | Teal |
 | Chart 4 | `FFA30F` | Amber |
 
@@ -120,15 +141,19 @@ workbooks; apply this contract when adding DR.GET formulas to a workbook here.
 
 ### Excel Department Pack
 - Summary by department
-- Detailed P&L per department
+- Detailed P&L per department (at the discovered account grain, P&L flows only)
 - Variance analysis
 - Comparison charts
+
+Every sheet is labeled with the period + scenario (and plan version, if any) it covers.
 
 ### PowerPoint Department Review
 - One slide per department
 - Key metrics highlight
-- Budget performance
+- Plan performance (only when a plan side was discovered — budget-like scenario or planning version)
 - Comparison to average
+
+Every slide states the period + scenario it covers.
 
 ## Examples
 
@@ -196,7 +221,7 @@ workbooks; apply this contract when adding DR.GET formulas to a workbook here.
 - Productivity
 
 **Performance**:
-- Budget variance
+- Plan variance (when a discovered plan side exists)
 - Trend analysis
 - YoY comparison
 

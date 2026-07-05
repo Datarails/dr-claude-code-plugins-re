@@ -35,8 +35,9 @@ them.
 
 ## Purpose
 
-The Datarails aggregation API works for most fields (~212/220) but some
-fields fail per-client (500 errors). This skill:
+The Datarails aggregation API works for nearly all fields — an all-PASS
+result is the norm — but occasionally a field fails per-client (500 errors).
+This skill:
 1. Discovers the financials table and its candidate categorical fields
 2. Tests each candidate field against aggregation
 3. Reports pass/fail with timing
@@ -63,8 +64,9 @@ it does not persist anything to disk.
 ### What It Reports (to the user, Phase 5)
 - Whether aggregation works at all for this table
 - Which fields PASS as aggregation dimensions and which FAIL (500)
-- The suggested sibling alternative for each failed field (e.g.
-  `DR_ACC_L1` → `DR_ACC_L1.5`)
+- The suggested sibling alternative for each failed field — a sibling
+  account-level field from the discovered schema (orgs often carry
+  in-between levels)
 - When the test was run
 
 Run this skill whenever a downstream skill reports an unexpected aggregation
@@ -125,6 +127,9 @@ case-insensitive name/alias match, respecting type):
 - `<amount_field>`   — numeric metric: `^amount$` → `transaction_amount` → `value`
 - `<scenario_field>` — categorical filter: `^scenario$` → `^version$`
 
+If neither chain matches (e.g. non-English field names), show the schema's
+field list and ask the user which fields hold the amount and the scenario.
+
 Then build the list of candidate categorical/string fields to test —
 **every** categorical/string field in the schema is a candidate. Don't skip
 any; discovering which ones work is the point.
@@ -136,14 +141,16 @@ still covers all of them):
 1. `<scenario_field>`
 2. the date field (`reporting_date` → `posting_date` → `^date$`)
 3. account-hierarchy fields, matched case-insensitively from the schema —
-   e.g. `DR_ACC_L0`, `DR_ACC_L1`, `DR_ACC_L2`, and any sibling/alternate
-   levels such as `DR_ACC_L1.5` / `L1_5`
+   e.g. `DR_ACC_L0`, `DR_ACC_L1`, `DR_ACC_L2`, plus any sibling/alternate
+   account-level fields the discovered schema carries (orgs often have
+   in-between levels)
 4. department / cost-center fields if present
 5. every other categorical field from the schema
 
-When a primary account level is in the list, make sure its likely siblings
-(e.g. `DR_ACC_L1.5` for `DR_ACC_L1`) are also in the candidate list so Step 6
-can suggest a working alternative.
+When a primary account level is in the list, make sure any sibling
+account-level fields from the discovered schema (orgs often carry in-between
+levels) are also in the candidate list so Step 6 can suggest a working
+alternative.
 
 ### Phase 3: Aggregation Testing
 
@@ -167,7 +174,7 @@ Parameters:
   dimensions: ["<field_alias>"]
   metrics: [{"field": "<amount_field>", "agg": "SUM"}]
   filters: [
-    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false}
+    {"name": "<scenario_field>", "values": ["<scenario_value>"], "is_excluded": false}
   ]
 ```
 
@@ -179,13 +186,13 @@ Parameters:
   dimensions: [<field_id>]
   metrics: [{"field_id": <amount_field_id>, "agg": "SUM"}]
   filters: [
-    {"field_id": <scenario_field_id>, "values": ["Actuals"]}
+    {"field_id": <scenario_field_id>, "values": ["<scenario_value>"]}
   ]
 ```
 
-The `"Actuals"` filter value is just a common default to keep each probe
-cheap; the probe is testing whether the *dimension* field aggregates, not the
-filter. If a probe returns empty (rather than 500) for every field, the
+`<scenario_value>` is any value from the discovered scenario domain
+(commonly an actuals-like one) — it just keeps each probe cheap; the probe is
+testing whether the *dimension* field aggregates, not the filter. If a probe returns empty (rather than 500) for every field, the
 scenario value may differ for this client — drop the filter and re-probe, or
 use a scenario value seen in a quick `get_data_by_alias` / `get_data_by_id`
 pull (small `limit`).
@@ -200,7 +207,8 @@ disk):
 
 For each failed field (especially account-hierarchy levels like `DR_ACC_L1`,
 `DR_ACC_L2`):
-- Look for sibling fields in the schema (e.g., `DR_ACC_L1.5`, `Account L1 Alt`)
+- Look for sibling fields in the schema (e.g., an alternate/in-between
+  account level such as `Account_L1_Alt`)
 - Probe those siblings the same way
 - If a sibling works, note it as the suggested alternative for the failed
   field (this goes into the report in Phase 5, not into any file)
@@ -229,7 +237,10 @@ file_path: tmp/API_Diagnostic_<table_name>_<timestamp>.txt
 
 #### Step 8: Show Summary
 
-Display results:
+Display results. The block below is **illustrative — your org's field names,
+group counts, and pass/fail results will differ**; an all-PASS result is the
+norm, and the FAIL lines here only show what the report looks like when a
+field does fail:
 
 ```
 API Diagnostic Results
@@ -242,21 +253,22 @@ Aggregation Tests:
   [PASS]  DR_ACC_L0        -> 5 groups
   [FAIL]  DR_ACC_L1        -> 500 error
   [FAIL]  DR_ACC_L2        -> 500 error
-  [PASS]  DR_ACC_L1.5      -> 18 groups
+  [PASS]  Account_L1_Alt   -> 18 groups
   [PASS]  Department L1    -> 3 groups
   [PASS]  Cost Center      -> 24 groups
 
 Result: 6/8 fields work (75%)
 
 Suggested Sibling Alternatives (for the failed fields):
-  DR_ACC_L1 -> DR_ACC_L1.5 (18 groups)
-  DR_ACC_L2 -> DR_ACC_L1.5 (18 groups)
+  DR_ACC_L1 -> Account_L1_Alt (18 groups)
+  DR_ACC_L2 -> Account_L1_Alt (18 groups)
 
 Diagnostic file (optional): tmp/API_Diagnostic_<table_name>_<timestamp>.txt
 
 What to do with this:
-  - When a skill 500s on DR_ACC_L1 / DR_ACC_L2, use DR_ACC_L1.5 instead
-    (~5s aggregation vs ~10min pagination).
+  - When a skill 500s on a FAIL field, use its suggested sibling from the
+    discovered schema instead (aggregation in seconds vs minutes of
+    pagination).
   - Fields marked PASS are safe to use directly as aggregation dimensions.
   - This map applies to the current environment/session; nothing is saved to
     disk, so re-run /dr-test after a schema change.

@@ -62,23 +62,26 @@ If any Datarails tool call fails with an authentication or connection error, tel
 
 ## Example Interactions
 
+(Illustrative — table ids, names, and values below are invented;
+your org's tables and fields will differ.)
+
 **User: "/dr-tables"**
 ```
 📊 Finance OS Tables
 
-| ID    | Name                    | Rows    |
-|-------|-------------------------|---------|
-| 11442 | GL Transactions         | 125,432 |
-| 11443 | Budget Data             | 8,291   |
-| 11444 | Vendor Master           | 1,847   |
+| ID     | Name                    | Alias      |
+|--------|-------------------------|------------|
+| 999901 | GL Transactions         | financials |
+| 999902 | Budget Data             | —          |
+| 999903 | Vendor Master           | —          |
 ...
 ```
 
-**User: "/dr-tables 11442"**
+**User: "/dr-tables 999901"**
 ```
-📋 Table: GL Transactions (ID: 11442)
+📋 Table: GL Transactions (ID: 999901)
 
-Rows: 125,432 | Columns: 24 | Last Updated: 2024-01-15
+Fields: 24 (from the schema call — row counts are not available from any tool; never invent one)
 
 Schema:
 | Column          | Type      | Nullable | Description          |
@@ -90,9 +93,9 @@ Schema:
 ...
 ```
 
-**User: "/dr-tables 11442 --field account_code"**
+**User: "/dr-tables 999901 --field account_code"**
 ```
-🔍 Distinct Values: account_code (Table 11442)
+🔍 Distinct Values: account_code (Table 999901)
 
 Found 156 unique values:
 

@@ -80,7 +80,9 @@ table. Works with any table — no pre-configuration required.
 - **Categorical Analysis**: Distinct count and sample values from
   `profile_categorical_fields` (capped at 5 fields per call), plus
   per-value frequencies derived from `get_aggregated_data_by_alias` /
-  `get_aggregated_data_by_id`.
+  `get_aggregated_data_by_id` (nulls appear as the explicit `[null]`
+  bucket; the trailing keyless grand-total row is excluded from the
+  frequency table).
 - **Sample Records**: Actual data samples for top findings, fetched
   via `get_data_by_alias` / `get_data_by_id` after the skill identifies
   the IDs to pull.
@@ -133,6 +135,14 @@ field failed.
 
 **Phase 2: Gather baseline aggregates**
 
+> **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
+
+A data-quality scan intentionally covers the whole table, so all-time
+aggregates are correct *here* — but still discover the date range (it
+powers the future-dated check) and label the workbook with the date
+range and scenarios it covers, so the Numeric Analysis SUM/AVG columns
+are never read as period P&L figures.
+
 1. `profile_numeric_fields(table_id)` — full numeric coverage
    (SUM/AVG/MIN/MAX/COUNT per numeric field). Treat the result as a
    starting point, not as classified findings.
@@ -142,8 +152,10 @@ field failed.
 3. For per-value frequencies, null counts, and duplicate detection:
    `get_aggregated_data_by_alias` (preferred) or
    `get_aggregated_data_by_id` grouped by the relevant dimension(s) with
-   `COUNT` as the metric — by-alias `metrics=[{"field": <field_alias>,
-   "agg": "COUNT"}]`, by-id `metrics=[{"field_id": <field_id>, "agg":
+   `COUNT` of a **different dense field** as the metric — never COUNT
+   the grouped dimension itself (see "Reading GROUP BY responses"
+   below) — by-alias `metrics=[{"field": <other_field_alias>, "agg":
+   "COUNT"}]`, by-id `metrics=[{"field_id": <other_field_id>, "agg":
    "COUNT"}]`. **This is where the actual findings come from** — the
    profile tools alone can't produce them.
 4. For top-finding row samples: `get_data_by_alias` /
@@ -155,13 +167,20 @@ field failed.
    ranges, and `is null` are all supported — no need to pre-identify IDs
    purely because the filter API can't express a comparison.
 
+> **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+
 **Phase 2b: Derive findings (client-side)**
 
 Apply the recipes from `/dr-anomalies` (range-band outliers, null
 rates, duplicates, rare-category values, future-dated rows) to the
-aggregates from Phase 2. Bucket by severity using the heuristics in
-that skill. Drop categories the API can't support (referential
-integrity, character-level hygiene).
+aggregates from Phase 2. When tabulating a GROUP BY response, drop the
+trailing keyless grand-total row first (keep it only as a checksum /
+total-row-count denominator) — counting it as a group inflates
+duplicate-group counts, per-value shares, and rare-value flags. Null
+rate = the `[null]`-bucket count ÷ total row count; the keyless row is
+the grand total, not a null group. Bucket by severity using the
+heuristics in that skill. Drop categories the API can't support
+(referential integrity, character-level hygiene).
 
 ## Datarails Brand Styling
 

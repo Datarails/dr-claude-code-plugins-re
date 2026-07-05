@@ -37,7 +37,7 @@ when the table has an alias: `list_aliased_fields(<alias>)` gives friendly field
 names and you query with `get_data_by_alias`. Otherwise `get_fields_by_id(<id>)`
 gives numeric field ids and you query with `get_data_by_id` (`select` and
 `filters` are field-id based). Always `select` only the columns you need — raw
-tables are ~200 columns wide.
+tables can be hundreds of columns wide in some orgs.
 
 > **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
 
@@ -111,6 +111,10 @@ Each `val` entry is `{condition, value, operator?}`:
   prefer.
 
 ## Example Interactions
+
+(Illustrative — `financials` and the field names below stand in for whatever
+alias and field aliases Step 2 discovered in your org; your org's names and
+values will differ.)
 
 **User: "/dr-query financials --sample"**
 ```

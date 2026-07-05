@@ -113,12 +113,13 @@ rather than pre-fetching distinct values.
 
 ## Example interaction
 
-**User prompt:** "Analyze table 11442 for data quality issues and
-provide recommendations."
+**User prompt:** "Analyze table <table_id> for data quality issues and
+provide recommendations." *(illustrative — use your org's table id from
+`list_data_models`)*
 
 The agent:
 1. Confirms auth and resolves the table (`list_data_models`).
-2. Calls `get_fields_by_id(11442)` (or `list_aliased_fields`) and the two
+2. Calls `get_fields_by_id(<table_id>)` (or `list_aliased_fields`) and the two
    `profile_*` tools for baseline aggregates.
 3. Runs `get_aggregated_data_by_id` group-by-field with COUNT to derive
    null rates, per-value frequencies, and duplicate candidates.

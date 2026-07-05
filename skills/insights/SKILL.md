@@ -29,8 +29,8 @@ Creates both PowerPoint presentations (for meetings) and Excel data books (for d
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--year <YYYY>` | Calendar year to analyze | Current year |
-| `--quarter <Q#>` | Quarter: Q1, Q2, Q3, Q4 | Current quarter |
+| `--year <YYYY>` | Calendar year to analyze | Latest complete fiscal year in the data (see data-scope preamble) |
+| `--quarter <Q#>` | Quarter: Q1, Q2, Q3, Q4 | None — full-year scope unless given |
 | `--period <period>` | Combined period: YYYY-QX or YYYY-MM | Auto-determined |
 | `--output-pptx <file>` | PowerPoint output path | `tmp/Insights_TIMESTAMP.pptx` |
 | `--output-xlsx <file>` | Excel output path | `tmp/Insights_Data_TIMESTAMP.xlsx` |
@@ -40,25 +40,32 @@ Creates both PowerPoint presentations (for meetings) and Excel data books (for d
 ### Revenue & Growth
 - Monthly revenue trends (12+ months)
 - Period-over-period growth rates (MoM, QoQ)
-- Revenue by account category
+- Revenue by account category (at the discovered P&L grain)
 - Trend analysis and momentum
 
 ### Key Performance Indicators
-- ARR (Annual Recurring Revenue)
-- Net New ARR
+
+> **Render only KPIs you can source.** A KPI may come from (a) the org's metric catalog — `list_business_metrics` (ungated) for discovery; the `get_business_metric_*` data tools are feature-gated and may be absent, and USER-kind metrics often return empty — or (b) aggregation over the discovered P&L grain (revenue, expense buckets, gross/operating margin when COGS/OpEx-like buckets exist). SaaS/unit-economics metrics (ARR, MRR, churn, LTV, CAC, burn, runway, NRR) are **not** derivable from a P&L table — include them only if discovered as populated metrics; otherwise omit the card/slide entirely. Never render a placeholder, estimate, or fabricated value for a KPI you could not source.
+
+The KPIs below come from the org's metric catalog and are included
+**only when discovered as populated metrics** — otherwise their cards
+and slides are omitted entirely:
+- ARR (Annual Recurring Revenue) and Net New ARR
 - Churn rate and dollar churn
-- LTV (Lifetime Value)
-- CAC (Customer Acquisition Cost)
+- LTV (Lifetime Value) / CAC (Customer Acquisition Cost)
 - Burn rate and runway
 
 ### Operational Metrics
-- Gross profit and margins
+- Gross profit and margins (when COGS/OpEx-like buckets exist at the
+  discovered grain)
 - Operating expenses by category
-- Headcount trends
-- Per-employee productivity metrics
-- Department performance
+- Headcount trends, per-employee productivity, and department
+  performance (when the relevant fields or metrics exist in the
+  discovered data)
 
 ### Financial Health
+Catalog-sourced only — rendered when discovered as populated metrics,
+omitted otherwise:
 - Cash burn multiple
 - CAC payback period
 - LTV/CAC ratio
@@ -66,20 +73,24 @@ Creates both PowerPoint presentations (for meetings) and Excel data books (for d
 
 ## Output: PowerPoint Presentation
 
-Professional 7-slide presentation includes:
+Professional presentation, up to 7 slides — any KPI card or slide whose
+metrics could not be sourced is omitted (see the KPI-honesty rule under
+Key Performance Indicators):
 
-1. **Title Slide** - Report period and date
+1. **Title Slide** - Report period, scenario, and date
 2. **Executive Summary** - Top metrics with trend indicators
 3. **Key Findings** - Top 5 insights with business impact
 4. **Recommendations** - Actionable next steps
-5. **Metrics Dashboard** - KPI summary with sparklines
-6. **Efficiency Analysis** - Ratios and operational metrics
-7. **Data Summary** - Data sources and methodology
+5. **Metrics Dashboard** - KPI summary with sparklines (sourced KPIs only)
+6. **Efficiency Analysis** - Ratios and operational metrics (sourced KPIs only)
+7. **Data Summary** - Data sources, period + scenario scope, methodology
 
 ### Design Features
 - Professional color scheme matching Datarails brand
 - Embedded charts and visualizations
 - Metrics boxes with trend indicators
+- Every chart, table, and metrics box labeled with the period +
+  scenario it covers
 - Consistent formatting across all slides
 - Executive-friendly layout
 
@@ -88,6 +99,7 @@ Professional 7-slide presentation includes:
 Comprehensive workbook includes:
 
 1. **Summary Sheet**
+   - Period + scenario scope of the report (repeated on every sheet header)
    - Key findings formatted as table
    - Severity and category indicators
    - Current vs prior period comparison
@@ -98,7 +110,7 @@ Comprehensive workbook includes:
    - Expected impact
 
 3. **Metrics Sheet**
-   - Current KPI values
+   - Current KPI values (sourced KPIs only — no placeholders)
    - Targets (if available)
    - Prior period comparison
 
@@ -117,10 +129,16 @@ Comprehensive workbook includes:
 ### Phase 1: Data Collection
 1. Verify authentication
 2. Discover the financials table and its fields — see below
-3. Fetch P&L trends (12 months) via `get_aggregated_data_by_alias` (or by-id)
-4. Fetch KPI metrics (4+ quarters) — discover named KPIs via
-   `list_business_metrics`, then compute their values by aggregating the
-   financials table (`get_aggregated_data_by_alias` / `get_aggregated_data_by_id`)
+3. Fetch P&L trends via `get_aggregated_data_by_alias` (or by-id) —
+   scoped to the requested period (default: latest complete fiscal year
+   or trailing 12 closed months), filtered to the discovered scenario
+   and P&L grain (data-scope preamble, items 1–3)
+4. Fetch KPI metrics — discover named KPIs via `list_business_metrics`;
+   compute P&L-derivable KPIs (revenue, expense buckets, margins) by
+   aggregating the financials table over the discovered grain
+   (`get_aggregated_data_by_alias` / `get_aggregated_data_by_id`).
+   Catalog-only KPIs are included solely when sourced — see the
+   KPI-honesty rule under Key Performance Indicators
 
 #### Discover the financials table and its fields
 
@@ -146,37 +164,57 @@ once per conversation, then carry the values forward.
    - `<amount_field>`       — numeric: `^amount$` → `transaction_amount` → `value`
    - `<scenario_field>`     — categorical: `^scenario$` → `^version$`
    - `<date_field>`         — date/timestamp: `reporting_date` → `posting_date` → `^date$`
-   - `<account_l1_field>`   — `dr_acc_l1` → `account_l1` → `account_group_l1`
-   - `<account_l2_field>`   — `dr_acc_l2` → `account_l2` (optional, for detail)
+   - `<account_level_fields>` — categorical: **all** account-hierarchy
+     level fields, shallowest to deepest (names/aliases matching
+     patterns like `dr_acc_l1`/`dr_acc_l2` → `account_l1`/`account_l2`
+     → `account_group_l1`). Capture every level — do **not** assume the
+     L1-style level is the P&L grain; the grain is chosen from distinct
+     values in step 3 (a deeper level is often the detail dimension)
 
 > **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
 
    If `<amount_field>` or `<scenario_field>` has no clear match, ask the
    user which field to use, then continue.
 
-3. Find the account-category values:
-   `get_distinct_values_by_alias(<alias>, <account_l1_field>)` (or
-   `get_distinct_values_by_id(<financials_table_id>, <account_l1_field_id>)`).
-   If the distinct call errors, fall back to
-   `get_data_by_alias(<alias>, select=[<account_l1_field>], limit=500)`
-   (or the by-id twin) and collect the distinct values. Match:
+> **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
+> 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
+> 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+
+3. Bind the P&L grain and its category values (preamble item 2 above):
+   pull distinct values of each account-level field, shallowest first —
+   `get_distinct_values_by_alias(<alias>, <field>)` (or
+   `get_distinct_values_by_id(<financials_table_id>, <field_id>)`).
+   If a distinct call errors, fall back to
+   `get_data_by_alias(<alias>, select=[<field>], limit=500)`
+   (or the by-id twin) and collect the distinct values. The level whose
+   values partition P&L flows into revenue/COGS/opex-like buckets is
+   `<account_grain_field>`. Match its values:
    - `<revenue_value>` ← `/revenue|sales|income/i`
    - `<cogs_value>`    ← `/cogs|cost of goods|cost of sales|direct cost/i`
    - `<opex_value>`    ← `/operating|opex|expense|sg&a/i`
 
-   If a category has several candidates, pick the broadest top-level
-   one; if genuinely ambiguous, ask the user once.
+   Scope every P&L figure to these flow buckets and exclude
+   balance-sheet buckets (asset/liability/equity-like values). If a
+   category has several candidates at the grain, pick the broadest one;
+   if genuinely ambiguous, ask the user once.
 
 Aggregation-field failures are handled reactively (see Error Handling),
 not pre-probed. On auth/connection failure during discovery: show the
 reconnect message and STOP — do not generate reports without fresh data.
 
 ### Phase 2: Analysis
-1. Calculate growth rates
-2. Compute efficiency ratios
-3. Identify trends and anomalies
-4. Generate business insights
-5. Create recommendations
+1. Apply the aggregate-reading rules (preamble item 4) to every GROUP BY
+   response before computing: exclude the trailing keyless grand-total
+   row from sums, shares, trends, and bucket counts (at most use it as
+   a checksum); read null counts only from the `[null]` bucket
+2. Calculate growth rates
+3. Compute efficiency ratios (sourced KPIs only — see the KPI-honesty
+   rule under Key Performance Indicators)
+4. Identify trends and anomalies
+5. Generate business insights
+6. Create recommendations
 
 ## Datarails Brand Styling
 
@@ -244,10 +282,13 @@ workbooks; apply this contract when adding DR.GET formulas to a workbook here.
 <!-- end:drget-authoring-contract -->
 
 ### Phase 3: Presentation Generation
-1. Create PowerPoint with 7 professional slides
+1. Create PowerPoint (up to 7 professional slides — omit any KPI card
+   or slide whose metrics could not be sourced)
 2. Generate Excel data book
 3. Embed charts and metrics
-4. Apply professional formatting
+4. Label every slide, chart, table, and metrics box with the period +
+   scenario it covers
+5. Apply professional formatting
 
 ### Phase 4: Output
 1. Save both files to tmp/
@@ -256,14 +297,15 @@ workbooks; apply this contract when adding DR.GET formulas to a workbook here.
 
 ## Examples
 
-### Generate current quarter insights
+### Generate insights for the default period
 ```bash
 /dr-insights
 ```
 
-Output:
+Output (period and scenario values are illustrative — both come from
+discovery):
 ```
-📊 Generating insights for 2026-Q1...
+📊 Generating insights for FY2025 (latest complete fiscal year) · Scenario: Actuals...
   📊 Fetching P&L trends...
   📈 Fetching KPI metrics...
   💡 Calculating insights...
@@ -275,7 +317,7 @@ Output:
 ==================================================
 INSIGHTS GENERATED
 ==================================================
-Period: 2026-Q1
+Period: FY2025 · Scenario: Actuals
 Key Findings: 5
 
 Outputs:
@@ -335,28 +377,33 @@ Outputs:
 
 ## Key Metrics Included
 
-**Growth Metrics**:
-- Revenue MoM/QoQ/YoY growth
-- ARR trends
-- Net New ARR
+Per the KPI-honesty rule (see Key Performance Indicators): P&L-derived
+metrics render whenever the discovered grain supports them; catalog-only
+metrics render only when discovered as populated metrics — otherwise
+their cards and slides are omitted entirely, never estimated.
 
-**Profitability Metrics**:
+**Growth Metrics** (revenue growth is P&L-derived; ARR is catalog-only):
+- Revenue MoM/QoQ/YoY growth
+- ARR trends and Net New ARR — only if sourced from the metric catalog
+
+**Profitability Metrics** (P&L-derived when COGS/OpEx-like buckets
+exist at the discovered grain):
 - Gross profit and margin
 - Operating expense ratio
 - EBITDA
 
-**Unit Economics**:
+**Unit Economics** (catalog-only — omitted unless sourced):
 - CAC (Customer Acquisition Cost)
 - LTV (Lifetime Value)
 - LTV/CAC ratio
 - Payback period
 
-**Cash Metrics**:
+**Cash Metrics** (catalog-only — omitted unless sourced):
 - Monthly burn rate
 - Runway (months of cash)
 - Burn multiple (burn rate / revenue)
 
-**Churn & Retention**:
+**Churn & Retention** (catalog-only — omitted unless sourced):
 - Dollar churn
 - Percentage churn
 - Net revenue retention
@@ -374,14 +421,15 @@ Fast processing via efficient MCP aggregation tools.
 - Connect via Connectors UI ("+" > Connectors > Datarails > Connect)
 
 **Aggregation field rejected (500)**
-- Retry with a sibling account field from the discovered schema
-  (e.g. `DR_ACC_L1.5`). If none works, note which field failed and
-  present what you have.
+- Retry with a sibling account-level field from the discovered schema
+  (another level captured in step 2). If none works, note which field
+  failed and present what you have.
 
 **"No KPI data found" warning**
 - `list_business_metrics` returned no named KPIs, or the financials
   table had no usable data to compute them — agent adapts and focuses
   on P&L trends
+- Unsourced KPI cards and slides are omitted, never estimated
 - Recommendations still generated
 
 **"Incomplete data for period" warning**
@@ -434,7 +482,9 @@ and fields on each cold session.
 ## Data Freshness
 
 Reports include generation timestamp. Data reflects:
-- Latest available P&L (typically current month)
+- The default report scope: latest complete fiscal year or trailing 12
+  closed months (data-scope preamble, item 3) — never an unscoped
+  all-time total
 - Latest available KPIs (typically current quarter)
 - Calculations performed at generation time
 

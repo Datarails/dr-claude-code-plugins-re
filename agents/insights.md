@@ -68,9 +68,14 @@ Use this agent when you need:
    - Fetch P&L trends (12+ months) via `get_aggregated_data_by_alias`
      (preferred) or `get_aggregated_data_by_id` grouped by the date and
      account dimensions.
+   - Scope every aggregate to the latest complete fiscal year or trailing
+     12 closed months — never an unscoped all-time total (financials
+     tables are multi-year cumulative) — and **label every output with
+     the period + scenario it covers**.
    - Fetch KPI metrics (4+ quarters). Discover named KPIs with
      `list_business_metrics`, then compute their values via the same
-     aggregation tools.
+     aggregation tools. Drop any KPI you cannot source (see "Render only
+     KPIs you can source" under Analysis Components).
 
 #### Inline Data Discovery
 
@@ -104,9 +109,15 @@ values forward:
    the values client-side. Match: `<revenue_value>` ←
    `/revenue|sales|income/i`, `<cogs_value>` ← `/cogs|cost of goods|cost
    of sales|direct cost/i`, `<opex_value>` ← `/operating|opex|expense|sg&a/i`.
+   Pull the distinct values of `<scenario_field>` the same way before
+   filtering by scenario — never assume a scenario name exists (`Budget`
+   frequently doesn't; many orgs carry only `{Actuals, Forecast}`, with
+   budget in a separate planning-version-like field whose alias/name
+   matches `/plan|version|cycle|budget/i`).
 4. **Aggregation-field failures are handled reactively, not pre-probed:**
    if an aggregation call 500s on a dimension field, re-inspect the schema
-   for a sibling (e.g. `DR_ACC_L1.5`) and retry; if an alias call fails,
+   for a sibling account-level field from the discovered schema (orgs
+   often carry in-between levels) and retry; if an alias call fails,
    fall back to the by-id twin. If none works, tell the user which field
    failed.
 
@@ -134,7 +145,7 @@ values forward:
    - Prioritize by impact
 
 4. **Presentation Creation**
-   - Generate PowerPoint (7 professional slides)
+   - Generate PowerPoint (up to 7 professional slides)
    - Create Excel data book
    - Embed visualizations
    - Apply executive formatting
@@ -146,6 +157,8 @@ values forward:
 
 ## Analysis Components
 
+> **Render only KPIs you can source.** A KPI may come from (a) the org's metric catalog — `list_business_metrics` (ungated) for discovery; the `get_business_metric_*` data tools are feature-gated and may be absent, and USER-kind metrics often return empty — or (b) aggregation over the discovered P&L grain (revenue, expense buckets, gross/operating margin when COGS/OpEx-like buckets exist). SaaS/unit-economics metrics (ARR, MRR, churn, LTV, CAC, burn, runway, NRR) are **not** derivable from a P&L table — include them only if discovered as populated metrics; otherwise omit the card/slide entirely. Never render a placeholder, estimate, or fabricated value for a KPI you could not source.
+
 ### Revenue & Growth
 - **Trend Analysis**: Monthly revenue for 12+ months
 - **Growth Rates**: MoM, QoQ, YoY changes
@@ -153,6 +166,7 @@ values forward:
 - **Seasonality**: Pattern recognition
 
 ### Key Performance Indicators
+*(only when discovered as populated metrics — see the KPI-honesty rule above)*
 - **ARR**: Annual Recurring Revenue trends
 - **Churn**: Dollar and percentage churn analysis
 - **LTV**: Lifetime Value trends
@@ -167,6 +181,7 @@ values forward:
 - **Efficiency Score**: Overall operational efficiency
 
 ### Unit Economics
+*(only when discovered as populated metrics — see the KPI-honesty rule above)*
 - **CAC**: Cost to acquire customer
 - **Payback Period**: Months to recover CAC
 - **LTV/CAC Ratio**: Efficiency indicator (target: 3x+)
@@ -271,7 +286,7 @@ Outputs:
 
 ## Output Formats
 
-### PowerPoint Presentation (7 slides)
+### PowerPoint Presentation (up to 7 slides)
 1. **Title Slide** - Report period and date
 2. **Executive Summary** - Top metrics with trends
 3. **Key Findings** - Top 5 insights with business impact
@@ -279,6 +294,10 @@ Outputs:
 5. **Metrics Dashboard** - KPI grid with status
 6. **Efficiency Analysis** - Ratios and benchmarks
 7. **Data Summary** - Sources and methodology
+
+Omit any slide whose KPIs could not be sourced (per the KPI-honesty
+rule) rather than filling it with placeholders; every slide states the
+period + scenario it covers.
 
 **Design Features**:
 - Professional Datarails branding
@@ -399,7 +418,7 @@ by later steps and by other Datarails skills in the same session.
 
 **Day 1**: Extract latest data
 ```bash
-/dr-extract --year 2025 --scenario Actuals
+/dr-extract --year 2025 --scenario <ActualsScenario>   # name from the discovered scenario domain
 ```
 
 **Day 2**: Check data quality

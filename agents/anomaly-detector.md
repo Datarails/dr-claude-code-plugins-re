@@ -33,8 +33,8 @@ baseline aggregates only — **not** classified findings:
 
 | Tool | What it returns |
 |---|---|
-| `profile_numeric_fields` | SUM, AVG, MIN, MAX, COUNT per numeric field |
-| `profile_categorical_fields` | distinct count + first 10 sample values per field (capped at 5 fields/call) |
+| `profile_numeric_fields` | SUM, AVG, MIN, MAX, COUNT per numeric field — in the backend-native `DR_Values`/`col_keys`/`row_keys` layout, with no per-value aggregator labels |
+| `profile_categorical_fields` | distinct count + first 10 sample values per field (capped at 5 fields/call; **bare calls default to upload/mapping metadata columns — always pass `fields`**) |
 | `get_aggregated_data_by_alias` / `get_aggregated_data_by_id` | grouped totals with no row cap (only path to per-value frequencies and null counts) |
 
 There is no server-side anomaly tool. The agent computes outlier flags,
@@ -98,21 +98,38 @@ In parallel where possible:
    `get_data_by_alias(<alias>, select=[<account_alias>], limit=500)` (or
    the by-id twin) and dedup client-side.
 2. `profile_numeric_fields(<table_id>)` — SUM/AVG/MIN/MAX/COUNT per
-   numeric field.
+   numeric field. **Reading the response:** it arrives in the
+   backend-native `DR_Values`/`col_keys`/`row_keys` layout — no
+   aggregator label on individual values, and values can appear
+   duplicated per stat. Map each value to its statistic via the keys
+   before labeling anything; never report a number as MIN/MAX/AVG/COUNT
+   without confirming its key. If the mapping is ambiguous, anchor it by
+   cross-checking ONE field with `get_aggregated_data_by_alias` /
+   `get_aggregated_data_by_id` (MIN and MAX in two separate calls — one
+   aggregation per field per call) before deriving outliers or ranges.
 3. `profile_categorical_fields(<table_id>, fields=[...])` — pass an
-   explicit field list because the tool silently caps at 5. Loop as
-   needed to cover all categorical fields.
+   **explicit `fields` list of business dimensions taken from the
+   Phase 2 schema** (account-hierarchy levels, scenario,
+   entity/department-like, date). Omitting `fields` profiles the table's
+   upload/mapping metadata columns (tab/label/user/mapper-style
+   bookkeeping fields), which says nothing about the data — never call
+   it bare. The tool also silently caps at 5 fields/call; loop as needed
+   to cover all business dimensions.
 4. For each candidate-key or category field:
    `get_aggregated_data_by_alias(<alias>, dimensions=[<field_alias>],
-   metrics=[{"field": <field_alias>, "agg": "COUNT"}])` (or the by-id
+   metrics=[{"field": <amount_field_alias>, "agg": "COUNT"}])` (or the by-id
    twin `get_aggregated_data_by_id(<table_id>, dimensions=[<field_id>],
-   metrics=[{"field_id": <field_id>, "agg": "COUNT"}])`). This is the
-   only source of per-value frequencies, null counts, and the inputs
-   for duplicate / rare-value detection.
+   metrics=[{"field_id": <amount_field_id>, "agg": "COUNT"}])`). **COUNT a
+   different dense field (e.g. the discovered amount field) than the GROUP BY
+   dimension itself — a same-field COUNT of the grouped dimension can 500.**
+   This is the only source of per-value frequencies, null counts, and the
+   inputs for duplicate / rare-value detection. Remember the response ends
+   with a keyless grand-total row — exclude it from frequency math.
 
    **Aggregation-field failures are handled reactively, not pre-probed:**
    if a call 500s on a dimension field, re-inspect the Phase 2 schema for
-   a sibling (e.g. `DR_ACC_L1.5` when `DR_ACC_L1` fails) and retry; if an
+   a sibling account-level field from the discovered schema (orgs often
+   carry in-between levels) and retry; if an
    alias call fails, fall back to the by-id twin. If no sibling works,
    tell the user which field failed.
 
@@ -122,9 +139,10 @@ Apply the recipes from the `/dr-anomalies` skill (kept in sync — see
 `skills/anomalies/SKILL.md`):
 
 - **Range outliers (numeric):** flag values outside
-  `[AVG - (MAX-MIN), AVG + (MAX-MIN)]`. Coarse substitute for `|z| > 3`
-  because std dev isn't returned. Severity by absolute count and
-  percentage of total.
+  `[AVG - (MAX-MIN), AVG + (MAX-MIN)]`, using the **key-mapped** stats
+  from Phase 2 (a mislabeled MAX-as-AVG produces garbage bands). Coarse
+  substitute for `|z| > 3` because std dev isn't returned. Severity by
+  absolute count and percentage of total.
 - **Null / missing values:** sum the null bucket COUNT from the
   `get_aggregated_data_by_alias` / `get_aggregated_data_by_id` GROUP BY
   divided by total rows (or filter directly with an advanced `is null`
@@ -167,7 +185,8 @@ Sheets:
 1. **Summary** — Data Quality Score, severity counts, top 5 findings.
 2. **Critical Findings** — items the agent classified Critical.
 3. **High Priority** — items the agent classified High.
-4. **Numeric Analysis** — per-field MIN/MAX/AVG/COUNT (from the tool)
+4. **Numeric Analysis** — per-field MIN/MAX/AVG/COUNT (from the tool,
+   key-mapped from the `DR_Values` response per Phase 2)
    plus skill-derived range-band outlier flag column. Std dev column
    blank with footnote: "not returned by the API; range used as a
    coarse substitute."
