@@ -1,6 +1,6 @@
 ---
 name: dr-extract
-description: Extract validated financial data from Datarails Finance OS to Excel. Creates workbooks with P&L, Balance Sheet, KPIs (including ARR), and validation checks. Self-contained — discovers the client's tables and fields on its own, no profile or setup step required.
+description: Extract validated financial data from Datarails Finance OS to Excel. Creates workbooks with P&L, Balance Sheet, KPIs (ARR and other SaaS metrics only when sourceable from the org's data), and validation checks. Self-contained — discovers the client's tables and fields on its own, no profile or setup step required.
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__list_data_models
@@ -25,7 +25,7 @@ Extract validated financial data from Finance OS to Excel workbooks. Data is pul
 
 The workbook contains:
 - **P&L Data**: Revenue, COGS, Operating Expenses by month
-- **KPI Data**: ARR, Net New ARR, Churn, LTV, Revenue by quarter
+- **KPI Data**: quarterly KPIs the org's data can actually source — revenue by quarter always; SaaS metrics (ARR, Net New ARR, Churn, LTV) only when a KPI source exists (see the KPI-honesty rule under Sheets to Generate)
 - **Validation**: Cross-checks between P&L and KPI tables
 
 ## Arguments
@@ -33,8 +33,8 @@ The workbook contains:
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `--output <file>` | Output filename | `tmp/Financial_Extract_YYYY.xlsx` |
-| `--scenario <name>` | Primary scenario | `Actuals` |
-| `--year <YYYY>` | Calendar year to extract | Current year |
+| `--scenario <name>` | Primary scenario | The discovered actuals-like scenario (a passed name is validated against the discovered scenario domain) |
+| `--year <YYYY>` | Calendar year to extract | Latest complete fiscal year in the data (per the data-scope discovery in Step 2) |
 
 ## Workflow
 
@@ -95,9 +95,20 @@ conversation, then carry the values forward.
    - balance-sheet categories ← `/asset|liabilit|equity/i`
 
    If a category has several candidates, pick the broadest top-level one; if
-   genuinely ambiguous, ask the user once.
+   genuinely ambiguous, ask the user once. If the L1 values partition as the
+   balance-sheet equation (asset / liability / equity / income-like) rather
+   than P&L buckets, the P&L categories live one level deeper — pull the
+   `<account_l2_field>` distinct values and match `<revenue_value>` /
+   `<cogs_value>` / `<opex_value>` there instead (see the data-scope
+   discovery below).
 
 Aggregation-field failures are handled reactively, not pre-probed (see Step 3).
+
+> **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
+> 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
+> 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
 
 ### Step 3: Fetch Data via MCP
 
@@ -108,9 +119,14 @@ by-id twin (`get_aggregated_data_by_id`).
 1. **Monthly P&L** — `get_aggregated_data_by_alias(<financials_alias>,
    dimensions=[<account_l1_field>, <account_l2_field>, <month_field>],
    metrics=[{"field": <amount_field>, "agg": "SUM"}], filters=[{"name":
-   <scenario_field>, "values": [<--scenario> or "Actuals"], "is_excluded":
-   false}])`. Scope to `--year` with an advanced date filter (see below) or by
-   filtering the `<month_field>` dimension client-side.
+   <scenario_field>, "values": [<--scenario> or <discovered actuals-like scenario>], "is_excluded":
+   false}])`. First validate the scenario against the domain from the
+   data-scope discovery — if it isn't there, list the scenarios that do exist
+   and ask rather than running an empty extract. Scope to `--year` with an
+   advanced date filter (see below) or by filtering the `<month_field>`
+   dimension client-side; when `--year` wasn't given, use the latest complete
+   fiscal year from the discovered date range — never an unscoped all-time
+   pull.
 2. **Balance Sheet items** — same table grouped by `[<account_l1_field>,
    <account_l2_field>, <month_field>]`, filtered client-side to the balance-sheet
    account categories found in Step 2.3.
@@ -119,19 +135,30 @@ by-id twin (`get_aggregated_data_by_id`).
    <quarter_field>], metrics=[{"field": <kpi_value_field>, "agg": "SUM"}], …)`
    (or the by-id twin), for `--year` and the prior year (for YoY). For named
    KPIs that aren't in a table (e.g. ARR), call `list_business_metrics` to
-   discover the metric and its dimensions, then aggregate the underlying
-   financials/KPI table via the same aggregation tools to compute the value.
+   check whether the org defines them as populated metrics — but this skill's
+   toolset reads KPI *values* only from tables, so a KPI found in neither the
+   KPI table nor the P&L-derivable grain is **omitted** from the workbook
+   (see the KPI-honesty rule under Sheets to Generate). Never back into a
+   SaaS metric by aggregating the P&L.
 4. **Distinct values for validation** — derive the distinct `<scenario_field>`,
    `<month_field>`, and `<account_l1_field>` values from the aggregation results,
    or call `get_distinct_values_by_alias` / `get_distinct_values_by_id` directly,
    to confirm the extract covers the expected dimensions.
+
+**Reading the responses:** apply rule 4 of the data-scope discovery to every
+aggregation payload — drop the trailing keyless grand-total row before
+computing monthly totals, subtotals, or YoY math (keep it only as a checksum
+for the Validation sheet), and treat `[null]` groups as their own explicit
+bucket.
 
 **Filter rules:**
 - **Date ranges filter directly** via an advanced filter — no epoch workaround
   needed. To scope to `--year`, pass `{"name": <month_field>, "values": {"type":
   "advanced", "val": [{"condition": "total_range", "value": ["<jan1_epoch>",
   "<dec31_epoch>"]}]}}` (epoch seconds as strings; by-id uses the `field_id`
-  form). Adding `<month_field>` as a dimension and filtering by `--year`
+  form). Jan 1–Dec 31 assumes a calendar-aligned fiscal year — if the org's
+  discovered fiscal calendar is offset, use its fiscal-year boundary dates
+  instead. Adding `<month_field>` as a dimension and filtering by `--year`
   client-side still works and is optional.
 - **Value-list filters** take `values: [...]` (set `is_excluded: true` for
   NOT-IN); advanced filters also support comparisons, ranges, text matching, and
@@ -139,7 +166,8 @@ by-id twin (`get_aggregated_data_by_id`).
 
 **If an aggregation call fails on a dimension field with a 500:** that field
 isn't usable as a dimension for this client. Re-inspect the Step 2 schema for
-a sibling (e.g. `DR_ACC_L1.5` when `DR_ACC_L1` fails, or `account_group_l1`)
+a sibling account-level field from the discovered schema (orgs often carry
+in-between levels, or an `account_group_l1`-style alternative)
 and retry with it. If the alias call errors, retry the by-id twin. If no sibling
 works, tell the user which field failed.
 
@@ -159,11 +187,13 @@ If openpyxl is missing:
 
 ## Sheets to Generate
 
+> **Render only KPIs you can source.** A KPI may come from (a) the org's metric catalog — `list_business_metrics` (ungated) for discovery; the `get_business_metric_*` data tools are feature-gated and may be absent, and USER-kind metrics often return empty — or (b) aggregation over the discovered P&L grain (revenue, expense buckets, gross/operating margin when COGS/OpEx-like buckets exist). SaaS/unit-economics metrics (ARR, MRR, churn, LTV, CAC, burn, runway, NRR) are **not** derivable from a P&L table — include them only if discovered as populated metrics; otherwise omit the card/slide entirely. Never render a placeholder, estimate, or fabricated value for a KPI you could not source.
+
 1. **Summary**
    - Year, scenario, generation timestamp.
-   - Totals: Revenue, COGS, Gross Profit, Gross Margin %, Operating Expenses, Operating Income, Net Income.
-   - Balance Sheet snapshot: Total Assets, Total Liabilities, Total Equity (period-end).
-   - KPI snapshot: ARR, Net New ARR, Churn %, LTV, CAC, LTV/CAC.
+   - Totals: Revenue, COGS, Gross Profit, Gross Margin %, Operating Expenses, Operating Income, Net Income — each labeled with the period + scenario it covers (e.g. "FY<year> · <scenario>"), never presented as bare all-time numbers.
+   - Balance Sheet snapshot: Total Assets, Total Liabilities, Total Equity (period-end, labeled with the as-of month).
+   - KPI snapshot: only KPIs actually sourced per the rule above; drop the block entirely if none were sourceable.
    - Row-by-row validation checks (see sheet 4) summarized as PASS / FAIL count.
 
 2. **P&L**
@@ -172,14 +202,15 @@ If openpyxl is missing:
    - Subtotals (Revenue, COGS, Gross Profit, Total OpEx, Operating Income) bolded.
    - Number format: `$#,##0` for dollars, `0.0%` for percentages.
 
-3. **KPIs**
-   - One row per metric. Columns: Q1 / Q2 / Q3 / Q4 / FY / Prior FY / YoY Δ%.
-   - Include ARR, Net New ARR, Gross Churn %, Net Churn %, LTV, CAC, LTV/CAC, NRR, GRR.
+3. **KPIs** *(only when at least one KPI was sourced — otherwise omit the sheet)*
+   - One row per **sourced** metric. Columns: Q1 / Q2 / Q3 / Q4 / FY / Prior FY / YoY Δ%.
+   - Candidate SaaS metrics (ARR, Net New ARR, Gross/Net Churn %, LTV, CAC, LTV/CAC, NRR, GRR) appear only when sourced per the rule above; P&L-derivable KPIs (revenue, gross/operating margin) are always fair game. No placeholder or estimated rows or columns — omit them instead.
 
 4. **Validation**
    - One row per cross-check:
-     - "P&L Revenue total equals KPI Revenue total" → PASS/FAIL with both values.
+     - "P&L Revenue total equals KPI Revenue total" → PASS/FAIL with both values (skip when no KPI source exists).
      - "Sum of monthly Revenue equals annual Revenue" → PASS/FAIL.
+     - "Grand-total checksum" — computed P&L total matches the aggregation response's keyless grand-total row → PASS/FAIL.
      - "All 12 months present in extract" → PASS/FAIL.
      - "Scenario coverage" — list distinct scenarios and confirm `--scenario` is among them.
      - "Discovered field coverage" — list the fields bound in Step 2 and confirm each returned data.
@@ -253,15 +284,21 @@ workbooks; apply this contract when adding DR.GET formulas to a workbook here.
 
 Always include in the summary:
 - Output file path
-- Year and scenario extracted
+- Year and scenario extracted (every quoted total carries this label)
 - Validation result count (e.g. "5/5 PASS")
-- Any warnings (missing months, scenario gaps)
+- Any warnings (missing months, scenario gaps, KPIs omitted as unsourceable)
 
 ## Troubleshooting
 
 **No table matches the financials pattern (Step 2)**
 - List the tables you found and ask the user which one holds their P&L /
   financial data, then continue.
+
+**Extract comes back empty for the requested scenario**
+- Re-check the scenario domain from the data-scope discovery: the scenario
+  name you filtered on may simply not exist in this org (budget-like data
+  often lives in a planning-version field instead). Offer the scenarios that
+  do exist.
 
 **Aggregation rejected on a dimension field (500)**
 - Swap to a sibling field from the Step 2 schema and retry (see Step 3). If

@@ -18,7 +18,7 @@ allowed-tools:
   - Write
   - Read
   - Bash
-argument-hint: "--year <YYYY> [--output <file>]"
+argument-hint: "[--year <YYYY>] [--output <file>]"
 ---
 
 # FP&A Intelligence Workbook
@@ -41,7 +41,7 @@ This is the **most powerful** financial analysis skill — it answers real busin
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--year <YYYY>` | **REQUIRED** Calendar year | -- |
+| `--year <YYYY>` | Calendar year to analyze | Latest complete fiscal year (or trailing 12 closed months) from the discovered date range — never an unscoped all-time total |
 | `--output <file>` | Output file path | `tmp/FPA_Intelligence_Workbook_YYYY_TIMESTAMP.xlsx` |
 
 ## Workflow
@@ -95,20 +95,36 @@ conversation, then carry the values forward.
    which field to use. A missing `<vendor_field>` or `<cost_center_field>`
    just omits that sheet — don't block on it.
 
-3. Find the account category values the insight rules and filters need. Call
+3. Find the account grain and the category values the insight rules and
+   filters need. Call
    `get_distinct_values_by_alias(<financials_alias>, <account_l1_field>)` (or
-   `get_distinct_values_by_id(<financials_table_id>, <account_l1_field_id>)`). If
-   the distinct call errors, fall back to
+   `get_distinct_values_by_id(<financials_table_id>, <account_l1_field_id>)`),
+   and the same for `<account_l2_field>`. Per the data-scope preamble below,
+   pick the **P&L grain**: the level whose values partition into
+   revenue/COGS/opex-like buckets — if the top level's values are
+   balance-sheet-equation buckets rather than P&L flows, the P&L line items
+   live one level deeper. Rebind `<account_l1_field>` to that P&L-grain level
+   (and `<account_l2_field>` to the next level down, when one exists) so every
+   category pull, filter, and sheet downstream uses the discovered grain. If a
+   distinct call errors, fall back to
    `get_data_by_alias(<financials_alias>, select=[<account_l1_field>], limit=500)`
    (or the by-id twin) and collect the distinct values. Match:
    - `<revenue_value>` ← `/revenue|sales|income/i`
    - `<cogs_value>`    ← `/cogs|cost of goods|cost of sales|direct cost/i`
    - `<opex_value>`    ← `/operating|opex|expense|sg&a/i`
 
-   If a category has several candidates, pick the broadest top-level one; if
-   genuinely ambiguous, ask the user once.
+   If a category has several candidates, pick the broadest one at the P&L
+   grain; if genuinely ambiguous, ask the user once. Scope every P&L pull in
+   Step 3 to these buckets — never present balance-sheet
+   (asset/liability/equity-like) totals as revenue or expenses.
 
 Aggregation-field failures are handled reactively, not pre-probed (see Step 3).
+
+> **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
+> 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
+> 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
 
 ### Step 3: Fetch Data via MCP
 
@@ -124,6 +140,17 @@ Aggregation call shapes:
 - By-id path: `get_aggregated_data_by_id(table_id=<financials_table_id>,
   dimensions=[<field_ids>], metrics=[{"field_id": <amount_field_id>, "agg":
   "SUM"}], filters=[...])`.
+
+**Default scope (data-scope preamble):** filter every P&L pull to a single
+scenario — the actuals-like value from the discovered scenario domain unless
+the user asked for another — and to `--year` (or, when `--year` was omitted,
+the latest complete fiscal year / trailing 12 closed months from the
+discovered date range). Carry the period + scenario into every sheet label.
+
+**Reading responses (preamble rule 4):** before any client-side math (sums,
+shares, MoM/YoY deltas, the σ anomaly rule), drop the trailing keyless
+grand-total row from each aggregation payload — use it only as a checksum —
+and read null counts only from the explicit `[null]` bucket.
 
 1. **Monthly P&L** — aggregate on the financials table grouped by
    `[<account_l1_field>, <month_field>]`, summed by `<amount_field>`. Scope
@@ -149,8 +176,8 @@ works and is optional.
 
 **If an aggregation call fails on a dimension field with a 500:** that field
 isn't usable as a dimension for this client. Re-inspect the Step 2 schema for
-a sibling (e.g. `DR_ACC_L1.5` when `DR_ACC_L1` fails, or `account_group_l1`)
-and retry with it. If the alias call errors, retry the by-id twin. If no
+a sibling account-level field from the discovered schema (orgs often carry
+in-between levels, or a name variant like `account_group_l1`) and retry with it. If the alias call errors, retry the by-id twin. If no
 sibling works, tell the user which field failed.
 
 ### Step 4: Calculate Insights
@@ -171,6 +198,10 @@ Apply these detection rules and rank results by severity:
 
 **Materiality thresholds**: only surface a finding if the affected line is ≥ 5% of the relevant total. Variance alerts trigger at 10% MoM change. Concentration risk triggers at 10% single-vendor share.
 
+Budget-dependent rules (e.g. cost center over budget) apply only when a
+budget-like scenario or planning-version field was discovered (data-scope
+preamble, item 1); otherwise skip them — never fabricate a budget baseline.
+
 For each insight, generate:
 - A one-sentence finding
 - Quantified impact ($ amount and % of relevant total)
@@ -190,7 +221,9 @@ Write a single Python script and execute it via `Bash`. The script reads a JSON 
 
 Order matters — the dashboard is sheet 1, raw data is sheet 10.
 
-1. **Insights Dashboard** — Top 5 findings with severity color, current period KPIs (Revenue, Gross Margin, OpEx, Burn, Runway), and the ranked recommendations list.
+> **Render only KPIs you can source.** A KPI may come from (a) the org's metric catalog — `list_business_metrics` (ungated) for discovery; the `get_business_metric_*` data tools are feature-gated and may be absent, and USER-kind metrics often return empty — or (b) aggregation over the discovered P&L grain (revenue, expense buckets, gross/operating margin when COGS/OpEx-like buckets exist). SaaS/unit-economics metrics (ARR, MRR, churn, LTV, CAC, burn, runway, NRR) are **not** derivable from a P&L table — include them only if discovered as populated metrics; otherwise omit the card/slide entirely. Never render a placeholder, estimate, or fabricated value for a KPI you could not source.
+
+1. **Insights Dashboard** — Top 5 findings with severity color, current period KPIs (Revenue, Gross Margin, OpEx from the discovered P&L grain; Burn and Runway only if sourced per the KPI-honesty rule above — omit those cards otherwise), and the ranked recommendations list.
 2. **Expense Deep Dive** — Top 20 expense accounts: amount, % of total OpEx, MoM Δ%, YoY Δ%. Color the % cells with a green→red color scale.
 3. **Variance Waterfall** — Current period vs. prior period: contribution to total variance line by line. Use a bar chart.
 4. **Trend Analysis** — 12-month rolling P&L: Revenue, COGS, Gross Profit, OpEx, Net Income. One line per metric, secondary axis for margin %.
@@ -200,12 +233,13 @@ Order matters — the dashboard is sheet 1, raw data is sheet 10.
    anomaly tool — the findings are computed client-side). Severity column,
    drill-down hint per row.
 6. **Vendor Analysis** — Top 20 vendors: spend, % of OpEx, MoM Δ. Concentration risk flag column. Pie chart for top-10.
-7. **SaaS Metrics** — ARR, Net New ARR, NRR, GRR, CAC, LTV, LTV/CAC, Magic Number, Burn Multiple, CAC Payback. Quarterly columns; YoY column at right.
-8. **Sales Performance** — Rep-level: bookings, win rate, ACV, ramp status. Cohort table by hire quarter.
+7. **SaaS Metrics** — only the SaaS/unit-economics metrics actually sourced per the KPI-honesty rule (e.g. ARR, NRR, CAC, LTV when they exist as populated metrics in the KPI table or metric catalog). Quarterly columns; YoY column at right. Omit the sheet entirely when none are sourced.
+8. **Sales Performance** — Rep-level: bookings, win rate, ACV, ramp status. Cohort table by hire quarter. Only if a sales/bookings-like table or populated metrics were discovered; omit the sheet otherwise (KPI-honesty rule).
 9. **Cost Center P&L** — Department × month grid with totals row and YoY column. Conditional formatting on Δ%.
 10. **Raw Data** — Long-form pivot-ready dataset (the monthly L1×L2 frame). No formatting — just headers + data.
 
-Each sheet must include a generation timestamp footer and the year analyzed.
+Each sheet must include a generation timestamp footer and the period +
+scenario analyzed (data-scope preamble: label every output).
 
 ## Datarails Brand Styling
 
@@ -283,7 +317,7 @@ After writing the file, surface it to the user:
 
 Always include in the summary:
 - Output file path
-- Year analyzed
+- Period + scenario analyzed
 - Number of insights surfaced (by severity)
 - Top recommendation
 
@@ -301,6 +335,10 @@ This workbook answers the **Top 10 Business Questions**:
 8. **What's our burn situation?** — Runway, burn multiple
 9. **What should we investigate?** — Exception report
 10. **What actions to take?** — Automated recommendations
+
+Questions 7 and 8 depend on sales/SaaS data existing in the org — when none
+was discovered, the workbook omits those sheets rather than fabricating
+answers (KPI-honesty rule).
 
 ## Performance
 
@@ -328,8 +366,8 @@ Aggregation-first strategy keeps round-trips small. Pagination is the fallback o
 
 **Missing data in sheets**
 - Re-check the fields bound in Step 2; a sheet whose source field
-  (`<vendor_field>`, `<cost_center_field>`, KPI table) wasn't found is
-  omitted by design.
+  (`<vendor_field>`, `<cost_center_field>`, KPI table) wasn't found — or
+  whose KPIs couldn't be sourced (KPI-honesty rule) — is omitted by design.
 
 ## Related Skills
 

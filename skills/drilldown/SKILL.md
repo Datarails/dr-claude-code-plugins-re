@@ -1,6 +1,6 @@
 ---
 name: dr-drilldown
-description: Drill down on a cell in the Datarails Excel Add-in to see underlying detail — also the skill to use when the user asks to "explain the variance", "explain this number", "what's driving this", "what's behind this cell", or break a figure into its line items. In a live Excel context (add-in agent bridge available) DR formula cells drill through the add-in's own drill-down; otherwise (Claude Code with an .xlsx file) it resolves DR.GET formulas, reads hidden "dr control" filters, queries Datarails, and validates totals. Self-contained — discovers the client's financials table and fields on its own, no profile or setup step required.
+description: Drill down on a cell in the Datarails Excel Add-in to see underlying detail — also the skill to use when the user asks to "explain the variance", "explain this number", "what's driving this", "what's behind this cell", or break a figure into its line items. In a live Excel context (add-in agent bridge available) DR formula cells drill through the add-in's own drill-down; with an .xlsx file (Claude Code) it resolves DR.GET formulas, reads hidden "dr control" filters, queries Datarails, and validates totals; with no workbook at all, the user can paste a DR.GET formula, describe the data point, or give structured filters (no-file mode). Self-contained — discovers the client's financials table and fields on its own, no profile or setup step required.
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__list_data_models
@@ -29,7 +29,7 @@ Drill into any cell that contains Datarails data to see the underlying line-item
 - Cells containing a **DR formula** directly (`DR.GET`/`DR.QTD`/`DR.YTD`/`DR.MTD`/… — any DR function)
 - Cells containing an **Excel formula** (SUM, +, -, etc.) whose precedents are DR formula cells
 
-**Two paths.** In a **live Excel context** (add-in agent bridge available — Claude for Excel / an open workbook with the add-in), drilling a DR formula cell goes through the **add-in's own drill-down** via the agent bridge (Step 0 below) — the add-in resolves filters, dates, and totals natively. (Excel context is about the bridge being present, not whether the workbook is connected.) The MCP/openpyxl workflow (Phases 0–5) is the **fallback** for Claude Code with an `.xlsx` file and no bridge.
+**Three paths.** In a **live Excel context** (add-in agent bridge available — Claude for Excel / an open workbook with the add-in), drilling a DR formula cell goes through the **add-in's own drill-down** via the agent bridge (Step 0 below) — the add-in resolves filters, dates, and totals natively. (Excel context is about the bridge being present, not whether the workbook is connected.) The MCP/openpyxl workflow (Phases 0–5) is the **file fallback** for Claude Code with an `.xlsx` file and no bridge. And with **no workbook at all**, **no-file mode** (below) takes a pasted DR.GET formula, a plain-language description, or structured filters straight from chat.
 
 **Requirements (fallback path only):** the MCP/openpyxl workflow requires Python with openpyxl to read Excel formulas. If not installed, run `pip install openpyxl`. The fallback path runs in Claude Code (not Cowork). The Excel-context path needs no Python.
 
@@ -37,9 +37,9 @@ Drill into any cell that contains Datarails data to see the underlying line-item
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `<cell-reference>` | The cell to drill down on, e.g. `B6` or `Sheet1!B6` | **Required** |
+| `<cell-reference>` | The cell to drill down on, e.g. `B6` or `Sheet1!B6` | **Required** for the Excel-context and file paths (not used in no-file mode) |
 | `--by <fields>` | Fields to break down by (e.g. `Account Full,Vendor`). **MCP/openpyxl fallback** accepts a comma-separated list (multiple `dimensions`). **Excel-context agent pivot** (`drilldown_by_pivot`) takes **exactly one** field — pass the single field as `rowField`; if multiple are given, use the first and tell the user the others aren't supported in one pivot. | All available fields (fallback) / first field (agent pivot) |
-| `--file <path>` | Path to the `.xlsx` workbook file | Ask user |
+| `--file <path>` | Path to the `.xlsx` workbook file | Ask user (omit for no-file mode: pasted formula / description / structured filters) |
 
 ## Verify Connection
 
@@ -69,9 +69,23 @@ Contract (see CLAUDE.md — do not probe `agent.get_session` inline).
 
   **Connection:** `drilldown_*` requires the workbook connected. **Let the Excel-context connector handle this gate** (per the Excel Context Contract) — its Connection requirement checks `isConnected` (a COM-only field; no gate on Flex) and prompts for explicit `connect_file` confirmation when needed. Do not probe or branch on `isConnected` here.
 
-- **No Excel context** (guard returns `excel_context: false` — Claude Code with `--file`, no bridge): use the MCP/openpyxl workflow (Phases 0–5 below).
+- **No Excel context, file provided** (guard returns `excel_context: false` — Claude Code with `--file`, no bridge): use the MCP/openpyxl workflow (Phases 0–5 below).
+
+- **No Excel context, no file** (the user pasted a formula or described a number in chat): use **no-file mode** (next section) — skip Phases 0–2 entirely.
 
 See the **Excel Context Contract** (CLAUDE.md) for the bridge protocol, drill-down commands, and gating.
+
+### No-file mode — chat-only intake (no workbook)
+
+The user has no workbook open and no `.xlsx` to hand over — they paste or describe what to drill. Gather the DR.GET parameters from one of three intakes:
+
+- **Intake A — pasted DR.GET formula.** Parse dimension/value pairs from the pasted string with the Step 1.3 pattern (`"[DimensionName]"` followed by its value). Values arrive as literals here (no cell references to resolve) — strings or numbers. Dimension names come from the client's own workbook/schema; match each parsed dimension to the fields discovered in Phase 3.
+- **Intake B — plain-language description.** e.g. "Break down January 2026 Actuals Revenue." Map the description to dimension filters via discovery (Step 3.1): the account-like term binds to the discovered account field at the discovered P&L grain, the scenario term is validated against the discovered scenario domain, the period term becomes an advanced date filter. Ask a clarifying question when the mapping is ambiguous — never guess silently.
+- **Intake C — structured filters.** e.g. "Scenario=Actuals, Account Group L1=Revenues, Reporting Date=2026-01" (illustrative — the client's own field names). Take the pairs as given, then validate each field name and value against the discovered schema / distinct values before querying.
+
+Then ask whether any **global add-in filters** (entity / reporting-unit / department-style) were active where this number came from — there is no `dr control` sheet to read in this mode, so global filters can only come from the user. If they're unsure, proceed without them and note in the output that totals may differ from their Excel if global filters are active.
+
+Continue at **Phase 3** (discovery + query) and present per **Phase 5**. **Phase 4 validation is limited here:** with no cached workbook value to check against, validate only if the user states the expected total — otherwise label the result "not validated against a workbook value".
 
 ### Phase 0 - Open the Workbook
 
@@ -110,10 +124,10 @@ Use this regex to parse dimension pairs from the formula string:
 
 For each match, group(1) is the dimension name and group(2) is the cell reference. Strip `$` from the cell reference and read the cached value from the `data_only=True` workbook.
 
-This produces a dict like:
+This produces a dict like (illustrative — dimension names come from the client's own workbook):
 
     {
-      "DR_ACC_L1.5": {"ref": "$A6", "value": "Revenues"},
+      "Account Group L1": {"ref": "$A6", "value": "Revenues"},
       "Scenario": {"ref": "$B$1", "value": "Actuals"},
       "Reporting Date": {"ref": "B$5", "value": 46053}
     }
@@ -156,17 +170,17 @@ Each cell may contain a JSON array or object. Parse it and look for objects that
 
 #### Step 2.3 - Parse Filter Definitions
 
-Each filter object has this structure:
+Each filter object has this structure (values shown are illustrative — your org's fields and values will differ):
 
     {
       "Key": "global",
       "FilterStorageValues": [
         {
-          "Id": 1646893,
+          "Id": 1234567,
           "Name": "Reporting Unit",
           "Type": "Text",
-          "Values": ["Core"],
-          "AllValues": [null, "###", "Collaborations", "Core", "DNA G", "DNA H", "LAB"],
+          "Values": ["Unit A"],
+          "AllValues": [null, "Unit A", "Unit B", "Unit C", "Unit D"],
           "IsExcluded": false,
           "IncludeNullValues": true
         }
@@ -187,11 +201,11 @@ Parse each filter and build a list of **active global filters**:
 
 **If `Values` is a proper subset of `AllValues`** and `IsExcluded` is false, this is an active filter:
 
-    Active filter: "Reporting Unit" IN ["Core"]
+    Active filter: "Reporting Unit" IN ["Unit A"]
 
 **If `IsExcluded` is true**, the filter means everything EXCEPT these values:
 
-    Active filter: "Reporting Unit" NOT IN ["DNA G", "DNA H"]
+    Active filter: "Reporting Unit" NOT IN ["Unit C", "Unit D"]
 
 Store all active filters - they must be applied to the drill-down query in Phase 3.
 
@@ -230,8 +244,9 @@ free; do it once per conversation, then carry the values forward.
 
 **Aggregation-field failures are handled reactively, not pre-probed.** If the
 Step 3.3 aggregation call 500s on a dimension field, re-inspect the schema for
-a sibling (e.g. `DR_ACC_L1.5` when `DR_ACC_L1` fails, or `account_group_l1`)
-and retry — this is also a likely cause of a total mismatch in Phase 4. If an
+a sibling account-level field from the discovered schema (orgs often carry
+in-between levels, or `account_group_l1`-style twins) and retry — this is also
+a likely cause of a total mismatch in Phase 4. If an
 alias call fails, fall back to the by-id twin.
 
 #### Step 3.2 - Determine Drill-Down Dimensions
@@ -241,7 +256,7 @@ If the user supplied `--by <fields>`:
 
 If no `--by` was supplied:
 - Use the fields from Step 3.1 to find all categorical fields that are NOT already pinned by the DR.GET parameters.
-- Common useful drill-down dimensions: `Account Full`, `Account Name`, `Report_Field`, `DR_ACC_L2`, `Vendor`, `Department L1`, `Department L2`, `Reporting Unit`, `Entity`.
+- Common useful drill-down dimensions (name hints — match against the discovered schema): `Account Name`/`Account Full`, `DR_ACC_L2`-style account levels, `Vendor`, `Department L1`/`Department L2`, `Reporting Unit`, `Entity`.
 - Ask the user which fields they want to break down by, suggesting the most useful ones.
 
 #### Step 3.3 - Build the Aggregation Query
@@ -315,7 +330,7 @@ Common causes and fixes:
 | Cause | Diagnosis | Fix |
 |-------|-----------|-----|
 | **Missing global filter** | The dr control sheet has a filter you did not apply | Re-read the control sheet, check for additional filter cells or sheets |
-| **Wrong field mapping** | A dimension name in DR.GET does not match the Datarails field name exactly | Use `list_aliased_fields` / `get_fields_by_id` to verify field names; try alternatives (e.g. `DR_ACC_L1.5` vs `DR_ACC_L1`) |
+| **Wrong field mapping** | A dimension name in DR.GET does not match the Datarails field name exactly | Use `list_aliased_fields` / `get_fields_by_id` to verify field names; try a sibling account-level field from the discovered schema (orgs often carry in-between levels) |
 | **Date format mismatch** | Reporting Date serial number not matching | Verify the date value and format being sent |
 | **IncludeNullValues not applied** | The global filter includes nulls but the query does not | Add a separate query for NULL values in that field and combine |
 | **Exclusion filter reversed** | IsExcluded true was not handled correctly | Double-check: if excluded, the values should be in the exclusion list |
@@ -333,7 +348,7 @@ If the mismatch cannot be resolved after 2 attempts:
 Show a single table with the drill-down data:
 
     Drill-down: Cell B6 = $1,234,567 (Revenues, Actuals, Jan-26)
-    Active global filters: Reporting Unit = "Core"
+    Active global filters: Reporting Unit = "Unit A"
 
     | Account Name           | Amount      |
     |------------------------|-------------|
@@ -384,21 +399,23 @@ Show each component table plus how they combine:
 
 ## Examples
 
+All examples are illustrative — DR.GET dimension names, filter values, and figures come from the client's own workbook and schema; your org's will differ.
+
 ### Example 1: Direct DR.GET cell
 
     User: /dr-drilldown B6 --file budget.xlsx
 
-Cell B6 contains `=DR.GET(Value, "[DR_ACC_L1.5]", $A6, "[Scenario]", $B$1, "[Reporting Date]", B$5)`
-- Resolves: DR_ACC_L1.5=Revenues, Scenario=Actuals, Reporting Date=46053
-- Reads dr control: Reporting Unit filter = "Core"
+Cell B6 contains `=DR.GET(Value, "[Account Group L1]", $A6, "[Scenario]", $B$1, "[Reporting Date]", B$5)`
+- Resolves: Account Group L1=Revenues, Scenario=Actuals, Reporting Date=46053
+- Reads dr control: Reporting Unit filter = "Unit A"
 - Queries Datarails with all filters, broken down by all available fields
 - Validates total, presents full breakdown
 
 ### Example 2: Drill down by specific field
 
-    User: /dr-drilldown B6 --by "Report_Field" --file budget.xlsx
+    User: /dr-drilldown B6 --by "Vendor" --file budget.xlsx
 
-Same resolution, but only breaks down by Report_Field.
+Same resolution, but only breaks down by Vendor.
 
 ### Example 3: Derived formula (Gross Profit)
 

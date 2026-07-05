@@ -35,6 +35,12 @@ Perfect for departmental reviews, budget planning, and performance assessment.
 - Comparative analysis
 - Per-employee metrics
 
+## Data-Scope Rules
+
+> **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+>
+> **Period scope.** Default every departmental P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total — and label every output with the period + scenario it covers.
+
 ## Use Cases
 
 - Monthly department reviews

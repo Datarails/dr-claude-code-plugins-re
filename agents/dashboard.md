@@ -49,12 +49,14 @@ Use this agent when you need:
 
 ## Workflow
 
-1. **Determine Period** - Current month or specified
+1. **Determine Period** - Current month or specified; default P&L views to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total — and label every output with the period + scenario it covers
 2. **Fetch Metrics** - Latest KPI values
 3. **Calculate Status** - Green/yellow/red indicators
 4. **Generate Excel** - Dashboard with all metrics
 5. **Generate PowerPoint** - One-pager for meetings
 6. **Deliver** - Save and display
+
+> **Scenario check (before step 3).** Never assume a scenario name exists — `Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`. Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) before any vs-target status. If no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the target side; if neither exists, say so and compute status from the scenarios that do exist (e.g. trend vs prior period).
 
 ## Output
 
@@ -110,6 +112,10 @@ Use this agent when you need:
 - Executive summary
 
 ## Key Metrics Included
+
+> **Render only KPIs you can source.** A KPI may come from (a) the org's metric catalog — `list_business_metrics` (ungated) for discovery; the `get_business_metric_*` data tools are feature-gated and may be absent, and USER-kind metrics often return empty — or (b) aggregation over the discovered P&L grain (revenue, expense buckets, gross/operating margin when COGS/OpEx-like buckets exist). SaaS/unit-economics metrics (ARR, MRR, churn, LTV, CAC, burn, runway, NRR) are **not** derivable from a P&L table — include them only if discovered as populated metrics; otherwise omit the card/slide entirely. Never render a placeholder, estimate, or fabricated value for a KPI you could not source.
+
+Candidate KPIs — each rendered only when sourced per the rule above:
 
 **Revenue & Growth**:
 - ARR (Annual Recurring Revenue)

@@ -152,8 +152,21 @@ When writing or updating a skill, copy the relevant recipe so heuristics stay co
    "Aggregation / query API notes") or by adding the date as a dimension and filtering
    client-side.
 5. **Failures are handled reactively, not pre-probed:** if a call 500s on a dimension/
-   metric field, re-inspect the Step-2 schema for a sibling (e.g. `DR_ACC_L1.5`) and
+   metric field, re-inspect the Step-2 schema for a sibling account-level field from the
+   discovered schema (orgs often carry in-between levels) and
    retry; if an alias call fails, fall back to the by-id twin.
+
+**Data-scope preamble (inline into every skill that aggregates financial data):**
+
+> **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
+> 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
+> 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+
+**KPI honesty (inline into every skill/agent that renders KPI cards, dashboards, or executive summaries):**
+
+> **Render only KPIs you can source.** A KPI may come from (a) the org's metric catalog — `list_business_metrics` (ungated) for discovery; the `get_business_metric_*` data tools are feature-gated and may be absent, and USER-kind metrics often return empty — or (b) aggregation over the discovered P&L grain (revenue, expense buckets, gross/operating margin when COGS/OpEx-like buckets exist). SaaS/unit-economics metrics (ARR, MRR, churn, LTV, CAC, burn, runway, NRR) are **not** derivable from a P&L table — include them only if discovered as populated metrics; otherwise omit the card/slide entirely. Never render a placeholder, estimate, or fabricated value for a KPI you could not source.
 
 **Metric-v1 skills (`__internal`, business-metrics / aliased layer):**
 Run the catalog calls in parallel — `list_data_models`, `list_aliased_fields` (or

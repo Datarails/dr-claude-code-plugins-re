@@ -23,7 +23,7 @@ A specialized agent for multi-scenario financial analysis and variance tracking.
 
 ## Description
 
-Analyzes variances between Actuals, Budget, and Forecast scenarios to support FP&A reviews and planning adjustments.
+Analyzes variances across the org's discovered scenarios — actuals vs whatever plan side exists (a budget-like scenario, or a planning-version field when none does) vs forecast — to support FP&A reviews and planning adjustments.
 
 Essential for financial planning, performance tracking, and forecast accuracy monitoring.
 
@@ -52,17 +52,21 @@ Use this agent when you need:
 ## Workflow
 
 1. **Determine Period** - Year or specific period
-2. **Specify Scenarios** - Actuals, Budget, Forecast, etc.
+2. **Discover Scenarios** - Pull the scenario domain before fetching anything (see below)
 3. **Fetch Data** - All scenario data
 4. **Calculate Variance** - $ and % differences
 5. **Analyze Trends** - Identify patterns
 6. **Generate Reports** - Excel and PowerPoint
 7. **Communicate** - Present findings
 
+> **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+>
+> **Period scope.** Default every comparison to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total — and **label every output with the period + scenario it covers.**
+
 ## Variance Analysis
 
-### Budget Variance
-- Actual vs Budget amounts
+### Budget/Plan Variance
+- Actual vs plan side (budget-like scenario, or planning-version field when none exists)
 - Percentage difference
 - Favorable/unfavorable
 - Trend (improving/worsening)
@@ -99,17 +103,18 @@ Use this agent when you need:
 **User**: "How did we perform against 2025 budget?"
 
 **Agent**:
-1. Fetches all 2025 Actuals data
-2. Fetches all 2025 Budget data
-3. Calculates variance by account
-4. Identifies favorable/unfavorable
-5. Generates comprehensive report
-6. Creates executive summary
+1. Discovers the scenario domain and resolves the plan side (budget-like scenario, or planning-version versions)
+2. Fetches all 2025 Actuals data
+3. Fetches all 2025 plan-side data
+4. Calculates variance by account
+5. Identifies favorable/unfavorable
+6. Generates comprehensive report
+7. Creates executive summary
 
-**Output**:
+**Output** (illustrative):
 ```
 Year: 2025
-Scenarios: 2 (Actuals, Budget)
+Compared: Actuals vs <discovered plan side>
 Variances Found: 12
 
 Revenue variance: +2.1% (favorable)
@@ -123,12 +128,13 @@ Key Finding: R&D spending exceeded budget by $450K
 **User**: "Show Q4 performance vs budget and forecast"
 
 **Workflow**:
-1. Fetches Q4 Actuals
-2. Fetches Q4 Budget
-3. Fetches Q4 Forecast
-4. Calculates all variances
-5. Generates three-way comparison
-6. Presents to finance team
+1. Discovers the scenario domain; resolves the plan side
+2. Fetches Q4 Actuals
+3. Fetches Q4 plan-side data
+4. Fetches Q4 Forecast (if present in the domain)
+5. Calculates all variances
+6. Generates three-way comparison
+7. Presents to finance team
 
 ### Forecast Accuracy Tracking
 
@@ -136,6 +142,7 @@ Key Finding: R&D spending exceeded budget by $450K
 
 **Command**:
 ```bash
+# scenario names from the discovered scenario domain
 /dr-forecast-variance --year 2025 \
   --scenarios Actuals,Forecast --period 2025-Q3
 ```
@@ -145,12 +152,12 @@ Key Finding: R&D spending exceeded budget by $450K
 ## Performance Measurement
 
 ### Favorable Variance
-- Actual > Budget (Revenue) ✅
-- Actual < Budget (Expense) ✅
+- Actual > Plan (Revenue) ✅
+- Actual < Plan (Expense) ✅
 
 ### Unfavorable Variance
-- Actual < Budget (Revenue) ❌
-- Actual > Budget (Expense) ❌
+- Actual < Plan (Revenue) ❌
+- Actual > Plan (Expense) ❌
 
 ### Variance Magnitude
 - <5%: Excellent accuracy
@@ -176,7 +183,7 @@ Key Finding: R&D spending exceeded budget by $450K
 
 ### Forecast Improvement
 ```bash
-# Track forecast getting better/worse
+# Track forecast getting better/worse (use discovered scenario names)
 /dr-forecast-variance --year 2025 --scenarios Actuals,Forecast
 # Compare vs prior period forecast
 ```
@@ -196,15 +203,15 @@ Key Finding: R&D spending exceeded budget by $450K
 
 ## Error Handling
 
-**"Scenario not found"** - Verify scenario exists
-**"No variance data"** - Confirm Budget/Forecast available
+**"Scenario not found"** - Re-pull the scenario domain; the requested name may not exist in this org
+**"No variance data"** - Confirm a plan side exists (budget-like scenario or planning-version field); if neither does, compare the scenarios that do exist and say so
 **"Large variance"** - Review Excel for root causes
 
 ## Advanced Usage
 
 ### Track forecast improvement
 ```bash
-# Run monthly forecasts and compare
+# Run monthly forecasts and compare (scenario names from the discovered domain)
 /dr-forecast-variance --year 2025 --scenarios Actuals,Forecast
 # Later in quarter:
 /dr-forecast-variance --year 2025 --scenarios Actuals,Forecast
@@ -213,16 +220,17 @@ Key Finding: R&D spending exceeded budget by $450K
 
 ### Multiple scenarios
 ```bash
-# Compare conservative vs aggressive budget
+# Compare plan versions — scenario names are placeholders;
+# always pass names from the discovered scenario domain
 /dr-forecast-variance --year 2025 \
-  --scenarios Actuals,Budget_Conservative,Budget_Aggressive
+  --scenarios Actuals,<PlanVersionA>,<PlanVersionB>
 ```
 
 ### Year-over-year comparison
 ```bash
-# Compare 2024 vs 2025 performance vs budget
-/dr-forecast-variance --year 2024 --scenarios Actuals,Budget
-/dr-forecast-variance --year 2025 --scenarios Actuals,Budget
+# Compare 2024 vs 2025 performance vs plan (use discovered scenario names)
+/dr-forecast-variance --year 2024 --scenarios Actuals,<PlanScenario>
+/dr-forecast-variance --year 2025 --scenarios Actuals,<PlanScenario>
 ```
 
 ## Integration

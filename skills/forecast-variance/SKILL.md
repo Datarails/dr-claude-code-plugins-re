@@ -22,7 +22,7 @@ argument-hint: "--year <YYYY> [--scenarios <list>] [--period <YYYY-MM>] [--outpu
 
 # Forecast Variance Analysis
 
-Analyze variances between Actuals, Budget, and Forecast scenarios.
+Analyze variances between your actual, plan, and forecast data. Scenario names are **discovered from your data, never assumed** — many orgs have no `Budget` scenario at all (plan data often lives in a separate planning-version field), so the plan side of the comparison is resolved at runtime (Step 1b).
 
 Essential for FP&A reviews, planning adjustments, and performance tracking.
 
@@ -31,7 +31,7 @@ Essential for FP&A reviews, planning adjustments, and performance tracking.
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `--year <YYYY>` | **REQUIRED** Calendar year to analyze | — |
-| `--scenarios <list>` | Comma-separated scenarios | `Actuals,Budget,Forecast` |
+| `--scenarios <list>` | Comma-separated scenario names, resolved against the discovered scenario domain (Step 1b) | Resolved at runtime — actual side + plan side + forecast, whichever exist |
 | `--period <YYYY-MM>` | Specific period to focus on | All year |
 | `--output-xlsx <file>` | Excel output path | `tmp/Forecast_Variance_YYYY_TIMESTAMP.xlsx` |
 | `--output-pptx <file>` | PowerPoint output path | `tmp/Forecast_Summary_YYYY_TIMESTAMP.pptx` |
@@ -76,9 +76,41 @@ Every Datarails customer structures their Financials table differently. **Never 
 | **Cost Center** | The field that identifies the organizational unit / department incurring the cost | `Cost_Center`, `DR_Cost_Center`, `Department`, `Dept_Name`, `CostCenter` |
 | **Report Field** | The field that identifies the P&L line item / account category as it appears in the customer's report | `Report_Field`, `Report_Line`, `DR_ACC_L1`, `DR_ACC_L2`, `Account_Name`, `Line_Item` |
 
-If multiple candidates exist for either dimension, pick the most specific / granular one. Document both discovered field names — use them in **every aggregation** for this analysis session. These two dimensions are mandatory; omitting either produces commentary that is not actionable.
+If multiple candidates exist for either dimension, pick the most specific / granular one. If no candidate is identifiable by name (e.g., non-English field names), list the discovered fields and ask the user which to use. Document both discovered field names — use them in **every aggregation** for this analysis session. These two dimensions are mandatory; omitting either produces commentary that is not actionable.
 
 If the schema genuinely has no identifiable cost center field, flag this in the Read Me block and fall back to the next-best grouping available (e.g., account hierarchy). Never silently drop the dimension.
+
+> **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
+> 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
+> 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+
+### Step 1b — Resolve the scenario domain and the plan side (never assume `Budget` exists)
+
+Scenario names vary by org, and a `Budget` scenario frequently does not exist — filtering on it returns an empty result and a silently wrong analysis. Resolve every side of the comparison against **discovered** values before any pull:
+
+1. **Discover the scenario domain.** Pull distinct values of the discovered scenario field — `get_distinct_values_by_alias(alias=<financials_alias>, field=<scenario_field>)` if the field is aliased, else `get_distinct_values_by_id(table_id=<id>, field_id=<scenario_field_id>)`.
+2. **Resolve the actual side** — the discovered value matching `/actual/i`.
+3. **Resolve the plan side:**
+   - **A budget-like scenario exists** (a discovered value matches `/budget|plan|aop|target/i`) → use it as the plan-side scenario filter.
+   - **No budget-like scenario** → look for a **planning-version-like field** in the Step 1 schema (alias/name matching `/plan|version|cycle|budget/i`). If one exists, pull **its** distinct values the same way, present the versions, and ask the user which plan version to compare against (default to the most recent only if the user already indicated it). Use `{<planning_version_field>: <chosen version>}` as the plan-side filter in Step 3 instead of a scenario value — and check which scenario values the rows under that version carry before also filtering on scenario.
+   - **Neither exists** → tell the user what you found, then offer what IS possible:
+     > I found actuals data but couldn't locate any budget or plan data in your financials table — there's no budget-like scenario and no planning-version field.
+     >
+     > The available scenarios are: [list the discovered values]
+     >
+     > Options:
+     > - Would you like me to compare Actuals against Forecast instead?
+     > - Or should I just show you the Actuals breakdown?
+4. **Resolve the forecast side** (if in scope) — the discovered value matching `/forecast/i`; if absent, drop it from the comparison and say so.
+5. **If `--scenarios` was passed**, map each requested name onto the discovered domain (case-insensitive). Any name with no match goes through the plan-side fallback above — never filter on a scenario value you did not see in the distinct-values response.
+
+**If the plan side is incomplete** (it exists but doesn't cover all the categories or periods that Actuals covers), say so and offer:
+- Compare only the overlapping categories/periods
+- Show where plan data is missing
+
+Record the resolved sides — actual, plan (scenario value or plan-version filter), forecast — and use them verbatim in every Step 3 pull and in every output label.
 
 ### Step 2 — Read the active sheet (Phase 0)
 
@@ -99,12 +131,14 @@ get_aggregated_data_by_alias(
   dimensions=[<period_field>, <cost_center_field>, <report_field>],
   metrics=[{"field": <amount_field>, "agg": "SUM"}],
   filters=[
-    {"name": <scenario_field>, "values": [<scenario>], "is_excluded": false},
-    {"name": <acc_l0_field>,   "values": ["P&L"],      "is_excluded": false},
-    {"name": <gaap_field>,     "values": ["Gaap"],     "is_excluded": true}
+    {"name": <scenario_field>,      "values": [<side resolved in Step 1b>],                "is_excluded": false},
+    {"name": <account_level_field>, "values": [<P&L flow buckets from data-scope item 2>], "is_excluded": false},
+    {"name": <gaap_field>,          "values": [<discovered GAAP-adjustment values>],       "is_excluded": true}
   ]
 )
 ```
+
+All filter values are placeholders — every one comes from Step 1b / the data-scope discovery, never from this template. **Plan side:** when Step 1b resolved a plan-version fallback, replace the scenario filter with `{"name": <planning_version_field>, "values": [<chosen version>], "is_excluded": false}`. **Account scope:** use the account-hierarchy level whose discovered values partition P&L flows (data-scope item 2) — on many orgs the top level is the balance-sheet equation and P&L buckets live one level deeper. **GAAP exclusion:** only if a GAAP-adjustment-like field exists — discover its values first, otherwise omit the filter.
 
 Scope by year either by adding `<date_field>` to `dimensions` and filtering the result client-side, or with an **advanced** date-range filter: `{"name": <date_field>, "values": {"type": "advanced", "val": [{"condition": "total_range", "value": ["<jan1_epoch>", "<dec31_epoch>"]}]}}` (epoch seconds as strings). Both work — date filtering is no longer rejected.
 
@@ -112,13 +146,15 @@ By-id fallback (no alias): `get_aggregated_data_by_id(table_id=<id>, dimensions=
 
 Assign each distinct pull a Source ID: `S1`, `S2`, `S3`, ...
 
-| Source ID | Scenario |
-|-----------|----------|
-| S1 | Actuals |
-| S2 | Budget |
-| S3 | Forecast (if in scope) |
+| Source ID | Side |
+|-----------|------|
+| S1 | Actual side (resolved actuals-like scenario) |
+| S2 | Plan side (budget-like scenario, or plan-version filter from Step 1b) |
+| S3 | Forecast side (if in scope) |
 
-**Also pull HeadCount** whenever compensation lines are in scope. Comp $ alone cannot distinguish volume (headcount change) from rate (salary / bonus change) — always decompose. See the HC inference trap in `datarails-excel-multi-table-analysis`.
+**An empty result from a scenario filter is a resolution failure, not a zero plan** — go back to Step 1b rather than presenting $0 as the plan side.
+
+**Also pull HeadCount** whenever compensation lines are in scope and the org has a headcount-like table (discover it via `list_data_models`; if none exists, skip the decomposition and say so). Comp $ alone cannot distinguish volume (headcount change) from rate (salary / bonus change) — always decompose. See the HC inference trap in `datarails-excel-multi-table-analysis`.
 
 **Verify data freshness** for each table before quoting period boundaries. If a table is short of the requested period, narrow the window and flag it in the Read Me block and in each affected commentary row.
 
@@ -136,10 +172,10 @@ Add two columns to the right of the user's range (or include them in the fresh b
 - If a decomposition applies (e.g., HC volume vs rate), include it
 - If data freshness is a caveat, name it inline
 
-**Example commentary cells:**
-> `Marketing expense +$120K (+14%) vs Budget, driven by Events cost center (+$95K, DR_ACC_L2: T&E); remaining $25K in Digital/Software. [S1, S2]`
+**Example commentary cells** (illustrative — `<report_field>` and the plan-side label come from Step 1 / Step 1b):
+> `Marketing expense +$120K (+14%) vs Plan, driven by Events cost center (+$95K, <report_field>: T&E); remaining $25K in Digital/Software. [S1, S2]`
 
-> `R&D compensation +$280K (+18%) vs Budget: $230K (82%) is rate-driven (Q4 bonus accrual on flat HC of 23), $50K (18%) is volume (2 new hires in Oct). [S1, S2, S3]`
+> `R&D compensation +$280K (+18%) vs Plan: $230K (82%) is rate-driven (Q4 bonus accrual on flat HC of 23), $50K (18%) is volume (2 new hires in Oct). [S1, S2, S3]`
 
 **Source Ref cell:** bracketed refs only — `[S1, S2]`. No commentary in this cell.
 
@@ -158,15 +194,15 @@ One row per distinct Source ID. Every `[S#]` cited in Commentary must have a mat
 
 ```
 SCOPE & FILTERS
-  Period:    <e.g., Q1–Q3 2025>
-  Scenarios: Actuals vs Budget vs Forecast
-  Accounts:  DR_ACC_L0 = "P&L", GAAP excluded
+  Period:    <explicit window, e.g., 2025-01 through 2025-09>
+  Scenarios: <resolved sides from Step 1b, e.g., Actuals vs "FY25 Plan v2" (plan version) vs Forecast>
+  Accounts:  <account_level_field> = <discovered P&L flow buckets>; <gaap_field> excluded (if present)
   Cost Center field:  <discovered field name>
   Report Field:       <discovered field name>
 
 SOURCE TABLES (full detail in Sources sheet)
-  S1 — Financials: Actuals by period × cost center × report field
-  S2 — Financials: Budget by period × cost center × report field
+  S1 — Financials: actual side by period × cost center × report field
+  S2 — Financials: plan side (budget-like scenario or plan version) by period × cost center × report field
   S3 — HeadCount: FTE by month × cost center (if applicable)
 
 DATA FRESHNESS
@@ -206,6 +242,7 @@ Only invoke `drilldown_list` (params: `sheetName`, `cellAddress`; `timeoutMs: 18
 - **Never omit the cost center dimension** from commentary — "R&D over budget" is insufficient; name the cost center
 - **Never omit the report field dimension** — "expenses up" is insufficient; name the line item
 - **Never hardcode dimension field names** — always discover from schema; they vary by client
+- **Never filter on a scenario value you didn't discover** — `Budget` frequently doesn't exist; resolve every side in Step 1b first
 - **Never write commentary without a `[S#]` ref** — every claim must be auditable
 - **Never overwrite the user's existing data** — add columns to the right only
 - **Never imply freshness you don't have** — flag any missing periods explicitly
@@ -214,8 +251,14 @@ Only invoke `drilldown_list` (params: `sheetName`, `cellAddress`; `timeoutMs: 18
 
 ## Variance Analysis
 
+**Variance math rules (all modes):**
+- Compute every side over the **same explicit period window** (data-scope item 3 — default the latest complete fiscal year or trailing 12 closed months, never an unscoped all-time total), pulled with identical dimensions and account scoping so rows line up.
+- **Label every table, chart, and commentary output with the period + the resolved sides it covers** (e.g., "2025-01…2025-09, Actuals vs FY25 Plan v2").
+- Apply data-scope item 4 to every aggregation response: exclude the trailing keyless grand-total row from sums, shares, and variance denominators (use it only as a checksum); read null counts only from the explicit `[null]` bucket; when COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself.
+- Variance $ = actual − plan; variance % = variance $ / |plan|. When the plan side is zero or missing for a row, report the $ variance and mark the % as n/m — never divide by zero or fabricate a value.
+
 ### Budget Variance
-- Actual vs Budget amounts
+- Actual vs plan-side amounts (budget-like scenario or plan version, resolved in Step 1b)
 - Percentage difference
 - Favorable/unfavorable identification
 - Trend analysis
@@ -323,6 +366,8 @@ workbooks; apply this contract when adding DR.GET formulas to a workbook here.
 /dr-forecast-variance --year 2025 --scenarios Actuals,Budget
 ```
 
+> Scenario names passed via `--scenarios` are resolved against the discovered scenario domain (Step 1b). If a requested name (e.g. `Budget`) doesn't exist on the org, the plan side falls back to a planning-version field — or you'll be shown the scenarios that do exist and offered Actuals vs Forecast.
+
 ### Specific period focus
 ```bash
 /dr-forecast-variance --year 2025 --period 2025-Q4
@@ -377,12 +422,12 @@ workbooks; apply this contract when adding DR.GET formulas to a workbook here.
 ## Interpretation
 
 ### Favorable Variance
-- Actual > Budget (Revenue) ✅
-- Actual < Budget (Expense) ✅
+- Actual > Plan (Revenue) ✅
+- Actual < Plan (Expense) ✅
 
 ### Unfavorable Variance
-- Actual < Budget (Revenue) ❌
-- Actual > Budget (Expense) ❌
+- Actual < Plan (Revenue) ❌
+- Actual > Plan (Expense) ❌
 
 ### % Variance
 - <5%: Excellent forecast/budget accuracy
@@ -424,9 +469,9 @@ workbooks; apply this contract when adding DR.GET formulas to a workbook here.
 
 ## Error Handling
 
-**"Scenario not found"** - Verify scenario exists in data
+**"Scenario not found"** - The requested name isn't in the discovered scenario domain. Re-run Step 1b: show the scenarios that DO exist, offer them, and try the planning-version fallback for the plan side.
 
-**"No variance data"** - Confirm Budget/Forecast scenarios available
+**"No variance data"** - A side returned empty. If the plan-side pull filtered on a scenario value that was never discovered (e.g. `Budget`), that's the bug — go back to Step 1b; plan data often lives in a planning-version field, not a scenario.
 
 **"Large variance"** - Review detailed Excel report for root causes
 

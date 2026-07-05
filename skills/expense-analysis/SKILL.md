@@ -59,77 +59,113 @@ once per conversation, then carry the values forward.
    - `<amount_field>`       — numeric: `^amount$` → `transaction_amount` → `value`
    - `<scenario_field>`     — categorical: `^scenario$` → `^version$`
    - `<date_field>`         — date/timestamp: `reporting_date` → `posting_date` → `^date$`
-   - `<account_l1_field>`   — `dr_acc_l1` → `account_l1` → `account_group_l1`
-   - `<account_l2_field>`   — `dr_acc_l2` → `account_l2` (for breakdown depth)
+   - `<account_level_fields>` — categorical, one per hierarchy level:
+     `dr_acc_l\d` → `account_l\d` → `account_group_l\d` (collect every
+     level you find — L0/L1/L2-like; the working grain among them is
+     picked in item 3, and the next level down serves as breakdown
+     depth)
 
 > **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
 
    If `<amount_field>` or `<scenario_field>` has no clear match, ask the
    user which field to use, then continue.
 
-3. Find the account-category values:
-   `get_distinct_values_by_alias(<alias>, <account_l1_field>)` (or
-   `get_distinct_values_by_id(<id>, <account_l1_field_id>)`). If the
+3. Find the expense-side account values — **at the right grain** (see
+   the data-scope preamble below, item 2). Pull distinct values of each
+   account-hierarchy level field:
+   `get_distinct_values_by_alias(<alias>, <account_field>)` (or
+   `get_distinct_values_by_id(<id>, <account_field_id>)`). If a
    distinct call errors, fall back to `get_data_by_alias(<alias>,
-   select=[<account_l1_field>], limit=500)` (or the by-id twin) and
-   collect the distinct values. Match:
-   - `<revenue_value>` ← `/revenue|sales|income/i` (excluded from expenses)
-   - `<cogs_value>`    ← `/cogs|cost of goods|cost of sales|direct cost/i`
-   - `<opex_value>`    ← `/operating|opex|expense|sg&a/i`
+   select=[<account_field>], limit=500)` (or the by-id twin) and
+   collect the distinct values. Pick the level whose values partition
+   P&L flows into revenue/COGS/opex-like buckets — on many orgs the
+   top level is the balance-sheet equation and the P&L line items live
+   one level deeper. Call the chosen level `<expense_grain_field>` and
+   the next level down (if any) `<expense_detail_field>`. At that
+   grain, bind over the DISCOVERED values:
+   - `<expense_values>` ← every P&L bucket matching
+     `/cogs|cost|expense|opex|sg&a/i` — this **include-list** is what
+     "expenses" means below. Never define expenses as "everything
+     except revenue": on real orgs that sweeps balance-sheet buckets
+     into the ranking.
+   - `<revenue_value>`  ← `/revenue|sales|income/i` (kept out of the
+     expense list; useful for context ratios)
+   - Balance-sheet buckets (`/asset|liabilit|equity/i`) are excluded
+     entirely — never report them as expenses.
 
-   If a category has several candidates, pick the broadest top-level
-   one; if genuinely ambiguous, ask the user once.
+   If a bucket has several candidates, pick the broadest top-level
+   one; if genuinely ambiguous (or nothing expense-like matches at any
+   level), ask the user once.
 
 Aggregation-field failures are handled reactively (see below), not
 pre-probed.
 
+> **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
+> 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
+> 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+
 ### Step 3: Pull totals by expense category
 
-Default breakdown is L1 × L2 if available, otherwise L1 only.
+Scope first (data-scope preamble, items 1 and 3): scenario =
+`--scenario` if given, else the actuals-like value (`/actual/i`) from
+the discovered scenario domain; period = the latest complete fiscal
+year (or trailing 12 closed months) unless `--year` narrows it —
+never an unscoped all-time total. Default breakdown is
+`<expense_grain_field>` × `<expense_detail_field>` if a deeper level
+exists, otherwise the grain field alone.
 
 Alias path (preferred):
 
 ```
 get_aggregated_data_by_alias(
   alias=<financials_alias>,
-  dimensions=["<account_l1_field>", "<account_l2_field>"],
+  dimensions=["<expense_grain_field>", "<expense_detail_field>"],
   metrics=[{"field": "<amount_field>", "agg": "SUM"}],
   filters=[
-    {"name": "<scenario_field>", "values": ["<scenario or Actuals>"], "is_excluded": false},
-    {"name": "<account_l1_field>", "values": ["<revenue_value>"], "is_excluded": true}
+    {"name": "<scenario_field>", "values": ["<discovered actuals-like scenario>"], "is_excluded": false},
+    {"name": "<expense_grain_field>", "values": [<expense_values>], "is_excluded": false},
+    <period filter on <date_field> — see Date scoping below>
   ]
 )
 ```
 
 By-id fallback (no alias): `get_aggregated_data_by_id(table_id=<id>,
-dimensions=[<account_l1_field_id>, <account_l2_field_id>],
+dimensions=[<expense_grain_field_id>, <expense_detail_field_id>],
 metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}],
 filters=[{"field_id": <scenario_field_id>, "values": [...]},
-{"field_id": <account_l1_field_id>, "values": [<revenue_value>], "is_excluded": true}])`.
+{"field_id": <expense_grain_field_id>, "values": [<expense_values>],
+"is_excluded": false}, <period filter>])`.
 
 Filter rules:
-- **Value-list / exclusion filters** match any of the listed values; set
-  `is_excluded: true` to turn the list into NOT-IN (that's how revenue is
-  dropped above).
+- **Value-list filters** match any of the listed values — expenses are
+  an *include-list* of the discovered `<expense_values>`, never a
+  NOT-IN of revenue (that would sweep balance-sheet buckets into the
+  ranking). `is_excluded: true` turns a list into NOT-IN when you
+  genuinely need one.
 - **Date scoping** can go in `filters` directly via an advanced
   `total_range` condition (epoch-second strings), or you can add
-  `<date_field>` to `dimensions` and filter client-side — both work.
+  `<date_field>` to `dimensions` and filter client-side — both work;
+  apply the default period scope one of these two ways.
 - **Comparisons, ranges, text matching, and null checks** are all
   supported via advanced filters (see the `--year` note below).
 
-If the L2 field is rejected: retry without it (group by L1 only) and
-note the limitation in the output.
+If the detail-level field is rejected: retry without it (group by
+`<expense_grain_field>` only) and note the limitation in the output.
 
 ### Step 4: Pull monthly expense trend
+
+Same scenario and period scope as Step 3.
 
 ```
 get_aggregated_data_by_alias(
   alias=<financials_alias>,
-  dimensions=["<date_field>", "<account_l1_field>"],
+  dimensions=["<date_field>", "<expense_grain_field>"],
   metrics=[{"field": "<amount_field>", "agg": "SUM"}],
   filters=[
-    {"name": "<scenario_field>", "values": ["Actuals"], "is_excluded": false},
-    {"name": "<account_l1_field>", "values": ["<revenue_value>"], "is_excluded": true}
+    {"name": "<scenario_field>", "values": ["<discovered actuals-like scenario>"], "is_excluded": false},
+    {"name": "<expense_grain_field>", "values": [<expense_values>], "is_excluded": false}
   ]
 )
 ```
@@ -139,7 +175,15 @@ get_aggregated_data_by_alias(
 
 ### Step 5: Compute concentration and present
 
-Calculate client-side from the L1×L2 result:
+Before computing anything, apply the aggregate-reading rule
+(data-scope preamble, item 4): drop the trailing **keyless
+grand-total row** from every aggregation response — it is not a
+category; exclude it from totals, shares, rankings, and bucket counts
+(at most use it as a checksum against your own sum). Null groups
+arrive as an explicit `[null]` bucket — surface them as "(unmapped)"
+rather than silently merging or dropping them.
+
+Calculate client-side from the grain × detail result:
 - Total expenses
 - Top N categories by absolute amount
 - Each category's share of total (concentration)
@@ -149,6 +193,7 @@ Calculate client-side from the L1×L2 result:
 
 ```
 ## Your Expense Analysis
+Scenario: [scenario] · Period: [period covered]
 
 Total Expenses: $[real_total]
 
@@ -183,9 +228,9 @@ Recommended Actions:
 
 | Argument | Description | Default |
 |---|---|---|
-| `--scenario <name>` | Scenario to analyze | `Actuals` |
-| `--year <YYYY>` | Restrict to one fiscal year (advanced `total_range` date filter, or a date dimension + client-side filter) | All available |
-| `--breakdown <l1\|l2>` | Hierarchy depth for the category table | `l2` if available, else `l1` |
+| `--scenario <name>` | Scenario to analyze | Actuals-like value from the discovered scenario domain |
+| `--year <YYYY>` | Restrict to one fiscal year (advanced `total_range` date filter, or a date dimension + client-side filter) | Latest complete fiscal year (or trailing 12 closed months) |
+| `--breakdown <l1\|l2>` | Hierarchy depth for the category table (grain only vs grain + one level deeper) | `l2` if a deeper level exists, else `l1` |
 
 ## Backward compatibility
 
@@ -198,13 +243,16 @@ Recommended Actions:
 
 ## Handling failures
 
-**L2 field rejected (500):** retry grouping by L1 only (or a sibling
-account field from the discovered schema, e.g. `DR_ACC_L1.5`); note the
-reduced depth in the output. If no field works, tell the user which
-field failed. If an alias call errors, retry the by-id twin.
+**Detail-level field rejected (500):** retry grouping by
+`<expense_grain_field>` only (or a sibling account-level field from
+the discovered schema); note the reduced depth in the output. If no
+field works, tell the user which field failed. If an alias call
+errors, retry the by-id twin.
 
-**Revenue category ambiguous:** ask the user which L1 value
-represents revenue so it can be properly excluded from "expenses".
+**Expense buckets ambiguous:** ask the user which account values at
+the chosen grain represent expenses (COGS/OpEx-like) — never fall
+back to "everything except revenue", which mislabels balance-sheet
+buckets as expenses.
 
 **All aggregation fails:** fall back to `get_data_by_alias` (or
 `get_data_by_id`) with the scenario as a value-list filter (500-row

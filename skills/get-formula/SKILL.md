@@ -120,9 +120,9 @@ Store the serial number as the cell value and apply `'MMM-YY'` number format so 
 | Using text month: `"January 2026"` | Use EOM serial number: `46053` |
 | Writing API epoch timestamps as date headers | Compute EOM serials from the calendar (see Date Dimension) — raw epochs land a day early with a time component |
 | Using `[Account]` or `[Month]` | Use the actual field names discovered in Step 2 |
-| Using Report_Field without scoping | Always include `[DR_ACC_L2]` alongside `[Report_Field]` |
+| Using Report_Field without scoping | Always include the L2 account dimension discovered in Step 2 alongside `[Report_Field]` |
 | Inventing or guessing dimension values | Validate against actual distinct values first |
-| Using `Scenario="Budget"` | Use `Scenario="Forecast"` + `Scenario Cycle` + `Planning Scenario` |
+| Assuming a scenario value like `"Budget"` exists | Use only scenario values discovered in Phase 2 — many orgs model budget as a forecast-like scenario plus `Scenario Cycle` + `Planning Scenario` |
 | Wrapping DR.GET in IFERROR/IF/other functions | DR.GET must be bare: `=DR.GET(...)` only |
 | Adding fallback values for missing data | Let DR.GET return empty/0 — users need to see gaps |
 | Pointing to cells that don't contain data | Every cell reference must point to an actual parameter or header cell |
@@ -135,8 +135,10 @@ Store the serial number as the cell value and apply `'MMM-YY'` number format so 
 WRONG:  =IFERROR(DR.GET(Value, "[Scenario]", $B$1, ...), 0)
 WRONG:  =IF(DR.GET(Value, ...) > 0, DR.GET(Value, ...), "")
 WRONG:  =ROUND(DR.GET(Value, ...), 2)
-RIGHT:  =DR.GET(Value, "[Scenario]", $B$1, "[DR_ACC_L1.5]", $A6, "[Reporting Date]", B$5)
+RIGHT:  =DR.GET(Value, "[Scenario]", $B$1, "[Account Group L1]", $A6, "[Reporting Date]", B$5)
 ```
+
+(Dimension names here are illustrative — always use the dimension names discovered from the client's own workbook/schema.)
 
 **Why:** The Datarails Add-in manages DR.GET formulas. Wrapping them in other functions breaks the add-in's ability to refresh, track, and drill down on them. If data is missing, the cell should show 0 or empty — this is valuable information that users need to see, not mask.
 
@@ -209,9 +211,10 @@ live table.
 
 **Aggregation-field failures are handled reactively, not pre-probed.** If a
 later aggregation call (used in Phase 2 for value discovery) 500s on a
-dimension field, re-inspect the Step 2 schema for a sibling (e.g.
-`DR_ACC_L1.5` when `DR_ACC_L1` fails, or `account_group_l1`) and retry with
-it; if an alias call fails, fall back to the by-id twin.
+dimension field, re-inspect the Step 2 schema for a sibling account-level
+field from the discovered schema (orgs often carry in-between levels, or an
+`account_group_l1`-style alternative) and retry with it; if an alias call
+fails, fall back to the by-id twin.
 
 ### Phase 2: Dimension Discovery & Validation
 
@@ -264,23 +267,24 @@ get_aggregated_data_by_alias(<financials_alias>, dimensions=[<scenario_field>], 
 For `--type detail`, discover which child values belong to which parent:
 ```
 # For each L1.5 value, find which L2 values belong to it
+# (<actuals_scenario> = the actuals-like scenario value discovered in Step 4)
 get_aggregated_data_by_alias(
   <financials_alias>,
   dimensions=[<account_l1_5_field>, <account_l2_field>],
   metrics=[{"field": <amount_field>, "agg": "COUNT"}],
-  filters=[{"name": <scenario_field>, "values": ["Actuals"], "is_excluded": false}]
+  filters=[{"name": <scenario_field>, "values": [<actuals_scenario>], "is_excluded": false}]
 )
 #   (by-id twin: get_aggregated_data_by_id(<financials_table_id>,
 #    dimensions=[<account_l1_5_field_id>, <account_l2_field_id>],
 #    metrics=[{"field_id": <amount_field_id>, "agg": "COUNT"}],
-#    filters=[{"field_id": <scenario_field_id>, "values": ["Actuals"]}]))
+#    filters=[{"field_id": <scenario_field_id>, "values": [<actuals_scenario>]}]))
 ```
 
 For Report_Field detail, also map L2 → Report_Field relationships.
 
 #### Step 6: Build Validated Value Registry
 
-Store all discovered values in a dict structure:
+Store all discovered values in a dict structure (illustrative — your org's values will differ):
 ```python
 registry = {
     "account_l1_5": ["Revenues", "COGS", ...],  # from live API
@@ -357,9 +361,9 @@ DR.GET formula in the file breaks.
 - Subtotal rows per L1.5 group
 
 ##### `--type budget` (Budget Template)
-- Scenario pre-set to Forecast
-- Scenario Cycle defaults to 0+12
-- Planning Scenario defaults to Bottom up
+- Scenario pre-set to the forecast-like scenario value discovered in Step 4
+- Scenario Cycle defaults to the current cycle from the registry (e.g. `0+12`, if the org uses cycles)
+- Planning Scenario defaults to a planning-scenario value discovered in Step 4
 - All L1.5 line items with monthly columns
 
 ##### `--type variance` (Actuals vs Budget)

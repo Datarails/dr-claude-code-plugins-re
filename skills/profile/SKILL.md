@@ -30,8 +30,8 @@ provenance of every number you present.
 
 | Tool | What it returns |
 |---|---|
-| `profile_numeric_fields` | `SUM, AVG, MIN, MAX, COUNT` per numeric field |
-| `profile_categorical_fields` | distinct-count + first 10 sample values per field (capped at 5 fields per call — pass an explicit `fields` list) |
+| `profile_numeric_fields` | `SUM, AVG, MIN, MAX, COUNT` per numeric field — relayed in the backend-native `DR_Values`/`col_keys`/`row_keys` layout, with **no aggregator label attached to individual values** (see the reading rule in Step 2) |
+| `profile_categorical_fields` | distinct-count + first 10 sample values per field (capped at 5 fields per call — pass an explicit `fields` list; **without one it defaults to upload/mapping metadata columns, not business dimensions**) |
 | `get_aggregated_data_by_alias` / `…_by_id` | grouped totals; the only path to per-value frequencies and null counts |
 | `get_distinct_values_by_alias` / `…_by_id` | the full distinct-value list for one field |
 
@@ -60,8 +60,29 @@ conversation, reuse them.** Discovery is cheap but not free.
    (business-friendly aliases); otherwise `get_fields_by_id(<table_id>)`
    (capture each field's numeric `id` — the by-id tools address fields by id).
 3. `profile_numeric_fields(table_id)` — per-field SUM/AVG/MIN/MAX/COUNT.
-4. `profile_categorical_fields(table_id, fields=[...])` — pass an explicit
-   list; the tool silently drops fields beyond 5. Use this to get distinct
+
+   **Reading the profiling response.** The response is not a labeled
+   per-field dict — it arrives in the backend-native aggregate layout
+   (`DR_Values` / `col_keys` / `row_keys` arrays), with values possibly
+   duplicated per stat and **no aggregator label attached to individual
+   values**. Inspect the keys and map every value to its statistic via
+   those keys before labeling anything. NEVER present a number as
+   MIN/MAX/AVG/COUNT without confirming which key it belongs to —
+   mislabeling here (e.g. calling a MAX an AVG) silently corrupts every
+   downstream derivation. If the mapping is ambiguous, cross-check ONE
+   field with a direct `get_aggregated_data_by_alias` / `…_by_id` call —
+   MIN and MAX in two separate calls (one aggregation per field per
+   call) — and use that to anchor the interpretation before deriving
+   outliers or ranges from it.
+
+4. `profile_categorical_fields(table_id, fields=[...])` — **always pass an
+   explicit `fields` list of business dimensions chosen from the field
+   schema discovered in item 2** (account-hierarchy levels, scenario,
+   entity/department-like fields, dates). Called without `fields`, the
+   tool defaults to the table's upload/mapping **metadata** columns
+   (tab/label/user/mapper-style bookkeeping fields) — profiling those
+   tells the user nothing about their data. Never call it bare. The tool
+   also silently drops fields beyond 5 per call. Use this to get distinct
    counts and sample values.
 5. For per-value frequency or null counts: `get_aggregated_data_by_alias`
    (or `…_by_id`) grouping by the field with `COUNT` as the metric.
@@ -76,7 +97,9 @@ conversation, reuse them.** Discovery is cheap but not free.
 ### Step 3: Derive richer stats client-side
 
 **Range / outlier flags (numeric)**
-- From step 3 you have `MIN, MAX, AVG, COUNT`.
+- From the `profile_numeric_fields` call you have `MIN, MAX, AVG, COUNT` —
+  **each mapped to its statistic via the response keys** (the reading rule
+  in Step 2). Do not derive bands from an unmapped or ambiguous value.
 - Approximate spread = `MAX - MIN`; flag values beyond
   `[AVG - spread, AVG + spread]` as out-of-band candidates. This is a
   coarse substitute for `|z| > 3` — true std dev is not available.
@@ -133,13 +156,19 @@ aggregates).
 
 ## Example Interactions
 
-**User: "/dr-profile 11442"**
+(Illustrative — table ids, field names, and figures below are invented;
+your org's tables, fields, and values will differ. Stat annotations like
+`(tool: MIN, MAX)` are only legitimate after key-mapping the
+`DR_Values`/`col_keys`/`row_keys` response per the reading rule in Step 2 —
+the tool itself does not label values.)
+
+**User: "/dr-profile 999901"**
 
 The narrative below is the target presentation. Annotate every line with
 its source so the user can re-derive it.
 
 ```
-📊 Profile: GL Transactions (ID: 11442)
+📊 Profile: GL Transactions (ID: 999901)
 
 ═══════════════════════════════════════════════════
 📈 NUMERIC FIELDS (8 columns)  (from profile_numeric_fields)
@@ -188,12 +217,12 @@ The remaining 11 categorical fields were not profiled in this run —
 re-invoke with --fields a,b,c to cover them.
 ```
 
-**User: "/dr-profile 11442 --numeric"**
+**User: "/dr-profile 999901 --numeric"**
 
 ```
 📈 Numeric Profile: GL Transactions
 
-Source: profile_numeric_fields(11442) for MIN/MAX/AVG/COUNT;
+Source: profile_numeric_fields(999901) for MIN/MAX/AVG/COUNT;
         get_aggregated_data_by_alias per field for null rates and
         decile distributions.
 
@@ -204,15 +233,15 @@ Source: profile_numeric_fields(11442) for MIN/MAX/AVG/COUNT;
 | unit_cost | 0.01   | 15,000  | 89.50   | 125,432 | 0%      | 45 (skill)  |
 
 "Out-of-band" uses the range heuristic, not std dev. For tighter
-bounds on a specific field run /dr-profile 11442 --field <name>.
+bounds on a specific field run /dr-profile 999901 --field <name>.
 ```
 
-**User: "/dr-profile 11442 --field amount"**
+**User: "/dr-profile 999901 --field amount"**
 
 ```
 📊 Field Profile: amount (GL Transactions)
 
-Source: profile_numeric_fields(11442) +
+Source: profile_numeric_fields(999901) +
         get_aggregated_data_by_alias(<alias>, dimensions=[amount-bucket], COUNT)
 
 Type: DECIMAL                          (schema)
@@ -264,6 +293,11 @@ Skill-derived (from bucketed aggregate):
   business rules before treating them as errors.
 - Be explicit when answering: "MIN was returned by the tool;
   P25 is approximated from a bucketed aggregate."
+- Never label a profiling number MIN/MAX/AVG/COUNT until you've mapped
+  it via the response keys; when unsure, anchor with one
+  `get_aggregated_data_by_*` cross-check (MIN and MAX in separate calls).
+- Never call `profile_categorical_fields` without `fields` — the bare
+  call profiles upload/mapping metadata columns, not business data.
 
 ## Related Skills
 
