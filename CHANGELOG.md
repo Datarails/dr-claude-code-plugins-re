@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [3.0.4] — 2026-07-05
+
+### Changed
+- **Documentation refresh — aligned all docs to the shipped v3.0.3 reality.** A doc audit found most docs lagged the v3.0.x tool migration, honest-scoping, and launcher-consolidation passes; several stale claims shipped in the public release. Fixes:
+  - **Public front door (`README.md`, `docs/guides/GETTING_STARTED.md`, `SETUP.md`):** `/dr-audit` re-described as an audit-support evidence package (was "SOX compliance audit"); `/dr-intelligence` SaaS/vendor/sales sheets marked conditional (only when the org's data sources them); `/dr-reconcile` re-described as independent-source pipeline-consistency checks; `/dr-query` noted to support advanced filters; `/dr-drilldown` noted to support no-file intake; the bundled-connector flow replaced the wrong `claude mcp add datarails-mcp` instruction everywhere; GETTING_STARTED's ~13 wrong `/datarails-finance-os:*` command namespaces corrected to `/datarails-financeos:*`, its "environment profile" Step 4 reframed as an optional compatibility check (no profiles exist), and its Claude Code examples pointed at the real dedicated skills; example-org timing figures generalized.
+  - **`RELEASING.md`:** documented the current release endgame — the public auto-tag GitHub App is not installed (auto-tag has failed on v3.0.1/v3.0.2/v3.0.3), so the maintainer must manually create the `v<version>` tag on the merge commit (exact `gh api` command included); bootstrap items 1–2 marked OUTSTANDING; the public hotfix Version-bump path flagged as blocked by the same App gap; `__internal` naming added to the strip convention.
+  - **`CONTRIBUTING.internal.md` / `DEV_MCP.internal.md`:** promotion described as an explicit two-stage flow pointing at RELEASING.md (was "tag push auto-syncs"); "don't self-bump plugin.json" note added; the two MCP servers described as one codebase differing by feature flags; "dev users" audience wording corrected to external/marketplace.
+  - **`docs/internal/FINANCE_OS_API_ISSUES_REPORT.md`:** added a status header separating the historical Feb-2026 raw-API snapshot from the current-canonical Call-Shape Matrix; corrected the **`wrapper_warning` clipping-hint claim** (no such hint exists on the live surface — callers detect bucket-end clipping themselves) and propagated that fix into the `financial-summary-v2__internal` and `metric-drilldown__internal` skills that repeated it; marked distinct-values RESOLVED, token expiry MITIGATED, async-polling/field-name request shape retired, and the single-org field list flagged.
+  - **Deleted four obsolete internal docs** (`FPA_IMPLEMENTATION_SUMMARY`, `COMPREHENSIVE_FPA_REPORT_GUIDE`, `DATA_EXTRACTION_STRATEGY`, `TABLE_STRUCTURE_ANALYSIS`) — Feb-2026 artifacts describing a removed MCP tool, a nonexistent script, and the retired client-profile system, and holding real example-org financials; nothing referenced them and git history preserves them.
+
 ## [3.0.3] — 2026-07-05
 
 ### Changed
