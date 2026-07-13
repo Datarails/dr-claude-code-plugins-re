@@ -8,9 +8,17 @@ allowed-tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__list_business_metrics
   - Write
@@ -62,14 +70,18 @@ then carry the values forward.
 
 > **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 > **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
-> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
 > 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 2. **Map the account grains.** From the per-level distinct values pulled in
-   the data-scope preamble (item 2) — if `get_distinct_values_by_alias`/`_by_id`
+   the data-scope preamble (item 2) — if the distinct-values start→poll pair
+   (`start_distinct_values_by_alias`/`_by_id` → `get_distinct_values_result_by_*`)
    errors, fall back to `get_data_by_alias(<alias>, select=[<account_field>],
    limit=500)` (or the by-id twin) and dedupe — identify two grains: the
    **balance-sheet grain** is the level whose values look like the
@@ -79,10 +91,11 @@ then carry the values forward.
    `/cogs|cost of goods|cost of sales|direct cost/i`,
    `/operating|opex|expense|sg&a/i`) — often one level deeper. Then discover
    the parent↔child mapping between the two adjacent levels with one
-   aggregate: `dimensions=[<parent_level>, <child_level>]`, metric `COUNT` on
-   a **different dense field** (a same-field COUNT of a grouped dimension can
-   500). Every child bucket should map to exactly one parent; note any that
-   map to several parents or to `[null]`.
+   aggregate (`start_aggregation_by_alias`/`_by_id` → poll the matching
+   result tool until ready): `dimensions=[<parent_level>, <child_level>]`,
+   metric `COUNT` on a **different dense field** (a same-field COUNT of a
+   grouped dimension can 500). Every child bucket should map to exactly one
+   parent; note any that map to several parents or to `[null]`.
 
 ## The checks — four independent-source comparisons
 
@@ -95,21 +108,25 @@ domain. Label every reported number with its period + scenario.
 
 3. **Check 1 — Cross-endpoint agreement.** Run the *same* aggregate through
    both API families over the same table and compare per bucket **to the
-   cent**: `get_aggregated_data_by_alias(<alias>,
+   cent**: the alias pair `start_aggregation_by_alias(<alias>,
    dimensions=[<account_field>], metrics=[{"field": <amount_field>, "agg":
-   "SUM"}], filters=[<scenario>, <date range>])` vs its by-id twin
-   `get_aggregated_data_by_id(<id>, dimensions=[<account_field_id>],
-   metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}], filters=[...])`.
-   This proves something only because the two calls travel different endpoint
+   "SUM"}], filters=[<scenario>, <date range>])` → poll
+   `get_aggregation_result_by_alias(handle)` until ready, vs the by-id pair
+   `start_aggregation_by_id(<id>, dimensions=[<account_field_id>],
+   metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}], filters=[...])`
+   → poll `get_aggregation_result_by_id(handle)` until ready.
+   This proves something only because the two pairs travel different endpoint
    families (aliased vs raw) — and it is only possible for fields that carry
    **both** an alias and a numeric id (per-field rule above). If the
    load-bearing fields (amount, scenario, account level, date) are not all
    aliased, **skip this check and note the skip in the report** — never fake
-   it by running the by-id call twice.
+   it by running the by-id pair twice.
 
 4. **Check 2 — Balance-sheet identity.** At the discovered balance-sheet
    grain: `dimensions=[<bs_level>, <period_field>]` (add the entity-like
-   field as a third dimension when one exists), `SUM(<amount>)`. Per period
+   field as a third dimension when one exists), `SUM(<amount>)` — via
+   `start_aggregation_by_alias`/`_by_id` → poll the matching result tool
+   until ready (async-fetch pattern). Per period
    (and entity), compare **magnitudes**: `|asset-like|` vs `|liability-like +
    equity-like|`, and report the org's **sign convention as discovered** from
    the data (e.g. whether liability/equity buckets arrive negative) — never
@@ -121,16 +138,19 @@ domain. Label every reported number with its period + scenario.
 
 5. **Check 3 — Cross-grain consistency.** The P&L-grain buckets must sum to
    their parent bucket at the level above (mapping from step 2). Two
-   aggregates over the same scope: `dimensions=[<parent_level>]` with
-   `SUM(<amount>)`, and `dimensions=[<parent_level>, <child_level>]` with
+   aggregates over the same scope (each via `start_aggregation_by_*` → poll
+   `get_aggregation_result_by_*` until ready): `dimensions=[<parent_level>]`
+   with `SUM(<amount>)`, and `dimensions=[<parent_level>, <child_level>]` with
    `SUM(<amount>)`. For each parent, the sum of its child rows — **including
    the `[null]` bucket** — must equal the parent's own row to the cent. A
    mismatch means the hierarchy mapping leaks rows (unmapped or double-mapped
    accounts).
 
-6. **Check 4 — Scenario/period integrity.** Two grouped calls over the scoped
-   window, **no scenario filter** on either: (a)
-   `dimensions=[<scenario_field>]`, (b) `dimensions=[<period_field>]`. In
+6. **Check 4 — Scenario/period integrity.** Two grouped aggregates over the
+   scoped window (each via `start_aggregation_by_*` → poll
+   `get_aggregation_result_by_*` until ready), **no scenario filter** on
+   either: (a) `dimensions=[<scenario_field>]`, (b)
+   `dimensions=[<period_field>]`. In
    each response the labeled group rows (including `[null]`) must sum to the
    appended **keyless grand-total row** (data-scope preamble, item 4) to the
    cent — and the two keyless rows must equal each other, since both describe
@@ -309,7 +329,7 @@ Reconcile with strict tolerance:
 
 ## Error Handling
 
-**"Account grain not found"** - Re-run discovery (`list_data_models` → `list_aliased_fields`/`get_fields_by_id` → `get_distinct_values_by_alias`/`get_distinct_values_by_id`) and re-derive the balance-sheet and P&L grains from the discovered level values. There is no profile — discovery happens inline.
+**"Account grain not found"** - Re-run discovery (`list_data_models` → `list_aliased_fields`/`get_fields_by_id` → `start_distinct_values_by_alias`/`start_distinct_values_by_id` → poll the matching `get_distinct_values_result_by_*`) and re-derive the balance-sheet and P&L grains from the discovered level values. There is no profile — discovery happens inline.
 
 **422 on aggregation** - At most one aggregation per field per call (split SUM and AVG of the same field into separate calls); SUM/AVG require a numeric or date field.
 

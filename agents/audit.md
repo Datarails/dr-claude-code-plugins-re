@@ -7,9 +7,17 @@ tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__list_business_metrics
   - Read
@@ -38,6 +46,8 @@ package states this out-of-scope boundary explicitly.
 
 ## Capabilities
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 - Period-completeness and checksum-integrity checks over the audited window
 - Reconciliation evidence delegated to the `/dr-reconcile` four
   independent-source checks (cross-endpoint agreement, balance-sheet
@@ -47,10 +57,11 @@ package states this out-of-scope boundary explicitly.
 - Substantive samples: row-level detail behind material buckets via
   `get_data_by_alias` / `get_data_by_id` (select + filters) so figures trace
   to source line items
-- Exception identification (computed client-side from
-  `get_aggregated_data_by_alias` / `get_aggregated_data_by_id`
-  results; there is no server-side anomaly tool — findings are
-  derived from baseline aggregates)
+- Exception identification (computed client-side from aggregation
+  start→poll results (`start_aggregation_by_alias`/`_by_id` →
+  `get_aggregation_result_by_alias`/`_by_id`); there is no
+  server-side anomaly tool — findings are derived from baseline
+  aggregates)
 - Management response framework
 
 ## Use Cases

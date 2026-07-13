@@ -8,9 +8,17 @@ allowed-tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__list_business_metrics
   - Read
@@ -259,6 +267,8 @@ If no `--by` was supplied:
 - Common useful drill-down dimensions (name hints — match against the discovered schema): `Account Name`/`Account Full`, `DR_ACC_L2`-style account levels, `Vendor`, `Department L1`/`Department L2`, `Reporting Unit`, `Entity`.
 - Ask the user which fields they want to break down by, suggesting the most useful ones.
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 #### Step 3.3 - Build the Aggregation Query
 
 Combine:
@@ -282,22 +292,26 @@ Build a filters list (alias path):
   filter the results client-side after the response — both work.
 - Text fields (`Scenario`, `Account Group L0`, etc.) use value-list filters.
 
-Then call `get_aggregated_data_by_alias` (preferred when the table has an alias):
+Then call `start_aggregation_by_alias` (preferred when the table has an alias):
 
-    get_aggregated_data_by_alias(
+    start_aggregation_by_alias(
         alias="<financials_alias>",
         dimensions=["<drill-down-field-1>", "<drill-down-field-2>"],
         metrics=[{"field": "<amount_field>", "agg": "SUM"}],
         filters=<combined_filters>
     )
 
-By-id fallback (no alias): `get_aggregated_data_by_id(table_id="<financials_table_id>",
-dimensions=[<drill-down-field-id-1>, <drill-down-field-id-2>], metrics=[{"field_id":
-<amount_field_id>, "agg": "SUM"}], filters=<combined_filters>)`.
+→ poll `get_aggregation_result_by_alias(handle)` until ready (async-fetch pattern).
 
-**Important:** Use `get_aggregated_data_by_alias` / `get_aggregated_data_by_id` (not
-`get_data_by_alias` / `get_data_by_id`) because aggregation has NO row limit and returns
-properly computed totals. The row-fetch tools cap at 500 rows and would return incomplete data.
+By-id fallback (no alias): `start_aggregation_by_id(table_id="<financials_table_id>",
+dimensions=[<drill-down-field-id-1>, <drill-down-field-id-2>], metrics=[{"field_id":
+<amount_field_id>, "agg": "SUM"}], filters=<combined_filters>)` → poll
+`get_aggregation_result_by_id(handle)` until ready (async-fetch pattern).
+
+**Important:** Use the aggregation start→poll tools (`start_aggregation_by_*` →
+`get_aggregation_result_by_*`), not `get_data_by_alias` / `get_data_by_id`, because aggregation
+has NO row limit and returns properly computed totals. The row-fetch tools cap at 500 rows and
+would return incomplete data.
 
 #### Step 3.4 - Handle Derived Formulas (Multiple DR.GET Sources)
 
@@ -311,6 +325,8 @@ Example for `=B6-B7` where B6 = DR.GET(Revenues) and B7 = DR.GET(COGS):
 ### Phase 4 - Validate the Total
 
 **This step is CRITICAL. Never skip it.**
+
+If a result arrives with `"truncated": true`, the rows are an incomplete prefix — narrow the query per the `guidance` (more filters / fewer columns / lower limit+offset paging) and re-fetch before validating; never present the prefix as complete.
 
 After receiving the aggregation results:
 

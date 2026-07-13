@@ -8,9 +8,17 @@ allowed-tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__list_business_metrics
   - mcp__datarails-finance-os__list_xl_functions
@@ -220,6 +228,10 @@ fails, fall back to the by-id twin.
 
 **CRITICAL: Every value used in a DR.GET formula must be validated against the live Datarails table.**
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
+> **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
+
 #### Step 3: Discover Account Hierarchy
 
 Use the financials table (alias or id) and the fields discovered in Step 2.
@@ -227,10 +239,11 @@ Use the financials table (alias or id) and the fields discovered in Step 2.
 Discover the account values directly from the distinct-values API:
 ```
 # Alias path (preferred)
-get_distinct_values_by_alias(<financials_alias>, <account_l1_5_field>)
-get_distinct_values_by_alias(<financials_alias>, <account_l2_field>)
+start_distinct_values_by_alias(<financials_alias>, <account_l1_5_field>)
+start_distinct_values_by_alias(<financials_alias>, <account_l2_field>)
 # By-id fallback (no alias)
-get_distinct_values_by_id(<financials_table_id>, <account_l1_5_field_id>)
+start_distinct_values_by_id(<financials_table_id>, <account_l1_5_field_id>)
+# → poll get_distinct_values_result_by_alias(handle) / get_distinct_values_result_by_id(handle) until ready (async-fetch pattern)
 ```
 If a distinct call errors, fall back to sampling rows and collect the values
 client-side:
@@ -243,8 +256,9 @@ get_data_by_alias(<financials_alias>, select=[<account_l1_5_field>, <account_l2_
 If you need exact totals or a fuller value set, aggregation also surfaces the
 distinct values as group keys:
 ```
-get_aggregated_data_by_alias(<financials_alias>, dimensions=[<account_l1_5_field>], metrics=[{"field": <amount_field>, "agg": "SUM"}])
-#   (or get_aggregated_data_by_id(<financials_table_id>, dimensions=[<account_l1_5_field_id>], metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}]))
+start_aggregation_by_alias(<financials_alias>, dimensions=[<account_l1_5_field>], metrics=[{"field": <amount_field>, "agg": "SUM"}])
+#   (or start_aggregation_by_id(<financials_table_id>, dimensions=[<account_l1_5_field_id>], metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}]))
+# → poll get_aggregation_result_by_alias(handle) (or get_aggregation_result_by_id) until ready (async-fetch pattern)
 ```
 (If this 500s on `<account_l1_5_field>`, swap to a sibling per Step 2's
 reactive-retry note; if the alias call fails, fall back to the by-id twin.)
@@ -252,13 +266,15 @@ reactive-retry note; if the alias call fails, fall back to the by-id twin.)
 #### Step 4: Discover Scenario Values
 
 Collect the distinct values for the scenario dimensions with
-`get_distinct_values_by_alias(<financials_alias>, <scenario_field>)` (or the
-by-id twin). For `--type budget` / `--type variance` you also need
+`start_distinct_values_by_alias(<financials_alias>, <scenario_field>)` (or the
+by-id twin) → poll `get_distinct_values_result_by_alias(handle)` until ready
+(async-fetch pattern). For `--type budget` / `--type variance` you also need
 `<cycle_field>` and `<planning_field>` values; do the same distinct call for
 each, or confirm them via aggregation:
 ```
-get_aggregated_data_by_alias(<financials_alias>, dimensions=[<scenario_field>], metrics=[{"field": <amount_field>, "agg": "SUM"}])
-#   (or get_aggregated_data_by_id(<financials_table_id>, dimensions=[<scenario_field_id>], metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}]))
+start_aggregation_by_alias(<financials_alias>, dimensions=[<scenario_field>], metrics=[{"field": <amount_field>, "agg": "SUM"}])
+#   (or start_aggregation_by_id(<financials_table_id>, dimensions=[<scenario_field_id>], metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}]))
+# → poll get_aggregation_result_by_alias(handle) (or get_aggregation_result_by_id) until ready (async-fetch pattern)
 # and likewise for <cycle_field>, <planning_field> when the report type uses them
 ```
 
@@ -268,16 +284,17 @@ For `--type detail`, discover which child values belong to which parent:
 ```
 # For each L1.5 value, find which L2 values belong to it
 # (<actuals_scenario> = the actuals-like scenario value discovered in Step 4)
-get_aggregated_data_by_alias(
+start_aggregation_by_alias(
   <financials_alias>,
   dimensions=[<account_l1_5_field>, <account_l2_field>],
   metrics=[{"field": <amount_field>, "agg": "COUNT"}],
   filters=[{"name": <scenario_field>, "values": [<actuals_scenario>], "is_excluded": false}]
 )
-#   (by-id twin: get_aggregated_data_by_id(<financials_table_id>,
+#   (by-id twin: start_aggregation_by_id(<financials_table_id>,
 #    dimensions=[<account_l1_5_field_id>, <account_l2_field_id>],
 #    metrics=[{"field_id": <amount_field_id>, "agg": "COUNT"}],
 #    filters=[{"field_id": <scenario_field_id>, "values": [<actuals_scenario>]}]))
+# → poll get_aggregation_result_by_alias(handle) (or get_aggregation_result_by_id) until ready (async-fetch pattern)
 ```
 
 For Report_Field detail, also map L2 → Report_Field relationships.
@@ -520,9 +537,11 @@ Report what was generated:
 - Re-run the skill to re-validate values against live data
 
 **A distinct-values call errors**
-- Use `get_distinct_values_by_alias` / `get_distinct_values_by_id`. If a call
-  errors, the skill falls back to sampling rows (`get_data_by_alias` /
-  `get_data_by_id`, small limit) or aggregation group keys for value discovery.
+- Use `start_distinct_values_by_alias` / `start_distinct_values_by_id` → poll
+  the matching `get_distinct_values_result_by_*` tool until ready (async-fetch
+  pattern). If a call errors, the skill falls back to sampling rows
+  (`get_data_by_alias` / `get_data_by_id`, small limit) or aggregation group
+  keys for value discovery.
 
 **Missing dimension values**
 - The live data may not contain all expected categories

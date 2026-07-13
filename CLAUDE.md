@@ -40,8 +40,8 @@ list). Always reach for the highest layer that fits:
 | Layer | Tools | Use when |
 |-------|-------|----------|
 | Business metrics (KPI) | `list_business_metrics` (always available) → `get_business_metric_data`*  | Named KPIs — revenue, margin, expenses, budget variance, headcount, ratios |
-| Aliased tables (**preferred** for raw data) | `list_aliased_fields`, `get_data_by_alias`, `get_aggregated_data_by_alias`, `get_distinct_values_by_alias` | A table's aliased fields — friendly names, ~95% fewer tokens. **Note: a table alias does not imply its fields are aliased (real orgs often alias only a few); use the by-id tools for any un-aliased field — see "Client Data Discovery".** |
-| Raw by-id (fallback) | `get_fields_by_id`, `get_data_by_id`, `get_aggregated_data_by_id`, `get_distinct_values_by_id` | Tables without an alias, or when an alias call fails |
+| Aliased tables (**preferred** for raw data) | `list_aliased_fields`, `get_data_by_alias`, `start_aggregation_by_alias` → `get_aggregation_result_by_alias`, `start_distinct_values_by_alias` → `get_distinct_values_result_by_alias` | A table's aliased fields — friendly names, ~95% fewer tokens. **Note: a table alias does not imply its fields are aliased (real orgs often alias only a few); use the by-id tools for any un-aliased field — see "Client Data Discovery".** |
+| Raw by-id (fallback) | `get_fields_by_id`, `get_data_by_id`, `start_aggregation_by_id` → `get_aggregation_result_by_id`, `start_distinct_values_by_id` → `get_distinct_values_result_by_id` | Tables without an alias, or when an alias call fails |
 
 `list_data_models` is the entry point for both raw layers — every entry carries
 both the numeric `id` (for the by-id tools) and the `alias` (for the by-alias
@@ -52,9 +52,11 @@ tools; empty when a table has no alias).
 is ungated — use it for discovery, and degrade to aliased/by-id aggregation for the
 actual values when the metric-data tools aren't enabled for the org.
 
-**Aggregation vs. pagination (speed):** aggregation (`get_aggregated_data_by_*`,
-async polling, ~5s, no row limit) is the default for summaries and totals. Page raw
-rows (`get_data_by_*`, ≤500/page) only when you need individual records.
+**Aggregation vs. pagination (speed):** aggregation (`start_aggregation_by_*` →
+`get_aggregation_result_by_*`, non-blocking start→poll, typically seconds, no row
+limit) is the default for summaries and totals. Page raw rows (`get_data_by_*`,
+≤500/page) only when you need individual records. See "Async fetch — start → poll"
+below for the polling contract.
 
 ### Backward compatibility — retired tool names (old → new)
 
@@ -80,6 +82,21 @@ invocations keep working.
 | `detect_anomalies` | (removed) compute client-side from `profile_*` + aggregates |
 | `execute_query` | (removed) use `get_data_by_*` advanced filters (or `sql_query` where the org's `mcp_use_llm_sql_tool` flag is on) |
 
+**Deprecated blocking tools (v3.1, async migration).** The four blocking fetch tools
+were superseded by the async start→poll pairs and are now hidden from the tool list
+but **still callable** — treat a reference to them the same way (map silently, don't
+report them as missing):
+
+| Deprecated blocking tool | Current async pair |
+|---|---|
+| `get_aggregated_data_by_id` | `start_aggregation_by_id` → `get_aggregation_result_by_id` |
+| `get_aggregated_data_by_alias` | `start_aggregation_by_alias` → `get_aggregation_result_by_alias` |
+| `get_distinct_values_by_id` | `start_distinct_values_by_id` → `get_distinct_values_result_by_id` |
+| `get_distinct_values_by_alias` | `start_distinct_values_by_alias` → `get_distinct_values_result_by_alias` |
+
+The `start_*` tools take the **same arguments** as their blocking twins; for distinct
+values the `limit` moves to the result tool.
+
 ### Aggregation / query API notes
 
 - **Date ranges now filter directly** — no more epoch workaround. The `filters`
@@ -97,8 +114,9 @@ invocations keep working.
 - **Some fields fail per-client** (500 errors). Discover lazily and retry reactively:
   if a dimension/metric field errors, re-inspect the schema for a sibling and retry.
   There is no profile file. Run `/dr-test` if you want the compatibility map up front.
-- **Distinct values** come from `get_distinct_values_by_alias` / `get_distinct_values_by_id`.
-  If a distinct-values call errors, fall back to sampling rows via `get_data_by_*`
+- **Distinct values** come from `start_distinct_values_by_alias` / `_by_id` →
+  `get_distinct_values_result_by_alias` / `_by_id` (pass `limit` to the result tool).
+  If a distinct-values fetch errors, fall back to sampling rows via `get_data_by_*`
   (`limit=500`, project just the field you need) and dedupe client-side.
 - **JWT tokens expire in 5 minutes.** Auto-refreshes for aggregation; manual refresh
   every 20K rows for pagination.
@@ -140,29 +158,37 @@ When writing or updating a skill, copy the relevant recipe so heuristics stay co
    `scenario` (`^scenario$`→`^version$`), `date` (`reporting_date`→`posting_date`→`^date$`),
    `account_l1` (`dr_acc_l1`→`account_l1`→`account_group_l1`). Ask the user if
    `amount`/`scenario` is unclear.
-3. Account categories — `get_distinct_values_by_alias(<alias>, <account_alias>)` (or
-   `get_distinct_values_by_id(<id>, <account_field_id>)`). If the distinct call errors,
+3. Account categories — `start_distinct_values_by_alias(<alias>, <account_alias>)` (or
+   `start_distinct_values_by_id(<id>, <account_field_id>)`), then poll the matching
+   `get_distinct_values_result_by_alias`/`_by_id` with the returned handle (pass `limit`
+   to the result tool) — see the async-fetch pattern below. If the distinct fetch errors,
    fall back to `get_data_by_alias(<alias>, select=[<account_alias>], limit=500)` (or the
    by-id twin) and dedupe. Match `revenue` `/revenue|sales|income/i`, `cogs`
    `/cogs|cost of goods|cost of sales|direct cost/i`, `opex` `/operating|opex|expense|sg&a/i`.
-4. Aggregate — `get_aggregated_data_by_alias(<alias>, dimensions=[…aliases],
+4. Aggregate — `start_aggregation_by_alias(<alias>, dimensions=[…aliases],
    metrics=[{"field": <amount_alias>, "agg": "SUM"}], filters=[…])` (preferred), or
-   `get_aggregated_data_by_id(<id>, dimensions=[…ids], metrics=[{"field_id": <amount_id>,
-   "agg": "SUM"}], filters=[…])`. Scope dates with an **advanced** filter (see
-   "Aggregation / query API notes") or by adding the date as a dimension and filtering
-   client-side.
+   `start_aggregation_by_id(<id>, dimensions=[…ids], metrics=[{"field_id": <amount_id>,
+   "agg": "SUM"}], filters=[…])`, then poll the matching `get_aggregation_result_by_*`
+   with the returned handle (async-fetch pattern below). Scope dates with an **advanced**
+   filter (see "Aggregation / query API notes") or by adding the date as a dimension and
+   filtering client-side.
 5. **Failures are handled reactively, not pre-probed:** if a call 500s on a dimension/
    metric field, re-inspect the Step-2 schema for a sibling account-level field from the
    discovered schema (orgs often carry in-between levels) and
    retry; if an alias call fails, fall back to the by-id twin.
 
+**Async fetch pattern (inline into every skill that fetches aggregates or distinct values):**
+
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 **Data-scope preamble (inline into every skill that aggregates financial data):**
 
 > **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
-> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
 > 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 **KPI honesty (inline into every skill/agent that renders KPI cards, dashboards, or executive summaries):**
 
@@ -219,7 +245,7 @@ in context everywhere else.
 > skill**, which drives the **Datarails Excel Add-In** via the hidden `__dr_agent` bridge
 > sheet (commands like `refresh_ribbon`, `drilldown_list`, `add_function_by_id`,
 > `agent.get_session`). It is **NOT** the `datarails-finance-os` MCP connector (the FinanceOS
-> REST API: `get_aggregated_data_by_alias`, `get_fields_by_id`, etc.). When a skill says "fire the
+> REST API: `start_aggregation_by_alias`, `get_fields_by_id`, etc.). When a skill says "fire the
 > agent" / "refresh via the agent", use the add-in bridge — never the MCP connector, and never
 > native Excel. The MCP connector is only for server-side data pulls when there is no Excel
 > context.
@@ -303,7 +329,7 @@ in Excel context — DR cells in scope? drill-down offered? If yes-then-no, add 
   writes or text commentary.
 - `drilldown_list` fires only in enrichment mode (DR formula cells exist —
   `DR.GET`/`DR.QTD`/`DR.YTD`/etc., any DR function). Cold-question mode (raw API
-  values from `get_aggregated_data_by_alias`) always skips drill-down.
+  values from the MCP aggregation tools) always skips drill-down.
 
 Skills with existing inline logic: the inline logic remains valid for the demo
 period. Migrate to delegation anchors during the next batch skill edit.

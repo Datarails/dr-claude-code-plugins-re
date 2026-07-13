@@ -7,9 +7,17 @@ tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__list_business_metrics
   - mcp__datarails-finance-os__profile_numeric_fields
@@ -35,7 +43,7 @@ baseline aggregates only — **not** classified findings:
 |---|---|
 | `profile_numeric_fields` | SUM, AVG, MIN, MAX, COUNT per numeric field — in the backend-native `DR_Values`/`col_keys`/`row_keys` layout, with no per-value aggregator labels |
 | `profile_categorical_fields` | distinct count + first 10 sample values per field (capped at 5 fields/call; **bare calls default to upload/mapping metadata columns — always pass `fields`**) |
-| `get_aggregated_data_by_alias` / `get_aggregated_data_by_id` | grouped totals with no row cap (only path to per-value frequencies and null counts) |
+| `start_aggregation_by_alias` / `start_aggregation_by_id` → poll `get_aggregation_result_by_*(handle)` | grouped totals with no row cap (only path to per-value frequencies and null counts) |
 
 There is no server-side anomaly tool. The agent computes outlier flags,
 severity, duplicate counts, null rates, rare-value detection, and the
@@ -81,6 +89,8 @@ regardless of an org's flag state.
 
 ### Phase 2: Gather baseline aggregates
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 In parallel where possible:
 
 1. Fields — if the table has an alias, `list_aliased_fields(<alias>)`
@@ -92,8 +102,10 @@ In parallel where possible:
    Take grouping dimensions straight from this schema. If a
    category-aware finding (rare-value, future-dated) needs the account
    dimension's distinct values, collect them via
-   `get_distinct_values_by_alias(<alias>, <account_alias>)` (or the
-   by-id twin `get_distinct_values_by_id(<table_id>, <account_field_id>)`).
+   `start_distinct_values_by_alias(<alias>, <account_alias>)` (or the
+   by-id twin `start_distinct_values_by_id(<table_id>, <account_field_id>)`)
+   → poll the matching `get_distinct_values_result_by_*(handle)` until
+   ready (async-fetch pattern).
    If a distinct call errors, fall back to
    `get_data_by_alias(<alias>, select=[<account_alias>], limit=500)` (or
    the by-id twin) and dedup client-side.
@@ -104,9 +116,11 @@ In parallel where possible:
    duplicated per stat. Map each value to its statistic via the keys
    before labeling anything; never report a number as MIN/MAX/AVG/COUNT
    without confirming its key. If the mapping is ambiguous, anchor it by
-   cross-checking ONE field with `get_aggregated_data_by_alias` /
-   `get_aggregated_data_by_id` (MIN and MAX in two separate calls — one
-   aggregation per field per call) before deriving outliers or ranges.
+   cross-checking ONE field with `start_aggregation_by_alias` /
+   `start_aggregation_by_id` (MIN and MAX in two separate calls — one
+   aggregation per field per call) → poll the matching
+   `get_aggregation_result_by_*(handle)` until ready (async-fetch
+   pattern) before deriving outliers or ranges.
 3. `profile_categorical_fields(<table_id>, fields=[...])` — pass an
    **explicit `fields` list of business dimensions taken from the
    Phase 2 schema** (account-hierarchy levels, scenario,
@@ -116,10 +130,12 @@ In parallel where possible:
    it bare. The tool also silently caps at 5 fields/call; loop as needed
    to cover all business dimensions.
 4. For each candidate-key or category field:
-   `get_aggregated_data_by_alias(<alias>, dimensions=[<field_alias>],
+   `start_aggregation_by_alias(<alias>, dimensions=[<field_alias>],
    metrics=[{"field": <amount_field_alias>, "agg": "COUNT"}])` (or the by-id
-   twin `get_aggregated_data_by_id(<table_id>, dimensions=[<field_id>],
-   metrics=[{"field_id": <amount_field_id>, "agg": "COUNT"}])`). **COUNT a
+   twin `start_aggregation_by_id(<table_id>, dimensions=[<field_id>],
+   metrics=[{"field_id": <amount_field_id>, "agg": "COUNT"}])`) → poll the
+   matching `get_aggregation_result_by_*(handle)` until ready (async-fetch
+   pattern). **COUNT a
    different dense field (e.g. the discovered amount field) than the GROUP BY
    dimension itself — a same-field COUNT of the grouped dimension can 500.**
    This is the only source of per-value frequencies, null counts, and the
@@ -144,7 +160,8 @@ Apply the recipes from the `/dr-anomalies` skill (kept in sync — see
   substitute for `|z| > 3` because std dev isn't returned. Severity by
   absolute count and percentage of total.
 - **Null / missing values:** sum the null bucket COUNT from the
-  `get_aggregated_data_by_alias` / `get_aggregated_data_by_id` GROUP BY
+  aggregation start→poll GROUP BY (`start_aggregation_by_*` →
+  `get_aggregation_result_by_*`)
   divided by total rows (or filter directly with an advanced `is null`
   condition). ≥10% on a non-nullable field → CRITICAL; ≥1% → HIGH.
 - **Duplicates:** pick a candidate composite key, GROUP BY that key

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [3.0.5] — 2026-07-12
+
+### Changed
+- **Migrated every skill/agent to the DR-50141 async fetch tools + truncation-envelope handling (DR-50494).** The MCP server replaced the four blocking fetch tools with async start→poll pairs (`start_aggregation_by_id`/`_by_alias` → `get_aggregation_result_by_id`/`_by_alias`; `start_distinct_values_by_id`/`_by_alias` → `get_distinct_values_result_by_id`/`_by_alias`) and hid the blocking tools from the tool list (still callable). This release aligns the whole plugin surface (~130 call sites across 19 public skills, 8 agents, 3 internal skills, 1 internal command, and `CLAUDE.md`):
+  - **New canonical "Async fetch — start → poll" block** in `CLAUDE.md`, inlined verbatim into every fetching skill/agent (29 files): `start_*` takes the same arguments as its blocking twin and returns `{status: "pending", handle}`; echo the handle to the matching result tool; `status: "running"` + `retry_after_seconds` means poll again (not an error); distinct-values `limit` moves to the result tool; expired-handle errors restart with `start_*`. Includes a **transitional fallback** — if the `start_*` tools aren't on the connector yet (older server), the blocking twins still work with the same arguments — so the plugin behaves correctly on both sides of the MCP prod deploy, whichever lands first. The deprecated tool names stay in each frontmatter allow-list (after the new pairs) for the same reason.
+  - **Data-scope preamble v2** (13 files, byte-verbatim): item 1 now names the async distinct-values pair, and a new **item 5 — Truncated results** teaches the `{data, truncated: true, total_rows, returned_rows, guidance}` envelope (server caps serialized results at ~100 KB): the `data` prefix is incomplete — never compute totals/shares/trends from it; follow the `guidance` (narrow the query or use a business metric) and re-fetch. Standalone truncation blockquotes added to `profile`, `get-formula`, and `anomalies-report` (no full preamble there), and row-fetch truncation sentences to `query`/`extract`/`drilldown`/`tables` (whose `get_data_by_*` reads can also return the envelope).
+  - **`CLAUDE.md`** data-access-layer table, aggregation-vs-pagination note, discovery recipe steps 3–4, and distinct-values API note rewritten to the async pairs; a "Deprecated blocking tools (v3.1, async migration)" mapping table added to the backward-compat section so references to the old names are silently mapped, never reported as missing.
+  - `reconciliation`'s cross-endpoint agreement check now runs both legs as start→poll (aliased vs by-id families — the independence argument is unchanged); `test`'s per-field probes and `cross-layer-reconcile__internal`'s aliased/raw legs migrated the same way. Tools that didn't change (`get_data_by_*`, `get_fields_by_id`, `list_*`, `profile_*`, `get_business_metric_*`) were left untouched.
+
 ## [3.0.4] — 2026-07-05
 
 ### Changed

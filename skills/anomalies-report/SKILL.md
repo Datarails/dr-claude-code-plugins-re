@@ -8,9 +8,17 @@ allowed-tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__profile_numeric_fields
   - mcp__datarails-finance-os__profile_categorical_fields
@@ -74,15 +82,15 @@ table. Works with any table — no pre-configuration required.
 - **Numeric Analysis**: SUM, AVG, MIN, MAX, COUNT per numeric field (from
   `profile_numeric_fields`) plus a skill-derived range-band outlier
   flag. Std dev and percentiles are not returned by the API and are
-  not reported unless the skill bucketed the field via
-  `get_aggregated_data_by_alias` / `get_aggregated_data_by_id` (note
-  that in the sheet when present).
+  not reported unless the skill bucketed the field via the aggregation
+  start→poll tools (`start_aggregation_by_*` →
+  `get_aggregation_result_by_*`) (note that in the sheet when present).
 - **Categorical Analysis**: Distinct count and sample values from
   `profile_categorical_fields` (capped at 5 fields per call), plus
-  per-value frequencies derived from `get_aggregated_data_by_alias` /
-  `get_aggregated_data_by_id` (nulls appear as the explicit `[null]`
-  bucket; the trailing keyless grand-total row is excluded from the
-  frequency table).
+  per-value frequencies derived from the aggregation start→poll tools
+  (`start_aggregation_by_*` → `get_aggregation_result_by_*`) (nulls
+  appear as the explicit `[null]` bucket; the trailing keyless
+  grand-total row is excluded from the frequency table).
 - **Sample Records**: Actual data samples for top findings, fetched
   via `get_data_by_alias` / `get_data_by_id` after the skill identifies
   the IDs to pull.
@@ -99,6 +107,8 @@ table. Works with any table — no pre-configuration required.
    alias path when an alias exists.**
 
 > **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
+
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
 
 **Resolve the target table:**
 
@@ -121,17 +131,18 @@ table. Works with any table — no pre-configuration required.
      categorical fields straight from this schema.
   3. If category-aware findings (rare-value, future-dated) need the account
      dimension, collect distinct values via
-     `get_distinct_values_by_alias(<alias>, <account_field>)` (or
-     `get_distinct_values_by_id(<table_id>, <account_field_id>)`). If the
-     distinct call errors, fall back to
+     `start_distinct_values_by_alias(<alias>, <account_field>)` (or
+     `start_distinct_values_by_id(<table_id>, <account_field_id>)`) → poll
+     the matching `get_distinct_values_result_by_*(handle)` until ready
+     (async-fetch pattern). If the distinct call errors, fall back to
      `get_data_by_alias(<alias>, select=[<account_field>], limit=500)` (or the
      by-id twin) and dedupe.
 
-Aggregation-field failures are handled reactively, not pre-probed: if
-`get_aggregated_data_by_alias` / `get_aggregated_data_by_id` 500s on a
-dimension field, re-inspect the schema for a sibling and retry; if the alias
-call fails, fall back to the by-id twin; if none works, tell the user which
-field failed.
+Aggregation-field failures are handled reactively, not pre-probed: if an
+aggregation start→poll call (`start_aggregation_by_*` →
+`get_aggregation_result_by_*`) 500s on a dimension field, re-inspect the
+schema for a sibling and retry; if the alias call fails, fall back to the
+by-id twin; if none works, tell the user which field failed.
 
 **Phase 2: Gather baseline aggregates**
 
@@ -150,14 +161,16 @@ are never read as period P&L figures.
    explicit field list (tool silently caps at 5 per call; loop as
    needed to cover them all).
 3. For per-value frequencies, null counts, and duplicate detection:
-   `get_aggregated_data_by_alias` (preferred) or
-   `get_aggregated_data_by_id` grouped by the relevant dimension(s) with
+   `start_aggregation_by_alias` (preferred) or
+   `start_aggregation_by_id` grouped by the relevant dimension(s) with
    `COUNT` of a **different dense field** as the metric — never COUNT
    the grouped dimension itself (see "Reading GROUP BY responses"
    below) — by-alias `metrics=[{"field": <other_field_alias>, "agg":
    "COUNT"}]`, by-id `metrics=[{"field_id": <other_field_id>, "agg":
-   "COUNT"}]`. **This is where the actual findings come from** — the
-   profile tools alone can't produce them.
+   "COUNT"}]` → poll the matching `get_aggregation_result_by_alias` /
+   `get_aggregation_result_by_id` with the `handle` until ready
+   (async-fetch pattern). **This is where the actual findings come
+   from** — the profile tools alone can't produce them.
 4. For top-finding row samples: `get_data_by_alias` /
    `get_data_by_id`. You can filter directly with an advanced condition
    tree — e.g. comparison `{"name": <amount_alias>, "values":
@@ -168,6 +181,8 @@ are never read as period P&L figures.
    purely because the filter API can't express a comparison.
 
 > **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+
+> **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 **Phase 2b: Derive findings (client-side)**
 
@@ -346,8 +361,9 @@ Whichever path resolved the table:
    `get_fields_by_id`)
 2. Identify numeric fields (for range-band / outlier checks) and categorical
    fields (for frequency / null / duplicate checks) from it
-3. For category-aware findings, collect distinct values via
-   `get_distinct_values_by_alias` / `get_distinct_values_by_id` (fall back to
+3. For category-aware findings, collect distinct values via the
+   distinct-values start→poll tools (`start_distinct_values_by_*` →
+   `get_distinct_values_result_by_*`) (fall back to
    sampling rows with `get_data_by_alias` / `get_data_by_id` only if the
    distinct call errors)
 4. Run analysis

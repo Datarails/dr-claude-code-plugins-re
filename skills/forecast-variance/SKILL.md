@@ -8,9 +8,17 @@ allowed-tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__list_business_metrics
   - Write
@@ -80,17 +88,20 @@ If multiple candidates exist for either dimension, pick the most specific / gran
 
 If the schema genuinely has no identifiable cost center field, flag this in the Read Me block and fall back to the next-best grouping available (e.g., account hierarchy). Never silently drop the dimension.
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 > **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
-> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
 > 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 ### Step 1b — Resolve the scenario domain and the plan side (never assume `Budget` exists)
 
 Scenario names vary by org, and a `Budget` scenario frequently does not exist — filtering on it returns an empty result and a silently wrong analysis. Resolve every side of the comparison against **discovered** values before any pull:
 
-1. **Discover the scenario domain.** Pull distinct values of the discovered scenario field — `get_distinct_values_by_alias(alias=<financials_alias>, field=<scenario_field>)` if the field is aliased, else `get_distinct_values_by_id(table_id=<id>, field_id=<scenario_field_id>)`.
+1. **Discover the scenario domain.** Pull distinct values of the discovered scenario field — `start_distinct_values_by_alias(alias=<financials_alias>, field=<scenario_field>)` if the field is aliased, else `start_distinct_values_by_id(table_id=<id>, field_id=<scenario_field_id>)` → poll the matching `get_distinct_values_result_by_alias`/`_by_id(handle)` until ready (async-fetch pattern; pass `limit` to the result tool if you need to cap the values).
 2. **Resolve the actual side** — the discovered value matching `/actual/i`.
 3. **Resolve the plan side:**
    - **A budget-like scenario exists** (a discovered value matches `/budget|plan|aop|target/i`) → use it as the plan-side scenario filter.
@@ -123,10 +134,10 @@ Do not assume which mode — read the sheet first.
 
 ### Step 3 — Pull data using the discovered dimensions (in parallel)
 
-Issue all scenario pulls in a single turn (concurrent tool calls). Use `get_aggregated_data_by_alias` (preferred) or its by-id twin `get_aggregated_data_by_id`. For each pull, always include the discovered **cost center** and **report field** dimensions alongside the period dimension:
+Issue all scenario pulls in a single turn (concurrent tool calls). Use `start_aggregation_by_alias` (preferred) or its by-id twin `start_aggregation_by_id`. For each pull, always include the discovered **cost center** and **report field** dimensions alongside the period dimension:
 
 ```
-get_aggregated_data_by_alias(
+start_aggregation_by_alias(
   alias=<financials_alias>,
   dimensions=[<period_field>, <cost_center_field>, <report_field>],
   metrics=[{"field": <amount_field>, "agg": "SUM"}],
@@ -138,11 +149,13 @@ get_aggregated_data_by_alias(
 )
 ```
 
+→ poll `get_aggregation_result_by_alias(handle)` until ready (async-fetch pattern) — start all sides first, then poll their handles together.
+
 All filter values are placeholders — every one comes from Step 1b / the data-scope discovery, never from this template. **Plan side:** when Step 1b resolved a plan-version fallback, replace the scenario filter with `{"name": <planning_version_field>, "values": [<chosen version>], "is_excluded": false}`. **Account scope:** use the account-hierarchy level whose discovered values partition P&L flows (data-scope item 2) — on many orgs the top level is the balance-sheet equation and P&L buckets live one level deeper. **GAAP exclusion:** only if a GAAP-adjustment-like field exists — discover its values first, otherwise omit the filter.
 
 Scope by year either by adding `<date_field>` to `dimensions` and filtering the result client-side, or with an **advanced** date-range filter: `{"name": <date_field>, "values": {"type": "advanced", "val": [{"condition": "total_range", "value": ["<jan1_epoch>", "<dec31_epoch>"]}]}}` (epoch seconds as strings). Both work — date filtering is no longer rejected.
 
-By-id fallback (no alias): `get_aggregated_data_by_id(table_id=<id>, dimensions=[<period_field_id>, <cost_center_field_id>, <report_field_id>], metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}], filters=[{"field_id": <scenario_field_id>, "values": [...]}])`. If an alias call 500s on a dimension, re-inspect the Step 1 schema for a sibling and retry, or fall back to the by-id twin.
+By-id fallback (no alias): `start_aggregation_by_id(table_id=<id>, dimensions=[<period_field_id>, <cost_center_field_id>, <report_field_id>], metrics=[{"field_id": <amount_field_id>, "agg": "SUM"}], filters=[{"field_id": <scenario_field_id>, "values": [...]}])` → poll `get_aggregation_result_by_id(handle)` until ready (async-fetch pattern). If an alias call 500s on a dimension, re-inspect the Step 1 schema for a sibling and retry, or fall back to the by-id twin.
 
 Assign each distinct pull a Source ID: `S1`, `S2`, `S3`, ...
 
@@ -179,7 +192,7 @@ Add two columns to the right of the user's range (or include them in the fresh b
 
 **Source Ref cell:** bracketed refs only — `[S1, S2]`. No commentary in this cell.
 
-> **Citing live DR-formula reads (Excel context):** When a $ figure comes from reading a DR cell (`agent.read_range` / `agent.evaluate_drget`) rather than a `get_aggregated_data_by_alias` pull, cite the cell's `data.sources[]` (sheet!cell + widget) returned by the read — **every $ figure must carry a source**. If a read returns empty `sources`, do not present the figure; re-read or tell the user it isn't Datarails-tracked.
+> **Citing live DR-formula reads (Excel context):** When a $ figure comes from reading a DR cell (`agent.read_range` / `agent.evaluate_drget`) rather than a `start_aggregation_by_alias` pull, cite the cell's `data.sources[]` (sheet!cell + widget) returned by the read — **every $ figure must carry a source**. If a read returns empty `sources`, do not present the figure; re-read or tell the user it isn't Datarails-tracked.
 
 ### Step 5 — Build the Sources sheet and Read Me block
 
@@ -218,7 +231,7 @@ DATA FRESHNESS
 
 If either condition is false, skip this step entirely and state why:
 - Non-Excel context → `drilldown_list` not available.
-- **Cold-question mode** → data cells were written as **raw values** from the FinanceOS API (`get_aggregated_data_by_alias`), not DR formulas. `drilldown_list` targets DR formula cells — it has nothing to act on. Tell the user drill-down is unavailable in this mode.
+- **Cold-question mode** → data cells were written as **raw values** from the FinanceOS API (`start_aggregation_by_alias` → `get_aggregation_result_by_alias`), not DR formulas. `drilldown_list` targets DR formula cells — it has nothing to act on. Tell the user drill-down is unavailable in this mode.
 
 > **Drill-down works on any DR function cell**, not just `DR.GET`. The cell must resolve to a Datarails widget (DR.GET/QTD/YTD/MTD/...). Before firing, if `isConnected` is false, confirm `connect_file` with the user (see Step 0).
 

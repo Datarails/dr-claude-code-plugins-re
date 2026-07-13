@@ -8,9 +8,17 @@ allowed-tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__list_business_metrics
   - Write
@@ -61,8 +69,10 @@ evidence package without a query behind it:
    each response the labeled group rows (including `[null]`) must sum to the
    appended keyless grand-total row (Data-scope preamble, item 4), and the
    two grand totals must equal each other. Tools:
-   `get_distinct_values_by_alias`/`_by_id`,
-   `get_aggregated_data_by_alias`/`_by_id`.
+   `start_distinct_values_by_alias`/`_by_id` → poll
+   `get_distinct_values_result_by_alias`/`_by_id`, and
+   `start_aggregation_by_alias`/`_by_id` → poll
+   `get_aggregation_result_by_alias`/`_by_id` (async-fetch pattern).
 2. **Consistency / reconciliation.** The reconciliation control is the
    `/dr-reconcile` skill's four independent-source checks — cross-endpoint
    agreement, balance-sheet identity, cross-grain roll-up, and
@@ -81,7 +91,11 @@ evidence package without a query behind it:
    `get_data_by_alias` / `get_data_by_id` with `select` on the load-bearing
    columns and `filters` scoping bucket + period, so a human auditor can
    trace reported figures to source line items. Respect the 500-row cap —
-   sample per bucket, never attempt a full extract.
+   sample per bucket, never attempt a full extract. If a response arrives
+   with `"truncated": true`, the returned rows are an incomplete prefix —
+   narrow the query per its `guidance` (more filters / fewer columns / lower
+   limit+offset paging) and re-fetch; never present the prefix as a complete
+   sample.
 
 **Out of scope — requires external evidence:** access control, change
 management, and IT general controls. No tool available to this skill can
@@ -91,11 +105,14 @@ instead.
 
 All of these checks aggregate live data. Run this discovery before any check that queries or aggregates:
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 > **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
-> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
 > 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 In particular, never test a control against a budget-named scenario filter without first confirming it exists in the discovered scenario domain — if the plan side lives in a planning-version-like field, route budget-related evidence through that field's versions instead, and record the actual scenario/version used in the evidence package and audit trail.
 
