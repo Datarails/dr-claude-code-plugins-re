@@ -54,9 +54,9 @@ first time a Datarails tool is used.
 ### Step 3: Try a skill
 
 ```
-/dr-tables                             # List tables
-/dr-financial-summary                  # Quick revenue/expense/margin snapshot
-/dr-intelligence --year 2025           # Generate intelligence workbook
+/datarails-financeos:tables                             # List tables
+/datarails-financeos:financial-summary                  # Quick revenue/expense/margin snapshot
+/datarails-financeos:intelligence --year 2026           # Generate intelligence workbook
 ```
 
 No setup or profile step is needed — every skill discovers your financials table and field names on its own, each session.
@@ -89,26 +89,26 @@ A browser window opens for login. Tokens are managed and refreshed automatically
 
 | Skill | Description |
 |-------|-------------|
-| `/dr-test` | Test API field compatibility |
-| `/dr-tables` | List all Finance OS tables |
-| `/dr-tables <id>` | View schema for a specific table |
-| `/dr-profile <id>` | Profile table statistics |
-| `/dr-anomalies <id>` | Detect data anomalies |
-| `/dr-query <id> --sample` | Get sample records |
-| `/dr-financial-summary` | Revenue/expense/margin snapshot |
-| `/dr-revenue-trends` | Revenue trends and growth rates |
-| `/dr-expense-analysis` | Top expense categories and trends |
-| `/dr-extract --year 2025` | Extract financial data to Excel |
-| `/dr-intelligence --year 2025` | Generate FP&A intelligence workbook |
-| `/dr-insights --year 2025` | Executive insights with PowerPoint |
-| `/dr-reconcile --year 2025` | Independent-source pipeline-consistency checks |
-| `/dr-dashboard` | Executive KPI dashboard |
-| `/dr-forecast-variance --year 2025` | Scenario/plan-vs-actual variance |
-| `/dr-audit --year 2025` | Audit-support evidence package (SOX-oriented reports) |
-| `/dr-departments --year 2025` | Department P&L analysis |
-| `/dr-get-formula` | Generate Excel with DR.GET formulas |
-| `/dr-drilldown` | Drill down on DR.GET formula cells |
-| `/dr-anomalies-report` | Comprehensive anomaly detection report |
+| `/datarails-financeos:test` | Test API field compatibility |
+| `/datarails-financeos:tables` | List all Finance OS tables |
+| `/datarails-financeos:tables <id>` | View schema for a specific table |
+| `/datarails-financeos:profile <id>` | Profile table statistics |
+| `/datarails-financeos:anomalies <id>` | Detect data anomalies |
+| `/datarails-financeos:query <id> --sample` | Get sample records |
+| `/datarails-financeos:financial-summary` | Revenue/expense/margin snapshot |
+| `/datarails-financeos:revenue-trends` | Revenue trends and growth rates |
+| `/datarails-financeos:expense-analysis` | Top expense categories and trends |
+| `/datarails-financeos:extract --year 2026` | Extract financial data to Excel |
+| `/datarails-financeos:intelligence --year 2026` | Generate FP&A intelligence workbook |
+| `/datarails-financeos:insights --year 2026` | Executive insights with PowerPoint |
+| `/datarails-financeos:reconciliation --year 2026` | Independent-source pipeline-consistency checks |
+| `/datarails-financeos:dashboard` | Executive KPI dashboard |
+| `/datarails-financeos:forecast-variance --year 2026` | Scenario/plan-vs-actual variance |
+| `/datarails-financeos:audit --year 2026` | Audit-support evidence package (not a SOX certification) |
+| `/datarails-financeos:departments --year 2026` | Department P&L analysis |
+| `/datarails-financeos:get-formula` | Generate Excel with DR.GET formulas |
+| `/datarails-financeos:drilldown` | Drill down on DR.GET formula cells |
+| `/datarails-financeos:anomalies-report` | Comprehensive anomaly detection report |
 
 ---
 
@@ -119,13 +119,13 @@ A browser window opens for login. Tokens are managed and refreshed automatically
 | Aggregation API | Fast — returns in seconds, no row limit | Summaries, totals, grouped data |
 | Pagination | Much slower — capped at 500 rows per page | Raw data extraction, full exports |
 
-Most skills use the aggregation API for fast results. Only `/dr-extract` with raw data needs pagination.
+Most skills use the aggregation API for fast results. Only `/datarails-financeos:extract` with raw data needs pagination.
 
 ---
 
 ## Reporting Issues
 
-1. Run `/dr-test` in Claude Code for a comprehensive API diagnostic
+1. Run `/datarails-financeos:test` in Claude Code for a comprehensive API diagnostic
 2. Verify the Datarails connector is connected
 3. Report with error message and steps to reproduce
 

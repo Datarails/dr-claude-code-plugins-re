@@ -98,13 +98,13 @@ This fetches live financial totals using the aggregation API (~5 seconds).
 Start by exploring what data is available:
 
 ```
-/dr-tables
+/datarails-financeos:tables
 ```
 
 Then pull a quick sample to see the data structure:
 
 ```
-/dr-query TABLE_ID --sample
+/datarails-financeos:query TABLE_ID --sample
 ```
 
 ### Troubleshooting
@@ -132,9 +132,9 @@ _Where is money going?_
 
 **Claude Code:**
 ```
-/dr-expense-analysis
+/datarails-financeos:expense-analysis
 ```
-(For ad-hoc slicing, `/dr-query` also supports advanced filters — comparisons, ranges, text matching, null checks, date ranges — on fields discovered at runtime.)
+(For ad-hoc slicing, `/datarails-financeos:query` also supports advanced filters — comparisons, ranges, text matching, null checks, date ranges — on fields discovered at runtime.)
 
 ### 3b. Revenue Trends
 
@@ -147,7 +147,7 @@ _How is revenue tracking?_
 
 **Claude Code:**
 ```
-/dr-revenue-trends
+/datarails-financeos:revenue-trends
 ```
 
 ### 3c. Budget vs Actual
@@ -161,7 +161,7 @@ _Are we on plan?_
 
 **Claude Code:**
 ```
-/dr-forecast-variance --year 2025
+/datarails-financeos:forecast-variance --year 2026
 ```
 The skill discovers which scenarios your org actually has at runtime (it never assumes a "Budget" scenario exists — plan data may live in a planning-version field). You can still name scenarios explicitly if you know them.
 
@@ -186,7 +186,7 @@ This tests which API fields work with your environment and reports compatibility
 
 ### Why This Matters
 
-Skills discover your financials table and field names automatically each session, so there's no setup step. `/dr-test` is optional — it reports which fields work as aggregation dimensions up front, but skills also retry a sibling field on their own when an aggregation rejects one.
+Skills discover your financials table and field names automatically each session, so there's no setup step. `/datarails-financeos:test` is optional — it reports which fields work as aggregation dimensions up front, but skills also retry a sibling field on their own when an aggregation rejects one.
 
 ### Troubleshooting
 
@@ -216,7 +216,7 @@ Claude will use the intelligence skill automatically, fetching live data and gen
 ### Claude Code Track
 
 ```
-/dr-intelligence --year 2025
+/datarails-financeos:intelligence --year 2026
 ```
 
 ### What You'll Get
@@ -250,13 +250,13 @@ You're up and running. Here's where to go from here:
 
 | Goal | Skill |
 |------|-------|
-| Check data quality | `/dr-anomalies-report` |
-| Executive presentation | `/dr-insights --year 2025 --quarter Q4` |
-| Cross-source consistency checks (pipeline/mapping validation) | `/dr-reconcile --year 2025` |
-| Department performance | `/dr-departments --year 2025` |
-| Audit-support evidence package | `/dr-audit --year 2025 --quarter Q4` |
-| Export raw data to Excel | `/dr-extract --year 2025` |
-| Real-time KPI dashboard | `/dr-dashboard` |
+| Check data quality | `/datarails-financeos:anomalies-report` |
+| Executive presentation | `/datarails-financeos:insights --year 2026 --quarter Q4` |
+| Cross-source consistency checks (pipeline/mapping validation) | `/datarails-financeos:reconciliation --year 2026` |
+| Department performance | `/datarails-financeos:departments --year 2026` |
+| Audit-support evidence package | `/datarails-financeos:audit --year 2026 --quarter Q4` |
+| Export raw data to Excel | `/datarails-financeos:extract --year 2026` |
+| Real-time KPI dashboard | `/datarails-financeos:dashboard` |
 
 ### Documentation
 
@@ -273,16 +273,16 @@ You're up and running. Here's where to go from here:
 | I want to... | Cowork Command | Claude Code Skill |
 |--------------|----------------|-------------------|
 | **Connect to Datarails** | "+" > Connectors > Connect | Bundled with the plugin — OAuth opens on first tool use (`/mcp` to check status) |
-| **See financial totals** | `/datarails-financeos:financial-summary` | `/dr-financial-summary` |
-| **Analyze expenses** | `/datarails-financeos:expense-analysis` | `/dr-expense-analysis` |
-| **Check revenue trends** | `/datarails-financeos:revenue-trends` | `/dr-revenue-trends` |
-| **Compare budget vs actual** | `/datarails-financeos:budget-comparison` | `/dr-forecast-variance` |
-| **Test API compatibility** | `/datarails-financeos:test-api` | `/dr-test` |
-| **Discover tables** | `/datarails-financeos:explore-tables` | `/dr-tables` |
-| **Check data quality** | `/datarails-financeos:data-check` | `/dr-anomalies` |
-| **Full intelligence report** | Ask Claude directly | `/dr-intelligence --year 2025` |
-| **Export to Excel** | Ask Claude directly | `/dr-extract --year 2025` |
-| **Check field compatibility (optional)** | `/datarails-financeos:test-api` | `/dr-test` |
+| **See financial totals** | `/datarails-financeos:financial-summary` | `/datarails-financeos:financial-summary` |
+| **Analyze expenses** | `/datarails-financeos:expense-analysis` | `/datarails-financeos:expense-analysis` |
+| **Check revenue trends** | `/datarails-financeos:revenue-trends` | `/datarails-financeos:revenue-trends` |
+| **Compare budget vs actual** | `/datarails-financeos:budget-comparison` | `/datarails-financeos:forecast-variance` |
+| **Test API compatibility** | `/datarails-financeos:test-api` | `/datarails-financeos:test` |
+| **Discover tables** | `/datarails-financeos:explore-tables` | `/datarails-financeos:tables` |
+| **Check data quality** | `/datarails-financeos:data-check` | `/datarails-financeos:anomalies` |
+| **Full intelligence report** | Ask Claude directly | `/datarails-financeos:intelligence --year 2026` |
+| **Export to Excel** | Ask Claude directly | `/datarails-financeos:extract --year 2026` |
+| **Check field compatibility (optional)** | `/datarails-financeos:test-api` | `/datarails-financeos:test` |
 
 ---
 

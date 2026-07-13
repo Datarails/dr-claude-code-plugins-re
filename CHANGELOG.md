@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [3.0.6] — 2026-07-13
+
+### Changed
+- **README rewrite — corrected the skill invocation format (was broken) + external-view cleanup.** The README told users to invoke skills as `/dr-<name>` (the frontmatter `name`), but Claude Code invokes a plugin skill/command by **`/<plugin>:<folder-or-filename>`** and ignores the frontmatter `name` (confirmed against the Claude Code Skills/Plugins docs). So every documented `/dr-*` command was non-resolving — e.g. it's `/datarails-financeos:tables`, not `/dr-tables`, and `/datarails-financeos:reconciliation` (folder), not `/dr-reconcile` (name). Rewrote the whole README to use the correct namespaced form throughout, led usage with natural-language invocation (Claude auto-selects the skill/agent), added a `datarails-financeos:` + Tab autocomplete tip, and made the skill list exhaustive (all 19, grouped) and consistent with the shipped honest-scoping (audit = not-SOX, reconcile = pipeline-consistency, forecast-variance = runtime-discovered scenarios, query = advanced filters, drilldown = no-file mode). Also removed the "For Maintainers" section (it named the internal repo `dr-internal-plugins` and `RELEASING.md` in the public mirror), refreshed `--year` examples to 2026, corrected the intelligence output label to "up to 10 sheets", and added an Agents section. Shipped to the public mirror as an out-of-band README hotfix (same content), so the next promotion supersedes it cleanly.
+- **Applied the same invocation fix to `SETUP.md` and `docs/guides/GETTING_STARTED.md`** — every `/dr-*` command → the correct `/datarails-financeos:<folder>` form (folder names, so `reconcile`→`reconciliation`, etc.), `--year 2025` examples → `2026`, and the SETUP audit row's "(SOX-oriented reports)" → "(not a SOX certification)". The public repo README already carries the fix via hotfix; SETUP/GETTING_STARTED reach public on the next promotion.
+- **Removed four redundant command launchers that collided with same-named skills.** `commands/{drilldown,financial-summary,expense-analysis,revenue-trends}.md` shared a folder/filename with a skill, so both registered the *same* slash (e.g. `/datarails-financeos:drilldown`) — an ambiguous double-registration left over from the S11 launcher consolidation. Deleted them; the identically-named skills remain the sole resolvers (same slash, full recipe). The four distinct launchers that map to a differently-named skill stay: `explore-tables`→`tables`, `data-check`→`anomalies`, `budget-comparison`→`forecast-variance`, `test-api`→`test`.
+
 ## [3.0.5] — 2026-07-12
 
 ### Changed
