@@ -6,7 +6,11 @@ allowed-tools:
   - mcp__datarails-finance-os__list_data_models
   - mcp__datarails-finance-os__list_aliased_fields
   - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__profile_numeric_fields
   - mcp__datarails-finance-os__profile_categorical_fields
@@ -44,12 +48,21 @@ If any Datarails tool call fails with an authentication or connection error, tel
 
 > **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 **Explore field values (with --field):**
-- Use `mcp__datarails-finance-os__get_distinct_values_by_alias` (aliased tables) or
-  `mcp__datarails-finance-os__get_distinct_values_by_id` (by-id fallback)
+- Use `mcp__datarails-finance-os__start_distinct_values_by_alias` (aliased tables) or
+  `mcp__datarails-finance-os__start_distinct_values_by_id` (by-id fallback)
+- → poll the matching `get_distinct_values_result_by_alias` /
+  `get_distinct_values_result_by_id` with the returned `handle` until ready
+  (async-fetch pattern); pass `limit` to the result tool
 - Show unique values with counts
 - Useful for understanding categorical data
 - If a distinct-values call errors, fall back to sampling rows and dedupe client-side
+- On `"truncated": true` in any data response, the returned rows are an
+  incomplete prefix — narrow the query per the `guidance` (more filters / fewer
+  columns / lower limit+offset paging) and re-fetch; never present the prefix as
+  complete
 
 ## Arguments
 

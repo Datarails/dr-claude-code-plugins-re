@@ -7,11 +7,19 @@ tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__profile_numeric_fields
   - mcp__datarails-finance-os__profile_categorical_fields
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__list_business_metrics
   - Read
@@ -31,7 +39,8 @@ aggregates only — **not** computed statistics:
 - `profile_numeric_fields` → SUM, AVG, MIN, MAX, COUNT per numeric field
 - `profile_categorical_fields` → distinct count + first 10 sample
   values per field (capped at 5 fields per call; pass an explicit list)
-- `get_aggregated_data_by_alias` / `get_aggregated_data_by_id` → grouped
+- `start_aggregation_by_alias` / `start_aggregation_by_id` (poll the
+  matching `get_aggregation_result_by_*` for the result) → grouped
   totals (the only source of per-value frequencies and null counts)
 
 Anything beyond that — median, std dev, percentiles, outlier flags,
@@ -79,12 +88,16 @@ aliased/by-id aggregation for the values.
 
 ## Workflow
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 1. **Connect** — Verify auth; instruct Connectors UI on failure.
 2. **Discover** — `list_data_models`, then `list_aliased_fields(<alias>)`
    (preferred) or `get_fields_by_id(<id>)` for field types/ids.
 3. **Profile** — `profile_numeric_fields`, `profile_categorical_fields`
    (with explicit `fields=[...]`). For richer stats run
-   `get_aggregated_data_by_id` grouped per field.
+   `start_aggregation_by_id` grouped per field → poll
+   `get_aggregation_result_by_id(handle)` until ready (async-fetch
+   pattern).
 4. **Detect findings** — apply the `/dr-anomalies` recipes
    client-side. Bucket by severity using the standard heuristic.
 5. **Investigate** — for each material finding, fetch sample rows via
@@ -121,7 +134,8 @@ The agent:
 1. Confirms auth and resolves the table (`list_data_models`).
 2. Calls `get_fields_by_id(<table_id>)` (or `list_aliased_fields`) and the two
    `profile_*` tools for baseline aggregates.
-3. Runs `get_aggregated_data_by_id` group-by-field with COUNT to derive
+3. Runs `start_aggregation_by_id` group-by-field with COUNT → polls
+   `get_aggregation_result_by_id(handle)` until ready — to derive
    null rates, per-value frequencies, and duplicate candidates.
 4. Applies range-band, duplicate, null-rate, rare-value, and
    future-date detection client-side. Buckets by severity.

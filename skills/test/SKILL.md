@@ -6,9 +6,17 @@ allowed-tools:
   - mcp__datarails-finance-os__list_data_models
   - mcp__datarails-finance-os__list_aliased_fields
   - mcp__datarails-finance-os__get_fields_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
@@ -154,6 +162,8 @@ alternative.
 
 ### Phase 3: Aggregation Testing
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 #### Step 5: Test Each Field
 
 **Aggregation rules:**
@@ -168,7 +178,7 @@ alternative.
 
 For each field, run the alias-path probe when the table has an alias:
 ```
-Use: mcp__datarails-finance-os__get_aggregated_data_by_alias
+Use: mcp__datarails-finance-os__start_aggregation_by_alias
 Parameters:
   alias: <financials_alias>
   dimensions: ["<field_alias>"]
@@ -177,10 +187,11 @@ Parameters:
     {"name": "<scenario_field>", "values": ["<scenario_value>"], "is_excluded": false}
   ]
 ```
+→ poll `get_aggregation_result_by_alias(handle)` until ready (async-fetch pattern)
 
 By-id probe (no alias — `dimensions` and `metrics`/`filters` are field-id based):
 ```
-Use: mcp__datarails-finance-os__get_aggregated_data_by_id
+Use: mcp__datarails-finance-os__start_aggregation_by_id
 Parameters:
   table_id: <financials_table_id>
   dimensions: [<field_id>]
@@ -189,9 +200,11 @@ Parameters:
     {"field_id": <scenario_field_id>, "values": ["<scenario_value>"]}
   ]
 ```
+→ poll `get_aggregation_result_by_id(handle)` until ready (async-fetch pattern)
 
 `<scenario_value>` is any value from the discovered scenario domain
-(commonly an actuals-like one) — it just keeps each probe cheap; the probe is
+(commonly an actuals-like one) — it just keeps each probe cheap (one `start_*`
+call plus its polls); the probe is
 testing whether the *dimension* field aggregates, not the filter. If a probe returns empty (rather than 500) for every field, the
 scenario value may differ for this client — drop the filter and re-probe, or
 use a scenario value seen in a quick `get_data_by_alias` / `get_data_by_id`

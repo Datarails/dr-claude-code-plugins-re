@@ -8,9 +8,17 @@ allowed-tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__profile_numeric_fields
   - mcp__datarails-finance-os__profile_categorical_fields
@@ -32,8 +40,8 @@ provenance of every number you present.
 |---|---|
 | `profile_numeric_fields` | `SUM, AVG, MIN, MAX, COUNT` per numeric field — relayed in the backend-native `DR_Values`/`col_keys`/`row_keys` layout, with **no aggregator label attached to individual values** (see the reading rule in Step 2) |
 | `profile_categorical_fields` | distinct-count + first 10 sample values per field (capped at 5 fields per call — pass an explicit `fields` list; **without one it defaults to upload/mapping metadata columns, not business dimensions**) |
-| `get_aggregated_data_by_alias` / `…_by_id` | grouped totals; the only path to per-value frequencies and null counts |
-| `get_distinct_values_by_alias` / `…_by_id` | the full distinct-value list for one field |
+| `start_aggregation_by_alias` / `…_by_id` → poll `get_aggregation_result_by_alias` / `…_by_id` | grouped totals; the only path to per-value frequencies and null counts |
+| `start_distinct_values_by_alias` / `…_by_id` → poll `get_distinct_values_result_by_alias` / `…_by_id` (pass `limit` to the result tool) | the full distinct-value list for one field |
 
 What the tools do NOT return: median, std dev, variance, percentiles,
 mode, distribution shape, outlier flags, per-value frequency for
@@ -46,6 +54,10 @@ categorical fields, null counts. The skill derives these.
 If any tool call fails with an authentication or connection error, guide
 the user to connect via the Connectors UI ("+" → Connectors → Datarails →
 Connect).
+
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
+> **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 ### Step 2: Resolve the table, then gather baseline aggregates
 
@@ -70,10 +82,11 @@ conversation, reuse them.** Discovery is cheap but not free.
    MIN/MAX/AVG/COUNT without confirming which key it belongs to —
    mislabeling here (e.g. calling a MAX an AVG) silently corrupts every
    downstream derivation. If the mapping is ambiguous, cross-check ONE
-   field with a direct `get_aggregated_data_by_alias` / `…_by_id` call —
-   MIN and MAX in two separate calls (one aggregation per field per
-   call) — and use that to anchor the interpretation before deriving
-   outliers or ranges from it.
+   field with a direct `start_aggregation_by_alias` / `…_by_id` call →
+   poll the matching `get_aggregation_result_by_*` (handle) until ready
+   (async-fetch pattern) — MIN and MAX in two separate calls (one
+   aggregation per field per call) — and use that to anchor the
+   interpretation before deriving outliers or ranges from it.
 
 4. `profile_categorical_fields(table_id, fields=[...])` — **always pass an
    explicit `fields` list of business dimensions chosen from the field
@@ -84,12 +97,16 @@ conversation, reuse them.** Discovery is cheap but not free.
    tells the user nothing about their data. Never call it bare. The tool
    also silently drops fields beyond 5 per call. Use this to get distinct
    counts and sample values.
-5. For per-value frequency or null counts: `get_aggregated_data_by_alias`
-   (or `…_by_id`) grouping by the field with `COUNT` as the metric.
+5. For per-value frequency or null counts: `start_aggregation_by_alias`
+   (or `…_by_id`) grouping by the field with `COUNT` as the metric →
+   poll `get_aggregation_result_by_alias` / `…_by_id` (handle) until
+   ready (async-fetch pattern).
 6. For the full distinct-value list of a single field:
-   `get_distinct_values_by_alias(<alias>, <field_alias>)` (or
-   `get_distinct_values_by_id(<table_id>, <field_id>)`). If a distinct call
-   errors, fall back to sampling rows via `get_data_by_alias` /
+   `start_distinct_values_by_alias(<alias>, <field_alias>)` (or
+   `start_distinct_values_by_id(<table_id>, <field_id>)`) → poll
+   `get_distinct_values_result_by_alias` / `…_by_id` (handle, `limit`)
+   until ready (async-fetch pattern). If a distinct call errors, fall
+   back to sampling rows via `get_data_by_alias` /
    `get_data_by_id` (small `limit`, project just that field) and dedupe.
 
 > **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
@@ -108,28 +125,31 @@ conversation, reuse them.** Discovery is cheap but not free.
   "values": {"type": "advanced", "val": [{"condition": "gt", "value":
   "<upper_band>"}]}}])` (or the by-id twin, or an `or`-chained `lt` for the
   low tail). Advanced comparison filters are supported.
-- For tighter bounds, call `get_aggregated_data_by_alias` (or `…_by_id`) with
-  the numeric field bucketed into deciles or sign×magnitude buckets; the
+- For tighter bounds, call `start_aggregation_by_alias` (or `…_by_id`) with
+  the numeric field bucketed into deciles or sign×magnitude buckets → poll
+  `get_aggregation_result_by_*` (handle) until ready; the
   per-bucket row counts give a usable distribution shape.
 
 **Percentiles (numeric)**
-- Not returned by the tool. Approximate via `get_aggregated_data_by_alias`
-  (or `…_by_id`) with a sign×magnitude bucketing of the numeric field;
+- Not returned by the tool. Approximate via `start_aggregation_by_alias`
+  (or `…_by_id`) with a sign×magnitude bucketing of the numeric field →
+  poll `get_aggregation_result_by_*` (handle) until ready;
   cumulative row counts across buckets give approximate P25/P50/P75/P95.
 - If the user needs exact percentiles, say so honestly: the only way is to
   pull every value (`get_data_by_alias` / `get_data_by_id` page at ≤500
   rows/page), which is rarely the whole table.
 
 **Null counts and rates**
-- `get_aggregated_data_by_alias` (or `…_by_id`) with the field as a dimension
+- `start_aggregation_by_alias` (or `…_by_id`) with the field as a dimension
+  → poll `get_aggregation_result_by_*` (handle) until ready —
   surfaces the null/blank bucket alongside named values; divide its COUNT by
   the total to get the rate. (Or filter directly with an advanced `is null`
   condition.)
 
 **Per-value frequencies (categorical)**
 - `profile_categorical_fields` returns a sample of values but no
-  counts. Get counts via `get_aggregated_data_by_alias` (or `…_by_id`)
-  grouped by the field.
+  counts. Get counts via `start_aggregation_by_alias` (or `…_by_id`)
+  grouped by the field → poll `get_aggregation_result_by_*` until ready.
 
 **Cardinality interpretation**
 - Compute `distinct_count / total_rows`. Conventional bands:
@@ -178,18 +198,19 @@ amount
 ├── Range: -1,250,000 to 8,750,000     (tool: MIN, MAX)
 ├── Mean: 45,231                        (tool: AVG)
 ├── Count: 125,432                      (tool: COUNT)
-├── Null rate: derived from get_aggregated_data_by_alias
-│   (dimensions=[amount], count null bucket / total) → 0%
+├── Null rate: derived from start_aggregation_by_alias → poll
+│   get_aggregation_result_by_alias (dimensions=[amount],
+│   count null bucket / total) → 0%
 ├── Range-band outliers: 127 values outside [AVG±spread]
 │   (skill heuristic, not z-score; std dev unavailable)
-└── Decile bucketing: see get_aggregated_data_by_alias(amount, deciles)
-    for an approximate distribution.
+└── Decile bucketing: see start_aggregation_by_alias(amount, deciles)
+    → get_aggregation_result_by_alias for an approximate distribution.
 
 quantity
 ├── Range: 0 to 10,000                  (tool)
 ├── Mean: 125                           (tool)
 ├── Null rate: 0.98% (derived from aggregate)
-└── Distribution: see get_aggregated_data_by_alias for buckets.
+└── Distribution: see start_aggregation_by_alias → result poll for buckets.
 
 ═══════════════════════════════════════════════════
 📋 CATEGORICAL FIELDS (5 of 16 — tool caps at 5)
@@ -197,7 +218,7 @@ quantity
 
 account_code  (156 distinct, from profile_categorical_fields)
 ├── Sample values: 4000-100, 4000-200, 5100-300, ...
-├── Frequencies: derived from get_aggregated_data_by_alias
+├── Frequencies: derived from start_aggregation_by_alias → result poll
 │   Top: 4000-100 (10.0%), 4000-200 (6.6%), 5100-300 (6.3%)
 └── Cardinality: 156 / 125,432 = 0.12% → LOW (skill interpretation)
 
@@ -223,8 +244,8 @@ re-invoke with --fields a,b,c to cover them.
 📈 Numeric Profile: GL Transactions
 
 Source: profile_numeric_fields(999901) for MIN/MAX/AVG/COUNT;
-        get_aggregated_data_by_alias per field for null rates and
-        decile distributions.
+        start_aggregation_by_alias → get_aggregation_result_by_alias
+        per field for null rates and decile distributions.
 
 | Field     | Min    | Max     | Mean    | Count   | Null %  | Out-of-band |
 |-----------|--------|---------|---------|---------|---------|-------------|
@@ -242,7 +263,8 @@ bounds on a specific field run /dr-profile 999901 --field <name>.
 📊 Field Profile: amount (GL Transactions)
 
 Source: profile_numeric_fields(999901) +
-        get_aggregated_data_by_alias(<alias>, dimensions=[amount-bucket], COUNT)
+        start_aggregation_by_alias(<alias>, dimensions=[amount-bucket], COUNT)
+        → poll get_aggregation_result_by_alias(handle) until ready
 
 Type: DECIMAL                          (schema)
 Tool-provided stats:
@@ -269,8 +291,9 @@ Skill-derived (from bucketed aggregate):
       <amount_alias>, "values": {"type": "advanced", "val": [{"condition":
       "gt", "value": "<upper_band>"}]}}]) (or the by-id twin; or-chain a
       `lt` for the low tail).
-   2. Or bucket the field via get_aggregated_data_by_alias (group by
-      sign and order-of-magnitude) to surface specific values, then hand
+   2. Or bucket the field via start_aggregation_by_alias (group by
+      sign and order-of-magnitude; poll get_aggregation_result_by_alias
+      until ready) to surface specific values, then hand
       them to /dr-query for deeper investigation.
 ```
 
@@ -294,14 +317,15 @@ Skill-derived (from bucketed aggregate):
 - Be explicit when answering: "MIN was returned by the tool;
   P25 is approximated from a bucketed aggregate."
 - Never label a profiling number MIN/MAX/AVG/COUNT until you've mapped
-  it via the response keys; when unsure, anchor with one
-  `get_aggregated_data_by_*` cross-check (MIN and MAX in separate calls).
+  it via the response keys; when unsure, anchor with one aggregation
+  start→poll cross-check (`start_aggregation_by_*` →
+  `get_aggregation_result_by_*`; MIN and MAX in separate calls).
 - Never call `profile_categorical_fields` without `fields` — the bare
   call profiles upload/mapping metadata columns, not business data.
 
 ## Related Skills
 
-- `/dr-tables` — discover available tables and call `get_aggregated_data_by_alias`
+- `/dr-tables` — discover available tables and call `start_aggregation_by_alias` → `get_aggregation_result_by_alias`
 - `/dr-anomalies` — same client-side computation pattern, focused on
   data-quality findings
 - `/dr-query` — fetch specific rows once you know the IDs

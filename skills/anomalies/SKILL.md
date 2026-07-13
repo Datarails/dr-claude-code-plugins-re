@@ -8,11 +8,19 @@ allowed-tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__profile_numeric_fields
   - mcp__datarails-finance-os__profile_categorical_fields
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
 argument-hint: "<table_id> [--severity critical|high|medium|low] [--type <anomaly_type>]"
 ---
@@ -34,7 +42,7 @@ Before designing the analysis, read what each tool actually returns:
 |---|---|---|
 | `profile_numeric_fields` | `SUM, AVG, MIN, MAX, COUNT` per numeric field — in the backend-native `DR_Values`/`col_keys`/`row_keys` layout, no per-value aggregator labels | median, std dev, percentiles, outlier flags, null counts |
 | `profile_categorical_fields` | distinct-count + first 10 sample values per field (capped at 5 fields; **bare calls default to upload/mapping metadata columns — always pass `fields`**) | per-value frequency, null counts, uniqueness ratio |
-| `get_aggregated_data_by_id` / `…_by_alias` | grouped totals with no row limit | anything not expressible as GROUP BY + aggregation |
+| `start_aggregation_by_id` / `…_by_alias` → poll `get_aggregation_result_by_id` / `…_by_alias` | grouped totals with no row limit | anything not expressible as GROUP BY + aggregation |
 | `get_data_by_id` / `…_by_alias` | raw rows (≤500/page) with value-list **and** advanced filters | — |
 
 For severity, percentiles, std dev, z-scores, and most named anomaly
@@ -54,11 +62,14 @@ Connect).
 1. `get_fields_by_id(table_id)` — field ids, names, types. (If you only have
    a name/alias, resolve the table via `list_data_models` first.)
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 > **Data-scope discovery — run before any aggregate (reuse anything already discovered this conversation).**
-> 1. **Scenario domain.** Pull distinct values of the scenario field (`get_distinct_values_by_alias`/`_by_id`) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
+> 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
 > 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 2. `profile_numeric_fields(table_id)` — SUM/AVG/MIN/MAX/COUNT per
    numeric field. **Reading the response:** it arrives in the
@@ -67,8 +78,9 @@ Connect).
    value to its statistic via the keys before labeling it; never present
    a number as MIN/MAX/AVG/COUNT without confirming its key. If the
    mapping is ambiguous, anchor it by cross-checking ONE field with
-   `get_aggregated_data_by_id` (MIN and MAX in two separate calls — one
-   aggregation per field per call) before deriving outlier bands.
+   `start_aggregation_by_id` (MIN and MAX in two separate calls — one
+   aggregation per field per call) → poll `get_aggregation_result_by_id(handle)`
+   until ready (async-fetch pattern) before deriving outlier bands.
 3. `profile_categorical_fields(table_id, fields=[...])` — pass an
    **explicit `fields` list of business dimensions from the discovered
    schema** (account levels, scenario, entity/department-like, date).
@@ -77,10 +89,12 @@ Connect).
    business data — never call it bare. The tool also silently caps at 5
    fields. Use this to plan rare-value checks; the actual per-value
    counts come from step 4.
-4. For each candidate-key or category field: `get_aggregated_data_by_id`
+4. For each candidate-key or category field: `start_aggregation_by_id`
    with that field id as the dimension and `COUNT` of a **different**
    dense field — e.g. the discovered amount field — as the metric
-   (`metrics=[{"field_id": <amount_field_id>, "agg": "COUNT"}]`). Never
+   (`metrics=[{"field_id": <amount_field_id>, "agg": "COUNT"}]`) →
+   poll `get_aggregation_result_by_id(handle)` until ready (async-fetch
+   pattern). Never
    COUNT the same field you group by — that pattern can return a 500.
    This is the only way to get per-value frequencies and null counts.
 
@@ -111,7 +125,7 @@ with the period + scenario it covers.
   HIGH; ≥1000 rows or ≥10% → CRITICAL; otherwise MEDIUM.
 
 **Missing values**
-- From the `get_aggregated_data_by_id` GROUP BY result, the null group
+- From the `get_aggregation_result_by_id` GROUP BY result, the null group
   arrives explicitly labeled `[null]` — read the null count from that
   bucket only. The response also appends a keyless trailing row equal
   to the **grand total**: use its count as the total-rows denominator
@@ -124,9 +138,11 @@ with the period + scenario it covers.
 
 **Duplicates**
 - Pick a candidate composite key (e.g. `[transaction_id]` or
-  `[amount, vendor, posting_date]`). Call `get_aggregated_data_by_id`
+  `[amount, vendor, posting_date]`). Call `start_aggregation_by_id`
   grouping by those field ids, with `COUNT` of a **different** dense field
-  (e.g. the discovered amount field) as the metric — never COUNT a field
+  (e.g. the discovered amount field) as the metric, then poll
+  `get_aggregation_result_by_id(handle)` until ready (async-fetch
+  pattern) — never COUNT a field
   that is also a GROUP BY dimension. Client-side, drop the keyless
   grand-total row (it is not a duplicate group), then filter groups where
   `COUNT > 1`.
@@ -146,8 +162,9 @@ with the period + scenario it covers.
 **Future-dated or implausible dates**
 - Filter the date field directly with an advanced range condition
   (`total_range` with epoch-second strings), or add the date field to
-  `dimensions` in `get_aggregated_data_by_id` and inspect the buckets for
-  values beyond today or before a plausible earliest date.
+  `dimensions` in `start_aggregation_by_id` (poll
+  `get_aggregation_result_by_id(handle)` until ready) and inspect the
+  buckets for values beyond today or before a plausible earliest date.
 
 **Out of scope for this skill**
 - Referential integrity (would require joining tables, which the
@@ -179,9 +196,9 @@ can re-derive it manually if they want.
 | Type | How the skill computes it |
 |------|---------------------------|
 | `outliers` | Range heuristic on `profile_numeric_fields` MIN/MAX/AVG (key-mapped from the `DR_Values` layout) |
-| `missing` | `[null]` bucket from `get_aggregated_data_by_id` GROUP BY ÷ grand-total row |
-| `duplicates` | `get_aggregated_data_by_id` GROUP BY candidate key + COUNT of a different dense field, filter COUNT > 1 |
-| `rare-category` | `get_aggregated_data_by_id` GROUP BY field + filter COUNT < threshold |
+| `missing` | `[null]` bucket from `start_aggregation_by_id` → `get_aggregation_result_by_id` GROUP BY ÷ grand-total row |
+| `duplicates` | `start_aggregation_by_id` → `get_aggregation_result_by_id` GROUP BY candidate key + COUNT of a different dense field, filter COUNT > 1 |
+| `rare-category` | `start_aggregation_by_id` → `get_aggregation_result_by_id` GROUP BY field + filter COUNT < threshold |
 | `temporal` | Aggregate by date dimension (or advanced date filter) + inspect for future/past-bound values |
 
 ## Example Interaction
@@ -268,4 +285,4 @@ the MCP server).
 
 - `/dr-profile` — field statistics (same client-side computation pattern)
 - `/dr-query` — fetch specific rows once you know the IDs
-- `/dr-tables` — schema discovery + `get_aggregated_data_by_id` source
+- `/dr-tables` — schema discovery + `start_aggregation_by_id` source

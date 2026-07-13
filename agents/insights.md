@@ -7,9 +7,17 @@ tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__list_business_metrics
   - Read
@@ -55,6 +63,8 @@ Use this agent when you need:
 
 ## Workflow
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 ### Adaptive Workflow
 
 1. **Data Gathering**
@@ -65,9 +75,11 @@ Use this agent when you need:
      saved profile or setup step. **If you already discovered the table,
      field names, and categories earlier in THIS conversation, reuse
      them.**
-   - Fetch P&L trends (12+ months) via `get_aggregated_data_by_alias`
-     (preferred) or `get_aggregated_data_by_id` grouped by the date and
-     account dimensions.
+   - Fetch P&L trends (12+ months) via `start_aggregation_by_alias`
+     (preferred) or `start_aggregation_by_id` grouped by the date and
+     account dimensions → poll the matching
+     `get_aggregation_result_by_*(handle)` until ready (async-fetch
+     pattern).
    - Scope every aggregate to the latest complete fiscal year or trailing
      12 closed months — never an unscoped all-time total (financials
      tables are multi-year cumulative) — and **label every output with
@@ -102,8 +114,10 @@ values forward:
    If `<amount_field>` or `<scenario_field>` has no clear match, ask the
    user which field to use, then continue.
 3. For revenue / expense category values, call
-   `get_distinct_values_by_alias(<alias>, <account_field>)` (or
-   `get_distinct_values_by_id(<id>, <account_field_id>)`). If the distinct
+   `start_distinct_values_by_alias(<alias>, <account_field>)` (or
+   `start_distinct_values_by_id(<id>, <account_field_id>)`) → poll the
+   matching `get_distinct_values_result_by_*(handle)` until ready
+   (async-fetch pattern). If the distinct
    call errors, fall back to `get_data_by_alias(<alias>,
    select=[<account_field>], limit=500)` (or the by-id twin) and dedupe
    the values client-side. Match: `<revenue_value>` ←

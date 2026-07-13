@@ -8,9 +8,17 @@ allowed-tools:
   - mcp__datarails-finance-os__get_fields_by_id
   - mcp__datarails-finance-os__get_data_by_alias
   - mcp__datarails-finance-os__get_data_by_id
+  - mcp__datarails-finance-os__start_aggregation_by_alias
+  - mcp__datarails-finance-os__get_aggregation_result_by_alias
   - mcp__datarails-finance-os__get_aggregated_data_by_alias
+  - mcp__datarails-finance-os__start_aggregation_by_id
+  - mcp__datarails-finance-os__get_aggregation_result_by_id
   - mcp__datarails-finance-os__get_aggregated_data_by_id
+  - mcp__datarails-finance-os__start_distinct_values_by_alias
+  - mcp__datarails-finance-os__get_distinct_values_result_by_alias
   - mcp__datarails-finance-os__get_distinct_values_by_alias
+  - mcp__datarails-finance-os__start_distinct_values_by_id
+  - mcp__datarails-finance-os__get_distinct_values_result_by_id
   - mcp__datarails-finance-os__get_distinct_values_by_id
 argument-hint: "<table or alias> [filter_expression] [--sample] [--limit N]"
 ---
@@ -41,19 +49,27 @@ tables can be hundreds of columns wide in some orgs.
 
 > **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
 
+> **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
+
 ### Step 3: Pick the right tool
 
 - **Sample / quick look** → `get_data_by_alias` / `get_data_by_id` with a small
   `limit` (e.g. 20) and no filters.
 - **Filtered records** → `get_data_by_alias` / `get_data_by_id` with `filters`
   (≤500 rows/page; use `offset` to page).
-- **Totals / grouped** → `get_aggregated_data_by_alias` / `get_aggregated_data_by_id`
-  (no row cap). Use this when you want a sum/count rather than individual rows.
+- **Totals / grouped** → `start_aggregation_by_alias` / `start_aggregation_by_id`
+  (same dimensions/metrics/filters arguments; no row cap) → poll the matching
+  `get_aggregation_result_by_alias` / `get_aggregation_result_by_id` with the
+  returned `handle` until ready (async-fetch pattern). Use this when you want a
+  sum/count rather than individual rows.
 
 ### Step 4: Execute and Present
 
 Format results as a readable table. Highlight any notable patterns. If a result
-is empty, say so plainly (it may be a too-narrow filter, not missing data).
+is empty, say so plainly (it may be a too-narrow filter, not missing data). If a
+response carries `"truncated": true`, the returned rows are an incomplete
+prefix — narrow the query per the `guidance` (more filters / fewer columns /
+lower limit+offset paging) and re-fetch; never present the prefix as complete.
 
 ## Arguments
 
@@ -145,7 +161,7 @@ get_data_by_alias(alias="financials", select=["account_code","amount","departmen
 | Method | Max Rows | Use Case |
 |--------|----------|----------|
 | `get_data_by_alias` / `get_data_by_id` | 500/page (use `offset`) | Row-level records, samples, filtered queries |
-| `get_aggregated_data_by_alias` / `get_aggregated_data_by_id` | none | Totals, grouped breakdowns (no row cap) |
+| `start_aggregation_by_alias` / `start_aggregation_by_id` → poll `get_aggregation_result_by_*` | none | Totals, grouped breakdowns (no row cap) |
 
 ## Tips
 
