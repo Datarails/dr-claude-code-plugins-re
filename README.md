@@ -52,7 +52,7 @@ Once the Datarails connector is connected, explore your data:
 ```
 /dr-tables                             # List available tables
 /dr-financial-summary                  # Quick revenue/expense/margin snapshot
-/dr-intelligence --year 2025           # Generate FP&A intelligence workbook
+/dr-intelligence --year 2026           # Generate FP&A intelligence workbook
 ```
 
 **Connecting:** In Claude Desktop, click "+" > Connectors > Datarails > Connect. In Claude Code, the connector is bundled with the plugin — a browser OAuth window opens the first time a skill uses it; no manual `claude mcp add` step is needed.
@@ -84,7 +84,7 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 ### Financial Analysis
 | Skill | Description | Output |
 |-------|-------------|--------|
-| `/dr-intelligence` | **Most powerful** - FP&A intelligence workbook with auto-insights | 10-sheet Excel |
+| `/dr-intelligence` | **Most powerful** - FP&A intelligence workbook with auto-insights | up to 10-sheet Excel |
 | `/dr-anomalies-report` | Data quality assessment with anomaly detection | Excel report |
 | `/dr-insights` | Trend analysis and executive insights | PowerPoint + Excel |
 | `/dr-reconcile` | Independent-source pipeline-consistency checks (cross-endpoint agreement, balance-sheet identity, roll-ups, scenario/period integrity) — validates the pipeline, not source systems | Excel report |
@@ -106,10 +106,14 @@ New here? Follow the **[Getting Started Guide](docs/guides/GETTING_STARTED.md)**
 | `/test-api` | Test API field compatibility |
 | `/drilldown` | Drill down on DR.GET values |
 
+### Specialized Agents
+
+Beyond the slash-command skills, the plugin bundles autonomous agents (e.g. `finance-analyst`, `anomaly-detector`) that Claude invokes on its own for open-ended, multi-step analysis — just describe the task in natural language; no manual invocation needed.
+
 ### /dr-intelligence (Most Powerful)
 
 ```
-/dr-intelligence --year 2025                    # Full intelligence workbook
+/dr-intelligence --year 2026                    # Full intelligence workbook
 ```
 
 **Sheets Generated** (up to 10 — conditional sheets are included only when the org's data sources them, and omitted rather than fabricated):
@@ -143,13 +147,6 @@ Authentication is handled automatically via **OAuth 2.0 + PKCE** when you connec
 | Slow extraction | Raw row extraction pages 500 rows at a time and can take minutes on large tables; summary skills use aggregation, which returns in seconds |
 
 See [SETUP.md](SETUP.md) for detailed setup and troubleshooting.
-
----
-
-## For Maintainers
-
-This is the published mirror. Development, versioning, and the release/promotion
-flow live in the internal repo (`dr-internal-plugins`) — see its `RELEASING.md`.
 
 ---
 
