@@ -1,6 +1,6 @@
 ---
 name: dr-anomalies
-description: Detect data anomalies in Datarails Finance OS tables. The MCP tools return baseline aggregates only; this skill is responsible for computing outlier flags, severity buckets, duplicate counts, and missing-value rates client-side from those aggregates.
+description: Answer IN CHAT what is wrong in one Datarails Finance OS table — severity-ranked outliers, duplicates, null rates, rare values — scoped to the latest complete fiscal year. Writes no file (use the anomalies-report skill for an Excel workbook; use the profile skill for unscoped whole-history statistics). The MCP tools return baseline aggregates only; this skill computes the findings client-side.
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__list_data_models
@@ -68,7 +68,7 @@ Connect).
 > 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
-> 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row. **A total is obtained by summing the rows** — there is no total row to read. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
 > 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 2. `profile_numeric_fields(table_id)` — SUM/AVG/MIN/MAX/COUNT per
@@ -100,6 +100,15 @@ Connect).
 
 ### Step 3: Compute findings client-side
 
+**First, normalize each GROUP BY response once.** Build a `valid_rows`
+collection by keeping only rows in which **every requested dimension key is
+present** (data-scope preamble, item 4), preserving genuine `[null]` values —
+those are real groups. On a correct response this keeps everything; during the
+stale-cache window it drops legacy roll-up rows that would otherwise inflate
+the missing-value denominator, always satisfy `COUNT > 1` for duplicate
+detection, and shift rare-category thresholds. **Every recipe below runs on
+`valid_rows`,** and the total-rows denominator is the sum of its group counts.
+
 For each anomaly category, apply the recipe below to the aggregates from
 step 2. Scope every aggregate to the period from the data-scope preamble
 (latest complete fiscal year or trailing 12 closed months by default) —
@@ -127,11 +136,11 @@ with the period + scenario it covers.
 **Missing values**
 - From the `get_aggregation_result_by_id` GROUP BY result, the null group
   arrives explicitly labeled `[null]` — read the null count from that
-  bucket only. The response also appends a keyless trailing row equal
-  to the **grand total**: use its count as the total-rows denominator
-  (or as a checksum), but never treat it as a data bucket — counting it
+  bucket only. The response carries **one row per group and no total
+  row**, so the total-rows denominator is the **sum of all group counts**
+  (including `[null]`); compute it yourself — counting a total row
   as one inflates null rates toward 100% and fakes a giant duplicate.
-  Null rate = `[null]` bucket count ÷ grand-total count. (Or filter
+  Null rate = `[null]` bucket count ÷ that summed total. (Or filter
   directly with an advanced `is null` condition.)
 - Severity heuristic: ≥10% null on a non-nullable field → CRITICAL;
   ≥1% → HIGH; <1% → LOW.
@@ -143,8 +152,7 @@ with the period + scenario it covers.
   (e.g. the discovered amount field) as the metric, then poll
   `get_aggregation_result_by_id(handle)` until ready (async-fetch
   pattern) — never COUNT a field
-  that is also a GROUP BY dimension. Client-side, drop the keyless
-  grand-total row (it is not a duplicate group), then filter groups where
+  that is also a GROUP BY dimension. Client-side, filter groups where
   `COUNT > 1`.
 - Severity heuristic: any duplicate of a primary-key field →
   CRITICAL; duplicates on a composite key → HIGH; near-duplicates
@@ -153,8 +161,8 @@ with the period + scenario it covers.
 **Rare categorical values**
 - From the per-field GROUP BY result, flag values whose frequency is
   below a small absolute threshold (e.g. `< 10` rows) or below
-  `0.01%` of total rows (denominator = the keyless grand-total row,
-  which is itself never a bucket). These are often typos, test data, or
+  `0.01%` of total rows (denominator = the **sum of all group counts**,
+  computed client-side). These are often typos, test data, or
   stale enums.
 - Severity heuristic: usually LOW or MEDIUM unless the field is a
   required dimension.
@@ -196,7 +204,7 @@ can re-derive it manually if they want.
 | Type | How the skill computes it |
 |------|---------------------------|
 | `outliers` | Range heuristic on `profile_numeric_fields` MIN/MAX/AVG (key-mapped from the `DR_Values` layout) |
-| `missing` | `[null]` bucket from `start_aggregation_by_id` → `get_aggregation_result_by_id` GROUP BY ÷ grand-total row |
+| `missing` | `[null]` bucket from `start_aggregation_by_id` → `get_aggregation_result_by_id` GROUP BY ÷ summed group counts |
 | `duplicates` | `start_aggregation_by_id` → `get_aggregation_result_by_id` GROUP BY candidate key + COUNT of a different dense field, filter COUNT > 1 |
 | `rare-category` | `start_aggregation_by_id` → `get_aggregation_result_by_id` GROUP BY field + filter COUNT < threshold |
 | `temporal` | Aggregate by date dimension (or advanced date filter) + inspect for future/past-bound values |
@@ -221,8 +229,7 @@ Scanned 125,000 records | Computed 47 findings
 ───────────────────────────────────────────────────────────
 
 1. DUPLICATE TRANSACTIONS
-   • Derived from: aggregate(group_by=[transaction_id], COUNT(amount)),
-     grand-total row excluded
+   • Derived from: aggregate(group_by=[transaction_id], COUNT(amount))
    • 23 transaction_id values appear ≥2 times
    • Examples: [45231×2, 67892×2, 89234×2, ...]
 
@@ -236,7 +243,7 @@ Scanned 125,000 records | Computed 47 findings
 
 3. HIGH NULL RATE: vendor_name
    • Derived from: aggregate(group_by=[vendor_name], COUNT(amount)) →
-     [null] bucket ÷ grand-total row
+     [null] bucket ÷ summed group counts
    • 2,500 records (2.0%) have a null vendor_name while vendor_id
      is populated.
 

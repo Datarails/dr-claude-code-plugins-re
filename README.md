@@ -30,7 +30,7 @@ The Datarails connector is **bundled with the plugin** — there's no separate s
 
 ## Using the plugin
 
-**Just ask.** Describe what you want in plain language and Claude picks the right skill or agent automatically:
+**Just ask.** Describe what you want in plain language and Claude picks the right skill automatically:
 
 > "Give me a financial summary for 2026."
 > "What are our top expenses this year — flag anything unusual."
@@ -68,7 +68,7 @@ Invoke any of these as **`/datarails-financeos:<name>`**, or just describe the t
 ### Reports & workbooks
 | Skill | What it does | Output |
 |-------|--------------|--------|
-| `intelligence` | **Most powerful** — FP&A workbook with auto-detected insights | Excel (up to 10 sheets) |
+| `intelligence` | Full-fiscal-year FP&A workbook with auto-detected insights (no PowerPoint) | Excel (up to 10 sheets) |
 | `insights` | Executive trend analysis and narrative | PowerPoint + Excel |
 | `dashboard` | Executive KPI dashboard | Excel + PowerPoint |
 | `departments` | Departmental P&L and comparison | Excel + PowerPoint |
@@ -90,10 +90,6 @@ Invoke any of these as **`/datarails-financeos:<name>`**, or just describe the t
 | `drilldown` | Break a Datarails number into its line items — from a workbook cell, a pasted `DR.GET` formula, or a plain-language description (no file needed) |
 
 > A few short **command aliases** also resolve under the same namespace for common tasks — `/datarails-financeos:explore-tables`, `:data-check`, `:budget-comparison`, `:test-api` — each launches the matching skill above.
-
-## Agents
-
-Beyond the skills, the plugin ships **autonomous agents** — `finance-analyst`, `anomaly-detector`, and others — that Claude engages on its own for open-ended, multi-step work (e.g. "profile this table and write up the data-quality risks"). You don't invoke them by name; just describe the task and Claude delegates.
 
 ## The intelligence workbook
 

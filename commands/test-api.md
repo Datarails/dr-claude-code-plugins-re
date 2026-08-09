@@ -5,9 +5,9 @@ description: Test API field compatibility and performance - discover which field
 # API Diagnostic Test
 
 This command is a thin launcher — the single maintained diagnostic lives in the
-`dr-test` skill. Do not improvise workflow steps here.
+`datarails-financeos:test` skill. Do not improvise workflow steps here.
 
-Invoke the **`dr-test`** skill with whatever arguments the user passed.
+Invoke the **`datarails-financeos:test`** skill with whatever arguments the user passed.
 
 Notes for the handoff:
 

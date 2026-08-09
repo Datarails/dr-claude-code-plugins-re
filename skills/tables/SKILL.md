@@ -1,6 +1,6 @@
 ---
 name: dr-tables
-description: List and explore Datarails Finance OS tables. Use to discover available data, view schemas, and understand table structure.
+description: List Datarails Finance OS tables and show one table's SCHEMA — fields, types, distinct values of a field. For per-field STATISTICS (ranges, percentiles, null rates, cardinality) use the profile skill. Works with or without an open workbook — in Excel, "list my Datarails tables/models/fields" still routes HERE via the MCP connector (the Excel bridge's agent.list_functions lists workbook widgets, not org tables).
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__list_data_models
@@ -41,9 +41,14 @@ If any Datarails tool call fails with an authentication or connection error, tel
 - If the table has an alias, use `mcp__datarails-finance-os__list_aliased_fields`
   (business-friendly field aliases); otherwise use
   `mcp__datarails-finance-os__get_fields_by_id` (capture each field's numeric `id`)
-- For a quick data overview, run `mcp__datarails-finance-os__profile_numeric_fields`
-  (stats per numeric field) and `mcp__datarails-finance-os__profile_categorical_fields`
-  (cardinality/top values per categorical field)
+- For a quick data overview, run `mcp__datarails-finance-os__profile_numeric_fields(table_id)`
+  (stats per numeric field) and `mcp__datarails-finance-os__profile_categorical_fields(table_id,
+  fields=[...])` — **always pass an explicit `fields` list of business dimensions taken
+  from the schema just fetched** (account-hierarchy levels, scenario, entity/department-like,
+  dates); called bare the tool profiles upload/mapping metadata columns, not business
+  data. The tool caps at **5 fields per call and silently drops the rest** — an explicit
+  list longer than 5 is still truncated, so batch into calls of ≤5 and merge the results
+  before presenting them as the table's overview
 - Present schema in a readable table format
 
 > **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.

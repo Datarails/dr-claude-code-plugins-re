@@ -1,6 +1,6 @@
 ---
 name: dr-profile
-description: Profile Datarails Finance OS table fields. The MCP tools return baseline aggregates (SUM/AVG/MIN/MAX/COUNT for numeric, distinct-value samples for categorical); this skill derives percentiles, range-outlier flags, null rates, and cardinality interpretation client-side.
+description: How is a field distributed? Per-field STATISTICS for a Datarails Finance OS table — whole-table-history ranges, approximate percentiles, null rates, cardinality — no severity ranking, no period scope. The MCP tools return baseline aggregates (SUM/AVG/MIN/MAX/COUNT for numeric, distinct-value samples for categorical); this skill derives the statistics client-side. For severity-ranked data-quality findings scoped to the latest fiscal year, use the anomalies skill.
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__list_data_models
@@ -120,6 +120,26 @@ conversation, reuse them.** Discovery is cheap but not free.
 - Approximate spread = `MAX - MIN`; flag values beyond
   `[AVG - spread, AVG + spread]` as out-of-band candidates. This is a
   coarse substitute for `|z| > 3` — true std dev is not available.
+- **These are table-level data statistics, not financial figures.** The
+  whole-history scan deliberately mixes all dates and all scenarios — it
+  profiles the *data* (distribution, nulls, cardinality), and truncating the
+  window would hide exactly the out-of-range values a profile exists to
+  surface. Never present a profiled SUM/AVG as a P&L number (the CLAUDE.md
+  period-scoping rule applies to financial reporting, and this output is
+  labeled accordingly); when the user wants a business-meaningful statistic,
+  re-run the aggregation with an explicit scenario + date-range filter and
+  label that window.
+- **These bands are computed over the table's WHOLE history (no period
+  scope).** `/dr-anomalies` computes the same band scoped to the latest
+  complete fiscal year, so the two will report different counts — label
+  the window in the output.
+- **Pooling scenarios widens the bands — say so, and offer to split.** On a
+  table carrying plan and actuals rows together, `MAX - MIN` spans both, so
+  the band is wider than any single scenario's and a real actuals outlier can
+  fall inside it. State which scenarios the profile pooled (discover them via
+  distinct values of the scenario-like field — never assume a name exists),
+  and when the numbers matter, re-run per scenario by adding the scenario
+  field as a grouping dimension or filtering to one value.
 - To surface the specific flagged rows you can filter directly:
   `get_data_by_alias(<alias>, select=[...], filters=[{"name": <amount_alias>,
   "values": {"type": "advanced", "val": [{"condition": "gt", "value":
