@@ -1,6 +1,6 @@
 ---
 name: dr-anomalies-report
-description: Generate a comprehensive data-quality Excel workbook from Finance OS tables. The MCP tools return baseline aggregates only; this skill derives findings, severity buckets, and the Data Quality Score client-side, then writes a multi-sheet workbook. Self-contained — pass --table-id to target a table directly, or it discovers the financials table on its own; no profile or setup step required.
+description: Detect data anomalies and generate a comprehensive data-quality Excel WORKBOOK from Finance OS tables, computed over the table's ALL-TIME history (use the anomalies skill for a chat-only answer scoped to the latest fiscal year — the two baselines differ by design, so counts won't match). The MCP tools return baseline aggregates only; this skill derives findings, severity buckets, and the Data Quality Score client-side, then writes a multi-sheet workbook. Self-contained — pass --table-id to target a table directly, or it discovers the financials table on its own; no profile or setup step required.
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__list_data_models
@@ -89,8 +89,8 @@ table. Works with any table — no pre-configuration required.
   `profile_categorical_fields` (capped at 5 fields per call), plus
   per-value frequencies derived from the aggregation start→poll tools
   (`start_aggregation_by_*` → `get_aggregation_result_by_*`) (nulls
-  appear as the explicit `[null]` bucket; the trailing keyless
-  grand-total row is excluded from the frequency table).
+  appear as the explicit `[null]` bucket; every returned row is a real
+  group, so the frequency table needs no total-row exclusion).
 - **Sample Records**: Actual data samples for top findings, fetched
   via `get_data_by_alias` / `get_data_by_id` after the skill identifies
   the IDs to pull.
@@ -148,11 +148,41 @@ by-id twin; if none works, tell the user which field failed.
 
 > **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
 
-A data-quality scan intentionally covers the whole table, so all-time
-aggregates are correct *here* — but still discover the date range (it
-powers the future-dated check) and label the workbook with the date
-range and scenarios it covers, so the Numeric Analysis SUM/AVG columns
-are never read as period P&L figures.
+**Period: this skill deliberately overrides item 3 above.** Its baseline is
+**ALL-TIME by design** — a data-quality scan covers the whole table, because
+the future-dated-rows check and out-of-range detection only work if the
+queries can see rows *outside* the expected window. (Filtering to the
+*discovered* range would in any case be a no-op: the range is derived from
+the data's own MIN/MAX, so it already contains every row — including the
+future-dated ones the check exists to find.) The period rule in item 3
+governs financial *reporting*; this workbook is a data-quality artifact.
+Consequence: its outlier counts, null rates, and severity-bucket sizes **will
+not match `/dr-anomalies`**, which scopes the same recipes to the latest
+complete fiscal year — state the baseline in the workbook so the two are
+never read as the same measurement, and never let the Numeric Analysis
+SUM/AVG columns be read as period P&L figures.
+
+**Scenario: NOT exempt — discover it and split on it.** The period override
+above does *not* extend to scenario, and an unscoped multi-scenario scan
+produces false findings rather than broader ones:
+
+- **Duplicates.** The same account + period appearing under `Actuals` and
+  `Budget` is the table working correctly, not a duplicate. Cross-scenario
+  pairs must never be reported as duplicate rows.
+- **Range-band outliers.** Plan/forecast rows carry different magnitudes than
+  actuals, so pooling them widens `MAX - MIN` and can both mask real actuals
+  outliers and flag ordinary forecast values.
+- **Null rates.** Plan rows legitimately leave different fields empty, so a
+  pooled null rate describes no scenario in particular.
+
+So in Phase 1, **discover the scenario domain** the same way `/dr-anomalies`
+does — pull distinct values of the scenario-like field
+(`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool);
+never assume a scenario name exists. Then either add the scenario field as a
+grouping dimension to the duplicate / rare-value / null-rate aggregates and
+report findings **per scenario**, or scope the scan to the actuals-like
+scenario and say so. Either way the workbook names the scenarios it covers —
+which it cannot do honestly without discovering them first.
 
 1. `profile_numeric_fields(table_id)` — full numeric coverage
    (SUM/AVG/MIN/MAX/COUNT per numeric field). Treat the result as a
@@ -180,20 +210,26 @@ are never read as period P&L figures.
    ranges, and `is null` are all supported — no need to pre-identify IDs
    purely because the filter API can't express a comparison.
 
-> **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row. **A total is obtained by summing the rows** — there is no total row to read. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
 
 > **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 **Phase 2b: Derive findings (client-side)**
 
-Apply the recipes from `/dr-anomalies` (range-band outliers, null
-rates, duplicates, rare-category values, future-dated rows) to the
-aggregates from Phase 2. When tabulating a GROUP BY response, drop the
-trailing keyless grand-total row first (keep it only as a checksum /
-total-row-count denominator) — counting it as a group inflates
-duplicate-group counts, per-value shares, and rare-value flags. Null
-rate = the `[null]`-bucket count ÷ total row count; the keyless row is
-the grand total, not a null group. Bucket by severity using the
+**First normalize each GROUP BY response**: keep only rows in which every
+requested dimension key is present (data-scope preamble, item 4), preserving
+genuine `[null]` values — during the stale-cache window this drops legacy
+roll-up rows that would otherwise inflate the null-rate denominator and the
+per-value frequency shares. Then apply the recipes from `/dr-anomalies`
+(range-band outliers, null rates, duplicates, rare-category values,
+future-dated rows) to the aggregates from Phase 2 — **but over this skill's all-time baseline,
+not the fiscal-year window the recipes are specified for in
+`/dr-anomalies`** (the borrowed recipes carry their window with them;
+the counts will differ from a `/dr-anomalies` run by design). When tabulating a
+GROUP BY response, every row is a real group — no total row is appended — so
+the **total-row-count denominator is your own sum of all group counts**
+(including `[null]`). Null rate = the `[null]`-bucket count ÷ that summed
+total. Bucket by severity using the
 heuristics in that skill. Drop categories the API can't support
 (referential integrity, character-level hygiene).
 
