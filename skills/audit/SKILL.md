@@ -65,10 +65,11 @@ evidence package without a query behind it:
 1. **Completeness & period integrity.** Discover the date field's range and
    confirm every expected period in the audited quarter/year is present
    (distinct values of the reporting-month field). Then verify integrity with
-   two grouped calls over the audited window — by scenario and by period: in
-   each response the labeled group rows (including `[null]`) must sum to the
-   appended keyless grand-total row (Data-scope preamble, item 4), and the
-   two grand totals must equal each other. Tools:
+   two grouped calls over the audited window — by scenario and by period:
+   **sum each response's rows** (including `[null]`) to get that slicing's
+   total — responses carry one row per group and no total row (Data-scope
+   preamble, item 4) — and the two totals must equal each other, since both
+   describe the same window sliced two ways. Tools:
    `start_distinct_values_by_alias`/`_by_id` → poll
    `get_distinct_values_result_by_alias`/`_by_id`, and
    `start_aggregation_by_alias`/`_by_id` → poll
@@ -76,16 +77,71 @@ evidence package without a query behind it:
 2. **Consistency / reconciliation.** The reconciliation control is the
    `/dr-reconcile` skill's four independent-source checks — cross-endpoint
    agreement, balance-sheet identity, cross-grain roll-up, and
-   scenario/period integrity. Delegate the method to that skill (do not
-   re-derive a weaker inline copy) and record its per-check
-   pass/fail/skipped results as the evidence here.
-3. **Account-mapping integrity.** The cross-grain roll-up check: two
-   aggregates over the same scope — `dimensions=[<parent_level>]` and
-   `dimensions=[<parent_level>, <child_level>]`, both `SUM(<amount>)`. For
-   each parent bucket, the sum of its child rows — **including the `[null]`
-   bucket** — must equal the parent's own row to the cent; accounts landing
-   in the `[null]` child bucket are flagged as **unmapped** in the exception
-   log.
+   scenario/period integrity. That skill's SKILL.md is the single source of
+   the **method** (query shapes, tolerance, pass/fail rules) — but its native
+   run is **year-scoped** (`--year` is its only window argument), while this
+   audit is quarter-scoped. So do not delegate a bare full-year run: apply
+   the four checks' method with the date filter narrowed to the **audited
+   window** (`--year` + `--quarter`, the same advanced date-range filter used
+   by every other family in this evidence package), and record in the
+   evidence which window each check actually covered. A full-year
+   reconciliation pass does not evidence a Q-scoped control — a
+   quarter-local inconsistency can net out over the year.
+3. **Account-mapping integrity.** Deliberately reuses the roll-up
+   *mechanics* from the reconciliation control's Check 3 — but for a
+   different verdict: not "does the pipeline roll up consistently" (that
+   pass/fail belongs to check family 2 above) but "which accounts are
+   unmapped". Two aggregates over the same scope —
+   `dimensions=[<parent_level>]` and `dimensions=[<parent_level>,
+   <child_level>]`, both `SUM(<amount>)`, with the **same parameters,
+   tolerance, and audited-window date filter as family 2's roll-up check**
+   (year + quarter — never the full year) so both comparisons cover the same
+   period. Sharing the scope aligns the comparison; it does not make the
+   totals agree — a mismatch is exactly the finding. For each parent bucket,
+   the sum of its child rows — **including the `[null]` bucket** — must equal
+   the parent's own row to the cent.
+
+   **Then name the accounts — the two aggregates above cannot.** They return
+   bucket *totals*, so the presence of a `[null]` child bucket tells you a
+   parent has unmapped rows, not which accounts carry them. An exception log
+   that names no account is not auditable evidence.
+
+   **Trigger on row presence, never on a non-zero amount.** Unmapped rows with
+   offsetting positive and negative amounts net to zero, so a `[null]` bucket
+   summing to `0.00` can still hold unmapped accounts — gating on the amount
+   would silently drop those exceptions from the evidence package. Add a
+   **row count** to the family-3 aggregate alongside the sum — `metrics=[{SUM
+   of <amount>}, {COUNT of <non_null_row_identifier>}]` — and treat
+   **`count > 0`** as the trigger. `SUM(<amount>)` reports the net unmapped
+   amount only; it never decides whether to look.
+
+   Choosing `<non_null_row_identifier>` is load-bearing: `COUNT` skips nulls,
+   so it must be a field the discovered schema populates on **every** source
+   row (a system row id, or the reporting-date field). It must **not** be the
+   account identifier or the child level — those are exactly the fields that
+   are null on the rows being hunted, so counting them can return `0` while
+   unmapped rows exist, reintroducing the miss this rule prevents. It must
+   also differ from `<amount>`, since one call may carry only one aggregation
+   per field. Verify non-nullness from the field's profile (null rate `0`)
+   before relying on it; if no such field exists, fall back to the bounded
+   row-level query below and treat any returned row as the trigger.
+
+   For each parent whose `[null]` child bucket contains rows, run one
+   follow-up query under the **same period + scenario filters**:
+   - *Preferred* — re-aggregate that parent with the account identifier added
+     as a dimension: `dimensions=[<parent_level>, <child_level>,
+     <account_id_or_name_field>]`, `SUM(<amount>)`, filtered to that parent.
+     Read the rows whose `<child_level>` is the `[null]` bucket — those
+     accounts, with their amounts, are the exception-log entries.
+   - *When row-level proof is wanted* — `get_data_by_alias` /
+     `get_data_by_id` with `select` on the account + amount + date columns
+     and `filters` scoping that parent, the audited window, and the scenario
+     (the `is null` advanced condition isolates the unmapped child set).
+     Respect the 500-row cap and the `truncated` envelope, per family 4.
+
+   The exception log records account identifier, parent bucket, amount, and
+   the window. The roll-up pass/fail itself is reported once, under family 2 —
+   this family reports only the exception list.
 4. **Substantive sampling.** For the material buckets (largest by absolute
    amount in the audited window), pull row-level detail via
    `get_data_by_alias` / `get_data_by_id` with `select` on the load-bearing
@@ -111,7 +167,7 @@ All of these checks aggregate live data. Run this discovery before any check tha
 > 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
-> 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row. **A total is obtained by summing the rows** — there is no total row to read. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
 > 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 In particular, never test a control against a budget-named scenario filter without first confirming it exists in the discovered scenario domain — if the plan side lives in a planning-version-like field, route budget-related evidence through that field's versions instead, and record the actual scenario/version used in the evidence package and audit trail.

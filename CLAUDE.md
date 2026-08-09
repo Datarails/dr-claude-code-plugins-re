@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A Claude Code plugin for Datarails Finance OS. It provides skills (`skills/*/SKILL.md`), commands (`commands/*.md`), and agents (`agents/*.md`) that connect to a remote MCP server at `https://mcp.datarails.com/mcp` (configured in `.claude-plugin/plugin.json`). There is no local server code — the MCP server is hosted remotely.
+A Claude Code plugin for Datarails Finance OS. It provides skills (`skills/*/SKILL.md`) and commands (`commands/*.md`) that connect to a remote MCP server at `https://mcp.datarails.com/mcp` (configured in `.claude-plugin/plugin.json`). There is no local server code — the MCP server is hosted remotely.
 
 ## Critical Rules
 
@@ -99,15 +99,32 @@ values the `limit` moves to the result tool.
 
 ### Aggregation / query API notes
 
-- **Date ranges now filter directly** — no more epoch workaround. The `filters`
-  argument accepts an **advanced** condition tree per field; for a date column pass
-  e.g. `{"name": <date_alias>, "values": {"type": "advanced", "val": [{"condition":
-  "total_range", "value": ["<start_epoch>", "<end_epoch>"]}]}}` (by-alias) or the
-  `{"field_id": <date_id>, …}` form (by-id). Epoch values go in as strings; the
-  backend casts per field. (You can still put the date in `dimensions` and filter
+- **Date ranges filter directly — but date values MUST be epoch seconds.** The
+  `filters` argument accepts an **advanced** condition tree per field; for a date
+  column pass e.g. `{"name": <date_alias>, "values": {"type": "advanced", "val":
+  [{"condition": "total_range", "value": ["<start_epoch>", "<end_epoch>"]}]}}`
+  (by-alias) or the `{"field_id": <date_id>, …}` form (by-id). In the **ordered**
+  conditions (`gt`/`gte`/`lt`/`lte`/`range`/`total_range`) a date value must be
+  **epoch seconds passed as a string** (the backend casts per field); calendar
+  strings like `"2026-01-01"` are **rejected** — a calendar string in a `gte`
+  condition returns an opaque 500, while the identical call with an epoch string
+  (`"1767225600"`) succeeds. Never send calendar dates in
+  ordered conditions. (You can still put the date in `dimensions` and filter
   client-side if you prefer.) Advanced conditions: `equals`, `dn_equals`, `contains`,
   `dn_contains`, `bw`, `ew`, `gt`, `gte`, `lt`, `lte`, `in`, `range` (exclusive
   between), `total_range` (inclusive between), `is null`.
+- **Aggregation guardrails (server-enforced):** a field may not appear in
+  both `dimensions` and `metrics` of the same aggregation call; at most **one
+  aggregation per field per call** (no SUM + AVG of the same field in one request —
+  split into two calls); **SUM/AVG are rejected on Text fields** — use `COUNT`,
+  `COUNT_UNIQUE`, `UNIQUE_VALUES`, `MIN` or `MAX` instead, on a field you are
+  **not** also grouping by (counting a requested dimension violates the first
+  guardrail above and can 500), or pick a numeric sibling. **How a violation surfaces varies per guardrail, not per
+  build** — the duplicate-aggregation and text-field shapes return a structured 422,
+  while the dimensions/metrics overlap and the calendar-date shape return an opaque
+  `internal_server_error` 500 with the cause in a suppressed HTML body. Treat every one of them as a contract violation to fix
+  client-side, not a server bug to retry — a 500 here does not mean an outage or an
+  old build.
 - **Simple value-list filters** still work: by-alias `{"name": <field_alias>,
   "values": [...], "is_excluded": false}`; by-id `{"field_id": <field_id>, "values":
   [...]}`. `is_excluded: true` turns a value list into NOT-IN.
@@ -187,7 +204,7 @@ When writing or updating a skill, copy the relevant recipe so heuristics stay co
 > 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
-> 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row. **A total is obtained by summing the rows** — there is no total row to read. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
 > 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 **KPI honesty (inline into every skill/agent that renders KPI cards, dashboards, or executive summaries):**
@@ -195,9 +212,10 @@ When writing or updating a skill, copy the relevant recipe so heuristics stay co
 > **Render only KPIs you can source.** A KPI may come from (a) the org's metric catalog — `list_business_metrics` (ungated) for discovery; the `get_business_metric_*` data tools are feature-gated and may be absent, and USER-kind metrics often return empty — or (b) aggregation over the discovered P&L grain (revenue, expense buckets, gross/operating margin when COGS/OpEx-like buckets exist). SaaS/unit-economics metrics (ARR, MRR, churn, LTV, CAC, burn, runway, NRR) are **not** derivable from a P&L table — include them only if discovered as populated metrics; otherwise omit the card/slide entirely. Never render a placeholder, estimate, or fabricated value for a KPI you could not source.
 
 **Metric-v1 skills (`__internal`, business-metrics / aliased layer):**
-Run the catalog calls in parallel — `list_data_models`, `list_aliased_fields` (or
-`list_data_models(has_alias=true)`), `list_business_metrics` (~5s) — and use the result
-directly; cache in session. Metric values via `get_business_metric_data`; drill via
+Run the catalog calls in parallel — `list_data_models(has_alias=true)` and
+`list_business_metrics` (~5s) — and use the result directly; cache in session.
+(`list_aliased_fields` requires an `alias` argument, so it can never join a blind
+parallel fan-out — call it per table once the alias is known.) Metric values via `get_business_metric_data`; drill via
 `get_business_metric_drilled_down_data` (both `use_semantic_layer_v2`-gated — the dev
 MCP has the flag on).
 
@@ -212,7 +230,7 @@ must carry the **"DR.GET Formulas — Authoring Contract"** block inline —
 same rationale as the discovery recipes above: a runtime "read the shared
 reference first" handoff gets skipped in Cowork, and a session without the
 contract in context invents DR.GET syntax by analogy with the MCP call it
-just made (observed in the field, 2026-06-01).
+just made.
 
 The block is **single-sourced**:
 
@@ -234,12 +252,15 @@ in context everywhere else.
 ### Excel Context Contract
 
 > **Internal / desktop-only.** The Excel Add-In bridge skills this contract governs —
-> `datarails-excel-agent` and `dr-excel-context` (`*__internal` folders) — are stripped
+> `datarails-excel-agent__internal` and `excel-context__internal` — are stripped
 > from the public mirror by the publish pipeline. This contract only applies in a live
 > Excel Add-In context (desktop); in the public/Cowork target there is no bridge, so the
 > Excel-context path is dormant and public finance skills fall through to their MCP path.
 
 > **Terminology — "agent" means the `datarails-excel-agent` skill, NOT the MCP connector.**
+> (`datarails-excel-agent` is the shorthand used throughout this doc and skill bodies; the
+> component's exact frontmatter name is **`datarails-excel-agent__internal`** — folder
+> `skills/datarails-excel-agent__internal/`. Same skill.)
 > Throughout these skills, **"the agent" / "agent bridge" / "agent refresh" / "agent
 > drill-down" / "agent commands" / "agent mode"** all refer to the **`datarails-excel-agent`
 > skill**, which drives the **Datarails Excel Add-In** via the hidden `__dr_agent` bridge
@@ -247,22 +268,26 @@ in context everywhere else.
 > `agent.get_session`). It is **NOT** the `datarails-finance-os` MCP connector (the FinanceOS
 > REST API: `start_aggregation_by_alias`, `get_fields_by_id`, etc.). When a skill says "fire the
 > agent" / "refresh via the agent", use the add-in bridge — never the MCP connector, and never
-> native Excel. The MCP connector is only for server-side data pulls when there is no Excel
-> context.
+> native Excel. The split is by **target**, not by whether Excel is open: the bridge acts on
+> the **open workbook**; the MCP connector answers **org-data questions** — which
+> tables/models/fields/metrics exist, aggregations, raw queries, distinct values, profiling,
+> org users, FX rates — and it remains the correct tool for those questions **even while a
+> workbook is open**. The bridge is not a data-query engine; the connector is not a workbook
+> actuator.
 
 Any skill that offers Excel-context behavior (in-sheet enrichment, agent refresh,
-drill-down) **must delegate to `/dr-excel-context`** rather than implementing
+drill-down) **must delegate to `excel-context__internal`** rather than implementing
 Excel context detection inline. This contract applies globally; it overrides
 inline logic in individual skill files.
 
-**Datarails operations route to the add-in bridge — NEVER native Excel.**
+**Workbook operations** route to the add-in bridge — NEVER native Excel, never the connector.
 In Excel context, when the user asks for a Datarails operation, satisfy it by
 firing the **agent bridge command** through `datarails-excel-agent` — never by
 driving Excel directly (no `Excel.run` `calculate()`/`calculateFull()`, no
 manual recalc, no formula re-write, no simulated ribbon click). A native Excel
 recalc does **not** pull fresh Datarails data, does **not** resolve DR widgets,
 and silently produces stale/`#BUSY!`/wrong results. The add-in owns these
-operations; the bridge is the only correct path.
+operations; the bridge is the only correct path **for workbook operations**.
 
 | User intent (in Excel context) | Bridge command (via `datarails-excel-agent`) | Do NOT |
 |---|---|---|
@@ -272,8 +297,27 @@ operations; the bridge is the only correct path.
 | "Add/insert this function" (place one widget at a cell) | `add_function_by_id` | Hand-typing a `=DR.GET(...)` string as a substitute for the insert command |
 | "Connect / submit / publish" | `connect_file` / `submit` / `publish_to_dashboard` | Any native-Excel equivalent |
 
+**Org-data questions route to the MCP connector — even in Excel.** Route by the
+**target** of the request, never by whether a workbook is open:
+
+| Request class (workbook open or not) | Route | Examples |
+|---|---|---|
+| **Workbook state & actions** — refresh/recalculate, drill a cell, insert a DR.GET / dynamic range, read or evaluate cells in *this* workbook, list functions/sheets *in this workbook*, select/activate, publish, connect, submit | **Bridge** (`datarails-excel-agent` via `execute_office_js`) — never native Excel, never the connector | "refresh", "what's behind B4", "insert the Value function at D2", "publish this range" |
+| **Org / server data** — list data models/tables, list/inspect fields, aggregated queries, raw row queries, distinct values, business metrics, profiling, org users, currency rates | **MCP connector** (`datarails-finance-os`) — **even when a workbook is open** | "list my dr models", "total OpEx by month 2025", "distinct values of Legal Entity" |
+| **Hybrid** — derive/verify from server data, then write it to the sheet | Connector for the data legs; bridge for every workbook write **plus the mandatory refresh** | "find 2025 revenue in my data and insert a DR.GET for it" |
+
+**Tie-breakers.** If the request names a cell, range, sheet, or formula, or asks to
+change what is in the workbook → bridge. If the answer would be identical with the
+workbook closed → connector. "Refresh", "recalculate", "drill down", "insert",
+"evaluate this cell", "publish", "connect", "submit" are **never** connector calls —
+the connector cannot see or touch the workbook. "What tables/models/fields do I have",
+"total X by Y", "distinct values of Z" are **never** bridge calls — the bridge cannot
+answer them. Watch the near-miss pair: *"list functions in this workbook"* = bridge
+`agent.list_functions`; *"list my Datarails models/tables"* = connector `list_data_models`.
+
 If unsure whether a request maps to a bridge command, call `agent.list_commands`
-and match — do not fall back to native Excel.
+and match — do not fall back to native Excel; if it matches no bridge command and
+is a data question, it belongs to the connector.
 
 **Transport:** these bridge commands are **not MCP tools and not callable functions** — each
 is JSON written to the `__dr_agent` sheet and read back, done by running Office.js via the
@@ -290,7 +334,7 @@ to **any skill and any write path** — `add_function_by_id`, `create_dynamic_ra
 batch) **before reading or reporting any value**. A freshly written DR.GET shows
 "Loading…" / `#BUSY!` / `#N/A` until refreshed — never present that as the value,
 and never satisfy the refresh with native Excel recalc. This is the most common
-Excel-context mistake. (Connector: `/dr-excel-context refresh-after-insert`.)
+Excel-context mistake. (Connector: `excel-context__internal refresh-after-insert`.)
 
 **MANDATORY: elaborating on DR-backed data → offer a drill-down.** When the user wants
 to go deeper on a figure or section — *"explain / elaborate / break down / dig into / what
@@ -302,17 +346,17 @@ whether the figures in scope are **DR formula cells**: read them with `agent.get
 `drilldown_by_pivot` through the agent. Drill-down is the **default elaboration path** for
 DR-backed figures: do not just narrate the cached value or silently re-derive via the
 `datarails-finance-os` MCP connector when a live drill is available. (Connector:
-`/dr-excel-context drilldown`.) **Checklist:** before finalizing any data-elaboration answer
+`excel-context__internal drilldown`.) **Checklist:** before finalizing any data-elaboration answer
 in Excel context — DR cells in scope? drill-down offered? If yes-then-no, add the offer.
 
 **Four mandatory delegation points:**
 
 | Point | When | Delegate to |
 |-------|------|-------------|
-| Guard | Step 0 — before any data pull (probe Excel context + login) | `/dr-excel-context guard` |
-| Refresh | Step 0b — after guard confirms Excel context | `/dr-excel-context refresh` |
-| Refresh after DR.GET insert | Immediately after each `add_function_by_id` call (or batch) | `/dr-excel-context refresh-after-insert` |
-| Drill-down | Final step — after analysis written to sheet | `/dr-excel-context drilldown` |
+| Guard | Step 0 — before any data pull (probe Excel context + login) | `excel-context__internal guard` |
+| Refresh | Step 0b — after guard confirms Excel context | `excel-context__internal refresh` |
+| Refresh after DR.GET insert | Immediately after each `add_function_by_id` call (or batch) | `excel-context__internal refresh-after-insert` |
+| Drill-down | Final step — after analysis written to sheet | `excel-context__internal drilldown` |
 
 **Rules enforced by the connector** (bridge command IDs, not `agent.*` aliases):
 
@@ -331,14 +375,22 @@ in Excel context — DR cells in scope? drill-down offered? If yes-then-no, add 
   `DR.GET`/`DR.QTD`/`DR.YTD`/etc., any DR function). Cold-question mode (raw API
   values from the MCP aggregation tools) always skips drill-down.
 
-Skills with existing inline logic: the inline logic remains valid for the demo
-period. Migrate to delegation anchors during the next batch skill edit.
+**One named exception, not a blanket reprieve:** `forecast-variance` is the
+single remaining skill with inline Excel-context logic (its Step 0/0b guard —
+duplication-audit finding L12, tracked for migration to Anchors A/B/C). No
+other skill may inline Excel-context detection, and no new inline copies may
+be added — new or edited skills always use the delegation anchors.
 
 ### Plugin Content Types
 
 - **Skills** (`skills/*/SKILL.md`): Full-featured workflows for Claude Code. Each has frontmatter with `allowed-tools` listing which MCP tools it can use. Reference: `skills/intelligence/SKILL.md`.
 - **Commands** (`commands/*.md`): Lightweight Cowork-friendly commands (no CLI dependencies).
-- **Agents** (`agents/*.md`): Specialized agent definitions (finance-analyst, dashboard, audit, etc.).
+
+(The plugin ships no `agents/*.md` — the eight former agents were 1:1 mirrors of
+same-named skills that had drifted into weaker copies (missing tools, dropped
+thresholds) and were removed in the 2026-08 duplication cleanup. Autonomous runs
+delegate to a general-purpose agent that invokes the skill, keeping one source
+of truth for every workflow's guards.)
 
 ### Adding a New Skill
 

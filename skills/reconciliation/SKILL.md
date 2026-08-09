@@ -1,6 +1,6 @@
 ---
 name: dr-reconcile
-description: Run independent-source consistency checks across Finance OS data - cross-endpoint agreement, balance-sheet identity, cross-grain roll-ups, and scenario/period integrity. Validates the data pipeline and mappings, not source systems.
+description: Whole-period consistency WORKBOOK - run independent-source checks across Finance OS data (cross-endpoint agreement, balance-sheet identity, cross-grain roll-ups, scenario/period integrity). Validates the data pipeline and mappings, not source systems. NOT a per-metric layer comparison - that is the dev-only cross-layer-reconcile harness.
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__list_data_models
@@ -76,7 +76,7 @@ then carry the values forward.
 > 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
-> 4. **Reading GROUP BY responses.** Null groups arrive explicitly labeled `[null]` — read null counts only from that bucket. Every aggregation response also appends a **keyless row equal to the grand total**; exclude it from sums, shares, trends, and bucket counts (at most use it as a checksum). When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row. **A total is obtained by summing the rows** — there is no total row to read. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
 > 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
 
 2. **Map the account grains.** From the per-level distinct values pulled in
@@ -150,13 +150,16 @@ domain. Label every reported number with its period + scenario.
    scoped window (each via `start_aggregation_by_*` → poll
    `get_aggregation_result_by_*` until ready), **no scenario filter** on
    either: (a) `dimensions=[<scenario_field>]`, (b)
-   `dimensions=[<period_field>]`. In
-   each response the labeled group rows (including `[null]`) must sum to the
-   appended **keyless grand-total row** (data-scope preamble, item 4) to the
-   cent — and the two keyless rows must equal each other, since both describe
-   the same unfiltered total. A mismatch means rows are escaping the grouping
-   (bad scenario/date values) or the two slicings disagree about what is in
-   scope.
+   `dimensions=[<period_field>]`. **Sum each response's rows** (including the
+   `[null]` group) to get that slicing's total — responses carry one row per
+   group and no total row, so the total is the sum (data-scope preamble,
+   item 4). The two totals must equal each other to the cent, since both
+   describe the same unfiltered window sliced two different ways. A mismatch
+   means rows are escaping one of the groupings (bad scenario/date values) or
+   the two slicings disagree about what is in scope.
+
+   > The independence of this check comes from the **two different slicings**,
+   > not from any server-provided total.
 
 ## Arguments
 
@@ -170,8 +173,8 @@ domain. Label every reported number with its period + scenario.
 ## What It Validates
 
 Every check compares two **independently-sourced** numbers — two different
-endpoint families, two different grains, or a group-by against its own
-grand-total checksum. Nothing is compared against a copy of itself.
+endpoint families, two different grains, or the same window sliced by two
+different dimensions. Nothing is compared against a copy of itself.
 
 ### 1. Cross-Endpoint Agreement
 - Same aggregate via the aliased and the raw by-id API families
@@ -188,8 +191,8 @@ grand-total checksum. Nothing is compared against a copy of itself.
 - Flags unmapped / double-mapped accounts (including `[null]` buckets)
 
 ### 4. Scenario/Period Integrity
-- Group rows sum to the keyless grand-total checksum
-- Scenario-sliced and period-sliced totals agree with each other
+- Scenario-sliced and period-sliced totals (each the sum of its own rows) agree
+  with each other to the cent
 
 **Not validated:** agreement with source systems (ERP/GL), completeness of
 the load, or business-metric engine values — the `get_business_metric_*` data
@@ -274,7 +277,7 @@ Excel report with multiple sheets:
    (or the skip note when alias coverage was too thin)
 3. **Check 2 - Balance Sheet** - per-period |A| vs |L+E|, sign-convention note
 4. **Check 3 - Roll-Up** - parent totals vs child-bucket sums per parent
-5. **Check 4 - Integrity** - group sums vs grand-total checksums
+5. **Check 4 - Integrity** - scenario-sliced total vs period-sliced total
 6. **Exceptions** (if any) - deltas exceeding each check's threshold
 
 ## Examples
