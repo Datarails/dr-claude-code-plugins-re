@@ -5,10 +5,10 @@ description: Compare actual results to budget - see where you're over or under p
 # Budget vs Actual Comparison
 
 This command is a thin launcher — the single maintained recipe for plan-vs-actual
-analysis lives in the `dr-forecast-variance` skill. Do not improvise workflow
+analysis lives in the `datarails-financeos:forecast-variance` skill. Do not improvise workflow
 steps here.
 
-Invoke the **`dr-forecast-variance`** skill with the user's request framed as a
+Invoke the **`datarails-financeos:forecast-variance`** skill with the user's request framed as a
 budget-vs-actual comparison, passing through any period (`--year`), scenario, or
 category focus they named.
 
