@@ -26,7 +26,9 @@ allowed-tools:
   - Read
   - Bash
   - execute_office_js
-argument-hint: "[--type summary|detail|budget|variance] [--year <YYYY>] [--output <file>]"
+  - set_cell_range
+  - get_cell_ranges
+argument-hint: "[--type summary|detail|budget|variance] [--year <YYYY>] [--output <file>] [--file]"
 ---
 
 # DR.GET Formula Workbook Generator
@@ -35,15 +37,17 @@ Generate Excel workbooks containing DR.GET formulas that pull live financial dat
 
 **DR.GET** is a custom Excel function that bridges Datarails' centralized financial database and Excel-based models. Formulas auto-refresh when the workbook is opened with the add-in active.
 
-> **⚠️ Excel context — refresh through the agent after writing formulas.** If this skill runs
-> in a **live Excel context** (add-in agent bridge available) and writes `=DR.GET(...)` formulas
-> into the open workbook, the cells show **"Loading…" / `#BUSY!` / `#N/A`** until refreshed.
-> You **MUST** fire an agent refresh afterward — `refresh_selected_cells_ribbon` (written range)
-> or `refresh_ribbon` (whole workbook) via the Excel Add-In bridge (the refresh-after-insert
-> delegation point of the Excel Context Contract in CLAUDE.md) — and **never** report a value before that refresh,
-> and **never** substitute a native Excel recalc (it won't pull Datarails data). Writing DR.GET
-> formulas and refreshing them is one atomic step. (File-output mode in Claude Code is exempt —
-> the formulas populate when the user opens the file with the add-in.)
+> **⚠️ Two output modes — resolve one in Step 0, never guess.** In a **live Excel context**
+> (add-in agent bridge available) this skill writes into the **open workbook** and refreshes
+> through the agent (**in-sheet mode**, Step 7-A). With no bridge it generates an `.xlsx`
+> with openpyxl (**file mode**, Step 7-B). A user who asks for a file — `--file`, `--output`,
+> or plain phrasing — gets file mode regardless of the bridge; mutating live cells is never a
+> substitute for a file someone asked for. Writing DR.GET formulas and refreshing them is
+> **one atomic step** in in-sheet mode: freshly written formulas read `Missing` / `Loading…` /
+> `#BUSY!` / `#N/A` until an agent refresh lands, so **never report a value — or call the job
+> done — before the refresh and the read-back in Step 8-A**, and never substitute a native
+> Excel recalc (it does not pull Datarails data). File mode is exempt: those formulas populate
+> when the user opens the file with the add-in.
 
 ## Arguments
 
@@ -51,7 +55,8 @@ Generate Excel workbooks containing DR.GET formulas that pull live financial dat
 |----------|-------------|---------|
 | `--type <type>` | Report type: `summary`, `detail`, `budget`, `variance` | `summary` |
 | `--year <YYYY>` | Calendar year for date headers | Current year |
-| `--output <file>` | Output file path | `tmp/DR_GET_<type>_<YEAR>.xlsx` |
+| `--output <file>` | Output file path. **Passing it requests file mode** — it is never ignored | `tmp/DR_GET_<type>_<YEAR>.xlsx` |
+| `--file` | Request file mode explicitly, without naming a path | Auto-detect (Step 0) |
 
 ## Adapting to the client's environment
 
@@ -156,12 +161,83 @@ RIGHT:  =DR.GET(Value, "[Scenario]", $B$1, "[Account Group L1]", $A6, "[Reportin
 
 ## Workflow
 
+### Phase 0: Mode selection
+
+#### Step 0: Excel context routing (ALWAYS FIRST)
+
+Before discovery, before any data pull, decide where the workbook is going to be
+written. Run the `agent.get_session` probe through the bridge. **`agent.get_session`
+is not an MCP tool** — you run it by executing Office.js via the `execute_office_js`
+tool to write the request to the `__dr_agent` sheet and read the response (see the
+Excel Context Contract in CLAUDE.md, §Transport). Do **not** call the
+`datarails-finance-os` MCP connector for this, and **never infer bridge availability from
+the user's wording** — only the probe establishes Excel context. Their wording does decide
+one thing, below: whether they asked for a file.
+
+**Resolve the mode in this order — the user's stated intent outranks the probe.**
+
+1. **Did the user ask for a file?** `--file`, `--output <path>`, or any phrasing that
+   names a file, a path, or a download ("generate a workbook", "send me the xlsx") is a
+   **file-mode request**. Never silently satisfy it by mutating the open workbook
+   instead — writing live cells is not a substitute for handing someone a file.
+2. **Probe `agent.get_session`.** On success, branch on login state exactly as the
+   contract specifies: **Flex** (response has `isLoggedIn`) — if `false`, tell the user
+   to sign in to Datarails and stop; **COM** (no `isLoggedIn`, exposes `isConnected`
+   instead) — a successful probe means the session is active, proceed. Do **not** gate
+   on `isConnected`; DR-formula writes and refresh both work on an unconnected workbook.
+
+   > **A failed probe is a normal result, not an error.** It is how this step detects
+   > "no bridge here", and in Claude Code — where there is no add-in — it is the
+   > *expected* outcome. Do not surface it to the user, do not retry it, and do not
+   > treat it as an authentication or connectivity problem: Step 1's Connectors UI
+   > guidance is about the `datarails-finance-os` connector and does **not** apply to
+   > this probe. Record the result and move on to the resolution table.
+3. **Resolve:**
+
+| User asked for | Bridge probe | Bash available | → Mode |
+|---|---|---|---|
+| nothing specific | succeeds | — | **In-sheet** (Step 7-A) |
+| nothing specific | fails | yes | **File** (Step 7-B) |
+| a file | — | yes | **File** (Step 7-B) — say the open workbook was left untouched |
+| a file | — | **no** | **Stop and say so** (below) |
+| nothing specific | fails | **no** | **Stop and say so** (below) |
+
+**When file mode is required but unreachable, say it plainly and stop.** File generation
+needs a Python runtime (`Bash` + `openpyxl`), and **Claude for Excel has neither** — so a
+file request on that surface cannot be honoured. Tell the user exactly that, and offer
+the two real options: write the report into the open workbook instead (in-sheet mode), or
+re-run the skill from Claude Code where file output works. Do **not** quietly downgrade to
+in-sheet mode, and do **not** produce a partial or fake file.
+
+> **A sheet list containing `__dr_agent` means the add-in is loaded and in-sheet mode
+> is the expected path.** It is a strong signal, not a substitute for the probe — still
+> run `agent.get_session`, because only the probe distinguishes a live listener from a
+> bridge sheet left behind in a saved file.
+
+**In-sheet mode changes three things**, and each has bitten before:
+
+| | In-sheet mode (Step 7-A) | File mode (Step 7-B) |
+|---|---|---|
+| Destination | A **new sheet** in the open workbook, block at A1 | A new `.xlsx` |
+| Write path | `set_cell_range` | openpyxl via Bash |
+| After writing | **Mandatory** agent refresh, then read-back (Step 8-A) | Nothing — formulas populate on open |
+| `<value_function>` defined name | Verify presence *and* value; add via Office.js if absent | Always add with openpyxl |
+
+**There is no Bash in a live Excel context.** Once in-sheet mode is resolved, do not plan
+an openpyxl script, a temp file, or a `python3` call — those tools do not exist on that
+surface, and a run that ends in a file is not the deliverable that mode produces.
+
 ### Phase 1: Setup
 
 #### Step 1: Verify Authentication
 ```
-If any tool call fails with a connection error, guide the user to connect via Connectors UI.
+If a datarails-finance-os connector call fails with a connection error, guide the
+user to connect via Connectors UI.
 ```
+
+**Scope:** this applies to the MCP connector calls from Step 2 onward. It does **not**
+apply to the Step 0 bridge probe — a failed `agent.get_session` means "no add-in here"
+and has already been handled as mode detection.
 
 #### Step 2: Discover the financials table and its fields
 
@@ -230,7 +306,7 @@ fails, fall back to the by-id twin.
 
 > **Async fetch — aggregations and distinct values run as start → poll.** `start_aggregation_by_id`/`_by_alias` and `start_distinct_values_by_id`/`_by_alias` take the same arguments as the retired blocking calls (dimensions/metrics/filters; table id + field id, or alias + field alias) and return immediately with `{"status": "pending", "handle": {...}}`. Echo that `handle` back verbatim to the matching `get_aggregation_result_by_*` / `get_distinct_values_result_by_*` tool: a `{"status": "running", "retry_after_seconds": N}` response means poll again with the same handle after ~N seconds (≈5s) — it is not an error, and large jobs may take several polls; when ready, the result arrives in the familiar shape (for distinct values, pass `limit` to the result tool). An expired/unknown-handle error means restart with the `start_*` tool. *Transitional fallback:* if the `start_*` tools aren't available on the connector (older server), the blocking twins `get_aggregated_data_by_*` / `get_distinct_values_by_*` still work with the same arguments.
 
-> **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
+> **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~50 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. On aggregations the top-level `totals` field is **unaffected by truncation** (computed across all groups, not just the returned prefix) — read grand totals from it instead of re-fetching. Narrow the query (fewer dimensions, more filters, fewer selected columns — or a business metric for a named KPI) and re-fetch **only when the rows themselves are needed** beyond the cap; with `totals` present, a SUM/COUNT/MIN/MAX grand total never requires a re-fetch or chunking by dimension (AVG, COUNT_UNIQUE and UNIQUE_VALUES never read `totals` — true average = SUM total ÷ COUNT total from two calls; true distinct count = the distinct-values tools). A truncated response **without** `totals` (pre-rollout cache) cannot answer a grand-total question from its prefix. Re-run the aggregation **once** — a fresh run may miss the stale entry and return `totals`. If the re-run still carries no `totals`, stop re-running and fall back to narrowing or chunking by dimension until the responses are complete, then sum those rows. Never total the prefix.
 
 #### Step 3: Discover Account Hierarchy
 
@@ -353,7 +429,68 @@ When generating Excel or PowerPoint files, apply Datarails brand styling:
 
 ### Phase 3: Workbook Generation
 
-#### Step 7: Generate Excel with openpyxl
+Run **either** Step 7-A **or** Step 7-B, per the mode chosen in Step 0. Everything
+after them in this phase — report-type structure, formula construction, calculated
+lines — is shared by both modes.
+
+#### Step 7-A: In-sheet generation (Excel context)
+
+Write into the open workbook with `set_cell_range`. No Bash, no openpyxl, no file.
+
+**Always a new sheet, block anchored at A1. No exceptions.** This is a correctness
+constraint, not a layout preference. The formula patterns and the Cell reference map
+below are written against that origin (`$B$1` = Scenario, `$B$2` = Cycle, `$B$3` =
+Planning Scenario, row 5 = date headers, column A = row labels). On a new sheet at A1
+every documented reference is correct as written, the destination is guaranteed empty,
+and nothing pre-existing can be overwritten or disturbed.
+
+**Writing into an existing sheet is not supported.** If the user asks for the block at a
+named sheet or anchor, say so plainly and put it on a new sheet instead — they can cut
+and paste it wherever they want afterwards, and Excel will carry the references with it.
+Do not improvise an offset layout: every literal in the Cell reference map would then
+point at whatever the workbook already holds there, filling the block with plausible,
+incorrect numbers while nothing visibly fails.
+
+**Clean up after yourself.** If you place scratch or probe cells anywhere while working,
+clear them before you report — a stray cell left in someone's live template is a defect
+even when the numbers are right.
+
+**Check the defined name before the first formula — and check the token you actually
+discovered.** The name to verify is `<value_function>` from Step 2.3, *not* the literal
+`Value`: orgs commonly expose several XL functions on the same table (`Value`, `Value_BS`,
+`Value_NonGaap`), and validating the wrong one leaves every formula broken while the check
+passes. Workbooks authored by the add-in usually already resolve it, but a workbook that
+merely *has* the add-in installed may not. Read `workbook.names` via `execute_office_js`
+and check **presence and value**, not presence alone:
+
+- **Absent** → add it as a workbook-scoped name referring to the string constant of the
+  token (`"<value_function>"`).
+- **Present and referring to that string constant** → correct, proceed.
+- **Present but referring to something else** — a range, a different literal, a formula —
+  → **stop and ask.** This is the dangerous case a presence-only check waves through: the
+  formulas will resolve against whatever that name points at, so the block fills with
+  wrong numbers and nothing errors. Never silently redefine it; the workbook may depend
+  on that name elsewhere. Report what it currently refers to and let the user decide.
+
+Skipping the check risks Excel autocorrecting the token to its built-in `VALUE()`, which
+breaks every formula the same way it does in a generated file.
+
+**Placing a single widget vs. writing a grid.** If the user wants one DR value at one
+cell in their own sheet, that is not this skill — use the bridge's `add_function_by_id`,
+since hand-typing a `=DR.GET(...)` string as a substitute for the insert command is a
+documented Do-NOT in the Excel Context Contract. This skill builds a grid (a P&L block is
+easily 150+ formulas), where writing the formula strings directly with `set_cell_range` is
+the sanctioned path — the contract names `/dr-get-formula` explicitly as a skill that
+writes DR.GET formulas into cells — followed by one batched refresh in Step 8-A.
+
+**Number formats and styling** go through `set_cell_range`'s `cellStyles`
+(`numberFormat`, `fontWeight`, `backgroundColor`), not the openpyxl calls in the Excel
+Formatting block below — that block is file mode's equivalent. The date-serial rule is
+identical in both modes: EOM serials with an `MMM-YY` number format.
+
+Then go to **Step 8-A** — the refresh is not optional and not a follow-up task.
+
+#### Step 7-B: File generation with openpyxl
 
 Use Bash to run a Python script (inline or from file) that generates the workbook using openpyxl.
 
@@ -407,7 +544,10 @@ f'=DR.GET(Value, "[{l1_5_field}]", $A{{row}}, "[{scenario_field}]", $B$1, "[{cyc
 f'=DR.GET(Value, "[{report_field}]", $A{{row}}, "[{l2_field}]", $B{{row}}, "[{scenario_field}]", $D$2, "[{date_field}]", {{col}}$5)'
 ```
 
-**Cell reference map** — each reference in the formula must point to:
+**Cell reference map** — these addresses assume the block's origin is A1, which both
+modes guarantee: file mode writes a fresh workbook, and in-sheet mode always writes a new
+sheet (Step 7-A). Use them as written; never offset the layout. Each reference in the
+formula must point to:
 - `$A{row}` → the account/line item label in column A of that row
 - `$B$1` → the Scenario parameter cell (e.g., "Actuals")
 - `$B$2` → the Scenario Cycle parameter cell (e.g., "0+12")
@@ -449,20 +589,66 @@ These P&L lines are always Excel formulas referencing other rows:
 
 ### Phase 4: Save & Report
 
-#### Step 8: Save Output & Verify
+#### Step 8-A: Refresh & verify in place (in-sheet mode)
+
+**This step is what makes the formulas real. A grid of `Missing` is a failed run, not
+a delivered one — even if every formula is correct.**
+
+1. **Refresh through the agent — `refresh_selected_cells_ribbon`, scoped to the range you
+   wrote.** Never `refresh_ribbon` here. Because the block is always a new sheet, that
+   scope contains nothing but the cells you just created: no pre-existing value can move,
+   and nothing in the workbook can depend on a sheet that did not exist a moment ago. A
+   whole-workbook refresh throws that guarantee away — it repulls every DR cell in the
+   file, and any that were stale will change, silently editing the user's model as a side
+   effect of your write. If the user explicitly wants everything refreshed, that is their
+   call to make, not yours to assume.
+   **If the refresh command itself fails** — error, timeout, or a listener that never
+   returns terminal status — stop and say so. The workbook is now carrying formulas that
+   were written but never resolved. Report exactly which sheet and range hold them, state
+   that they are unresolved, and offer to remove the sheet or leave it for the user to
+   refresh from the ribbon. Do not retry blindly, do not delete their content without
+   asking, and do not report the run as finished.
+2. **Read the range back** with `get_cell_ranges` and check every DR cell. None of
+   these may survive: `Missing`, `Loading…`, `#BUSY!`, `#N/A`, `#VALUE!`. A native
+   Excel recalc does not clear them — only an agent refresh does.
+3. **If sentinels remain**, do not report success, and do not just refresh again —
+   distinguish the two cases first. `Loading…` / `#BUSY!` are transient: wait for the
+   refresh command's own terminal status (the bridge command carries its own timeout —
+   do not invent a longer wait around it), then re-read. **Bound the retry**: at most a
+   couple of re-reads after terminal status. If sentinels still show, treat it as a
+   failed refresh and handle it per item 1 — report the range as unresolved and stop.
+   Never loop waiting for a value that may never arrive; an in-progress-looking cell
+   that never resolves is indistinguishable from a hung listener, and the user is
+   sitting in front of the workbook. `Missing` after a refresh that
+   completed is **terminal** — the formula resolved to nothing, which almost always
+   means a dimension value that doesn't match the live data. Re-check that row's
+   values against the registry from Phase 2 and fix the formula; repeating the refresh
+   will return the same result. Either way, name the exact cells and the sentinel each
+   one shows rather than leaving them for the user to find.
+4. **Only values you have read back after a successful refresh may be quoted.** Never
+   report a figure sourced from the MCP aggregation you used during discovery as
+   though it were the cell's value — if the cell has not resolved, the honest report
+   is that it has not resolved.
+
+#### Step 8-B: Save Output & Verify (file mode)
 
 Save to `tmp/DR_GET_<type>_<YEAR>.xlsx` or the user-specified `--output` path.
 
 Then re-open the saved file and verify it before reporting success:
 
+Both assertions check `<value_function>` — the token discovered in Step 2.3 — not the
+literal `Value`. On an org whose function is `Value_BS`, hardcoding `Value` here verifies
+a name the formulas never use: the check passes and the workbook is broken.
+
 ```python
+token = value_function            # from Step 2.3; "Value" only if that is what was discovered
 check = openpyxl.load_workbook(out_path)
-assert "Value" in check.defined_names, "defined name 'Value' is missing — Excel will autocorrect the token to VALUE()"
+assert token in check.defined_names, f"defined name '{token}' is missing — Excel will autocorrect the token to VALUE()"
 for ws in check.worksheets:
     for row in ws.iter_rows():
         for c in row:
             if isinstance(c.value, str) and "DR.GET" in c.value:
-                assert c.value.replace(" ", "").startswith("=DR.GET(Value,"), \
+                assert c.value.replace(" ", "").startswith(f"=DR.GET({token},"), \
                     f"bad DR.GET formula in {ws.title}!{c.coordinate}"
 ```
 
@@ -471,12 +657,25 @@ user a file that fails verification.
 
 #### Step 9: Report to User
 
-Report what was generated:
-- Number of validated dimension values used
-- Number of DR.GET formulas written
-- Number of calculated rows
+Both modes report: number of validated dimension values used, number of DR.GET
+formulas written, number of calculated rows.
+
+**In-sheet mode** also reports:
+- The name of the new sheet and the range the block occupies
+- That the refresh ran and the read-back was clean — or exactly which cells still
+  show a sentinel, if any do
+- If the user had asked for an existing sheet or anchor: that it went to a new sheet
+  instead, and that they can cut and paste it where they want
+- If the refresh failed: the sheet and range now holding unresolved formulas, and the
+  choice offered (remove the sheet, or leave it for a manual ribbon refresh)
+- **No** "open this with the add-in to refresh" line — the formulas are already live,
+  and telling the user to refresh a range you just refreshed reads as an unfinished job
+
+**File mode** also reports:
 - Output file path
 - Reminder: "Open this workbook with the Datarails Excel Add-in active to refresh formulas."
+- If the file was requested (`--file` / `--output` / plain phrasing) while a live Excel
+  context was available, say that the open workbook was deliberately left untouched
 
 ---
 
@@ -502,10 +701,22 @@ Report what was generated:
 /dr-get-formula --type variance --year 2026
 ```
 
-### Custom output location
+### Custom output location (file mode)
 ```bash
 /dr-get-formula --type summary --year 2026 --output tmp/PnL_Template_2026.xlsx
 ```
+
+### Request file mode explicitly
+```bash
+/dr-get-formula --type summary --year 2026 --file
+```
+
+**How the mode resolves.** With a workbook open and the add-in bridge live, the plain
+invocations above go to **in-sheet mode** — the block is written into that workbook and
+refreshed. `--file` or `--output` is a file request and is never satisfied by writing to
+the open workbook instead; where a Python runtime exists (Claude Code) it produces the
+`.xlsx` and leaves any open workbook untouched, and where one does not (Claude for Excel)
+Step 0 says so and stops rather than substituting a different deliverable.
 
 ---
 
@@ -535,6 +746,43 @@ Report what was generated:
 - Verify the Datarails Excel Add-in is active
 - Check that dimension values match exactly (case-sensitive, exact spelling)
 - Re-run the skill to re-validate values against live data
+
+**Cells written in-sheet still read `Missing` after the refresh**
+- `Missing` is the add-in's "this combination resolved to nothing" sentinel, not a
+  loading state — a second refresh will not clear it. Check the dimension values in
+  that row/column against the Phase 2 registry; a value the live table doesn't carry
+  is the usual cause.
+- If the refresh itself never ran, that is the bug, not the formula. A native Excel
+  recalc (F9, `calculate()`) does not pull Datarails data and leaves `Missing` in
+  place. Only an agent refresh through the bridge resolves DR cells.
+- Do not report the numbers you pulled during discovery as if they were the cell
+  values. They came from the MCP aggregation, not from the sheet, and quoting them
+  hides an unresolved grid behind correct-looking figures.
+
+**The user asked for a file but the skill is running in Claude for Excel**
+- File generation needs `Bash` + `openpyxl`; that surface has neither, so the request
+  cannot be honoured there. Say so and stop.
+- Do **not** substitute in-sheet mode — writing into their live workbook is a different
+  and irreversible deliverable, not a smaller version of the one they asked for. Offer it
+  as a choice, or point them at Claude Code where file output works.
+
+**In-sheet numbers look plausible but are wrong across the whole block**
+- Check where the block was written. The formula patterns and Cell reference map assume
+  an A1 origin; placed anywhere else, `$B$1` / `$B$2` / `$B$3` / `{col}$5` point at
+  whatever that sheet already holds and every cell resolves against the wrong parameters,
+  with nothing visibly failing.
+- This is why in-sheet mode always writes a new sheet at A1 (Step 7-A). If a block ended
+  up in an existing sheet, that path was not followed — rewrite it to a new sheet rather
+  than trying to patch the references.
+
+**A refresh changed cells the skill didn't write**
+- It should not be possible on this path: in-sheet mode writes a new sheet and refreshes
+  only that range, so the scope holds nothing but cells the skill just created, and no
+  pre-existing formula can depend on a sheet that did not exist a moment ago.
+- If it happened, a whole-workbook `refresh_ribbon` was used instead of
+  `refresh_selected_cells_ribbon`. That repulls every DR cell in the file, and any that
+  were stale will move — a real change to the user's model. Report every value that
+  moved, and use the scoped command next time.
 
 **A distinct-values call errors**
 - Use `start_distinct_values_by_alias` / `start_distinct_values_by_id` → poll

@@ -43,6 +43,69 @@ prove the numbers match the ERP/GL. State this in the report output too.
 
 Essential for month-end close and financial validation.
 
+## Excel Context — Routing Preamble
+
+Before any data pull, establish whether this skill is running in a **live Excel context**
+(Claude for Excel with the Datarails Add-In loaded) and route accordingly.
+
+**Detect — never infer from the user's wording.** A sheet list containing `__dr_agent`
+means the add-in is loaded. Confirm with the `agent.get_session` probe, which you run by
+executing Office.js through the `execute_office_js` tool (see the Excel Context Contract
+in CLAUDE.md, §Transport) — it is not an MCP tool and has no MCP equivalent.
+**A failed probe is a normal detection result**, not an error: it means "no bridge here",
+which is the expected outcome in Claude Code. Do not surface it, do not retry it, and do
+not apply this skill's connection-error or Connectors-UI guidance to it — that guidance is
+about `datarails-finance-os` connector calls only.
+**A successful probe means Excel context, on either transport.** The bridge serves two
+add-in tracks and their session payloads differ: Flex (Office.js task pane) exposes
+`isLoggedIn`; the COM desktop add-in — the majority of live workbooks — exposes
+`isConnected` instead, and **`isConnected: false` is not a login failure, an error, or a
+reason to stop or send the user anywhere**. It merely means the workbook isn't connected
+to a Datarails file, which matters only to `drilldown_*` / `create_dynamic_range` (the
+bridge skill gates those itself). Only Flex's explicit `isLoggedIn: false` means
+sign-in is needed.
+
+**Route by the target of the request, not by whether a workbook is open.**
+
+- **Org / server data** — which tables, models and fields exist, aggregations, raw rows,
+  distinct values, metrics, profiling — always the `datarails-finance-os` MCP connector,
+  **even in Excel**. The bridge cannot answer these.
+- **Workbook actions** — refresh, drill a cell, insert a DR function, read what a cell
+  returns, publish, submit — always the add-in bridge. Never a native Excel recalc
+  (`calculate()`, F9): it does not pull Datarails data and silently yields stale values.
+
+**In a live Excel context this skill cannot produce its file deliverable.** Its generation
+steps depend on the `Bash` tool, which that surface does not provide. Say so plainly and
+offer the real alternatives — a scoped answer in chat, or re-running this skill from
+Claude Code where file output works. Never improvise another route to a file, never hand
+back a partial artifact, and never silently substitute a different deliverable: writing
+into someone's live workbook instead of giving them the file they asked for is a
+different and irreversible outcome, not a smaller version of the same one.
+
+**If you do write DR formulas into the workbook, writing and refreshing are one atomic
+step.** Write to a **new sheet**, fire `refresh_selected_cells_ribbon` scoped to that
+range — a new-sheet block is one contiguous range, so one scoped call covers any cell
+count — then read the range back. `refresh_ribbon` is not the tool for this: it repulls
+every DR cell in the file and can silently move numbers elsewhere in the user's model.
+It is reserved for the one case the scoped command can't cover — scattered inserts
+across multiple sheets, per `excel-context__internal`'s refresh-after-insert rule — and
+even then only with the user's explicit OK, after snapshotting the DR ranges you can
+bound, reporting each changed cell in them before → after with the compared ranges
+named, and saying plainly that cells beyond them may also have updated. If the user
+declines the whole-workbook refresh, fall back to scoped `refresh_selected_cells_ribbon`
+calls sheet-by-sheet — slower, but nothing outside the written cells moves. A freshly
+written DR formula reads `Missing` / `Loading…` / `#BUSY!` until an agent refresh lands,
+so never quote a value you have not read back after a successful refresh, and never
+present a figure fetched from the MCP connector as though it were the cell's value.
+`/dr-get-formula` is the full authority for DR.GET workbooks.
+
+**If the user asks you to elaborate on a DR-backed figure** — "explain", "break down",
+"what's driving this", "why is X" — and the figures in scope are DR formula cells, offer
+the add-in's drill-down instead of silently re-deriving the number through the MCP
+connector. A drill resolves the exact filters behind that cell; a hand-rebuilt query only
+approximates them.
+<!-- end:excel-context-preamble -->
+
 ## How the checks source their numbers
 
 This skill is **self-contained** — it discovers the client's financials table,
@@ -76,8 +139,8 @@ then carry the values forward.
 > 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
-> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row. **A total is obtained by summing the rows** — there is no total row to read. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
-> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
+> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row mixed into the `data` list; grand totals arrive in a separate top-level `totals` field beside the rows (`{"data": [...], "totals": {...}}`), computed across **all** groups, not just the returned prefix. **For a grand total, read `totals` — never sum the rows when the response carries `truncated: true`** (summing the returned prefix silently under-counts; dev repro: 474 of 31,455 rows summed to 21% of the true total). **`totals` combines the per-group results rather than re-scanning the rows**, so it is exact exactly when the aggregation is decomposable: SUM (sum of the group sums), COUNT (sum of the group counts), MIN, and MAX. It is **WRONG for AVG** (unweighted mean of the group averages) and **COUNT_UNIQUE** (sum of the per-group distinct counts, so a value recurring across groups is counted once per group) — true average = SUM total ÷ COUNT total (two calls: a field may be aggregated at most once per request); true distinct count = the distinct-values tools. Treat every aggregation type not named exact above — **`UNIQUE_VALUES` included**, whose cross-group de-duplication is unverified (the `COUNT_UNIQUE` behaviour above is evidence the engine may not de-duplicate across groups at all) — as not decomposable: derive it from complete rows or the distinct-values tools, never from `totals`. `totals` is absent on dimension-less aggregations (the single returned row IS the total) and may be absent on responses cached before the rollout (cache TTL ≤ 7 days) — only in those two cases is a total obtained by summing complete (untruncated) rows. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~50 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. On aggregations the top-level `totals` field is **unaffected by truncation** (computed across all groups, not just the returned prefix) — read grand totals from it instead of re-fetching. Narrow the query (fewer dimensions, more filters, fewer selected columns — or a business metric for a named KPI) and re-fetch **only when the rows themselves are needed** beyond the cap; with `totals` present, a SUM/COUNT/MIN/MAX grand total never requires a re-fetch or chunking by dimension (AVG, COUNT_UNIQUE and UNIQUE_VALUES never read `totals` — true average = SUM total ÷ COUNT total from two calls; true distinct count = the distinct-values tools). A truncated response **without** `totals` (pre-rollout cache) cannot answer a grand-total question from its prefix. Re-run the aggregation **once** — a fresh run may miss the stale entry and return `totals`. If the re-run still carries no `totals`, stop re-running and fall back to narrowing or chunking by dimension until the responses are complete, then sum those rows. Never total the prefix.
 
 2. **Map the account grains.** From the per-level distinct values pulled in
    the data-scope preamble (item 2) — if the distinct-values start→poll pair
@@ -150,16 +213,26 @@ domain. Label every reported number with its period + scenario.
    scoped window (each via `start_aggregation_by_*` → poll
    `get_aggregation_result_by_*` until ready), **no scenario filter** on
    either: (a) `dimensions=[<scenario_field>]`, (b)
-   `dimensions=[<period_field>]`. **Sum each response's rows** (including the
-   `[null]` group) to get that slicing's total — responses carry one row per
-   group and no total row, so the total is the sum (data-scope preamble,
-   item 4). The two totals must equal each other to the cent, since both
-   describe the same unfiltered window sliced two different ways. A mismatch
-   means rows are escaping one of the groupings (bad scenario/date values) or
-   the two slicings disagree about what is in scope.
+   `dimensions=[<period_field>]`. **First apply the item-4 defensive filter —
+   keep only rows in which every requested dimension key is present** (a stale
+   cached response can carry legacy roll-up rows that omit keys and equal the
+   whole total, which would fake a mismatch), preserving genuine `[null]`
+   groups, **then sum those rows** to get that slicing's total — this check's
+   rows must be
+   summed client-side, and the responses must be **complete**: on
+   `truncated: true`, narrow (e.g. split the window into sub-ranges) and
+   stitch, never sum a prefix. The two totals must equal each other to the
+   cent, since both describe the same unfiltered window sliced two different
+   ways. A mismatch means rows are escaping one of the groupings (bad
+   scenario/date values) or the two slicings disagree about what is in scope.
 
    > The independence of this check comes from the **two different slicings**,
-   > not from any server-provided total.
+   > not from any server-provided total. For exactly that reason, **do not
+   > read the top-level `totals` field for this check**: the engine computes
+   > `totals` over the filtered window independently of the grouping, so both
+   > slicings would return the same engine number by construction and the
+   > check would pass vacuously (verified live: `totals` is byte-identical
+   > across groupings of the same window).
 
 ## Arguments
 
@@ -259,10 +332,23 @@ workbook, the only valid form is:
   otherwise Excel autocorrects the bare token to its built-in `VALUE()` and
   the formula breaks.
 - Bare `=DR.GET(...)` only — never wrapped in IFERROR/IF/ROUND.
+- **Every rule here applies to the retrieval/period family** — `DR.GET`,
+  `DR.QTD`, `DR.YTD`, `DR.MTD` share one form (`=DR.QTD(Value, "[Dim]",
+  CellRef, ...)`), one cell-reference discipline, one `Value` defined-name
+  requirement, one no-wrapping rule. "DR.GET" in this contract means that
+  family. Helper functions with their own documented signatures (e.g.
+  `DR.INCLUDE`, `DR.RANGE`) are **not** covered here — author those only from
+  their own documentation, never by analogy with this form.
+- **In a live Excel context, writing DR formulas and refreshing them is one
+  atomic step** — a freshly written DR cell reads `Missing` until an agent
+  refresh lands, and only read-back values may be quoted. The Excel-context
+  routing preamble (or the skill's own Step 0 workflow) owns that procedure;
+  this contract owns the formula text.
 
 The get-formula skill (`/dr-get-formula`) is the full reference — parameter
 cells, validated dimension values, report layouts. Prefer it for whole formula
-workbooks; apply this contract when adding DR.GET formulas to a workbook here.
+workbooks; apply this contract when adding any retrieval/period DR formula
+(`DR.GET`/`DR.QTD`/`DR.YTD`/`DR.MTD`) to a workbook here.
 <!-- end:drget-authoring-contract -->
 
 ## Output

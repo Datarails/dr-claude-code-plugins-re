@@ -58,6 +58,19 @@ limit) is the default for summaries and totals. Page raw rows (`get_data_by_*`,
 ≤500/page) only when you need individual records. See "Async fetch — start → poll"
 below for the polling contract.
 
+### Server prefix varies by surface — match tools by name, not prefix
+
+Skills and docs here write connector tools as `mcp__datarails-finance-os__<tool>`,
+after the `mcpServers` key in `plugin.json`. Other surfaces register the same
+server under their own key — **Claude for Excel exposes it as
+`mcp__datarails__<tool>`** — so the full prefixed string from a skill body may
+match nothing there while the tool itself is present. When resolving or searching
+for a connector tool, match on the bare tool name (`start_aggregation_by_id`,
+`list_data_models`, …), never on the server prefix, and never conclude a
+capability is missing because the prefixed name failed to resolve. (Observed live
+2026-08-13: prefixed lookups from a skill body cost several failed searches and
+two failed code-execution calls before the bare name matched.)
+
 ### Backward compatibility — retired tool names (old → new)
 
 The MCP consolidated its tool surface in v3.0.0. If a user (or an old workflow /
@@ -204,8 +217,8 @@ When writing or updating a skill, copy the relevant recipe so heuristics stay co
 > 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
-> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row. **A total is obtained by summing the rows** — there is no total row to read. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
-> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
+> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row mixed into the `data` list; grand totals arrive in a separate top-level `totals` field beside the rows (`{"data": [...], "totals": {...}}`), computed across **all** groups, not just the returned prefix. **For a grand total, read `totals` — never sum the rows when the response carries `truncated: true`** (summing the returned prefix silently under-counts; dev repro: 474 of 31,455 rows summed to 21% of the true total). **`totals` combines the per-group results rather than re-scanning the rows**, so it is exact exactly when the aggregation is decomposable: SUM (sum of the group sums), COUNT (sum of the group counts), MIN, and MAX. It is **WRONG for AVG** (unweighted mean of the group averages) and **COUNT_UNIQUE** (sum of the per-group distinct counts, so a value recurring across groups is counted once per group) — true average = SUM total ÷ COUNT total (two calls: a field may be aggregated at most once per request); true distinct count = the distinct-values tools. Treat every aggregation type not named exact above — **`UNIQUE_VALUES` included**, whose cross-group de-duplication is unverified (the `COUNT_UNIQUE` behaviour above is evidence the engine may not de-duplicate across groups at all) — as not decomposable: derive it from complete rows or the distinct-values tools, never from `totals`. `totals` is absent on dimension-less aggregations (the single returned row IS the total) and may be absent on responses cached before the rollout (cache TTL ≤ 7 days) — only in those two cases is a total obtained by summing complete (untruncated) rows. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~50 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. On aggregations the top-level `totals` field is **unaffected by truncation** (computed across all groups, not just the returned prefix) — read grand totals from it instead of re-fetching. Narrow the query (fewer dimensions, more filters, fewer selected columns — or a business metric for a named KPI) and re-fetch **only when the rows themselves are needed** beyond the cap; with `totals` present, a SUM/COUNT/MIN/MAX grand total never requires a re-fetch or chunking by dimension (AVG, COUNT_UNIQUE and UNIQUE_VALUES never read `totals` — true average = SUM total ÷ COUNT total from two calls; true distinct count = the distinct-values tools). A truncated response **without** `totals` (pre-rollout cache) cannot answer a grand-total question from its prefix. Re-run the aggregation **once** — a fresh run may miss the stale entry and return `totals`. If the re-run still carries no `totals`, stop re-running and fall back to narrowing or chunking by dimension until the responses are complete, then sum those rows. Never total the prefix.
 
 **KPI honesty (inline into every skill/agent that renders KPI cards, dashboards, or executive summaries):**
 
@@ -336,6 +349,17 @@ batch) **before reading or reporting any value**. A freshly written DR.GET shows
 and never satisfy the refresh with native Excel recalc. This is the most common
 Excel-context mistake. (Connector: `excel-context__internal refresh-after-insert`.)
 
+**MANDATORY: confirm the LAYOUT before building any multi-period grid.** Any skill about to
+write an analysis grid spanning two or more scenario sides (actual / plan / forecast) across
+periods **must ask the user which layout they want**, in the same clarifying turn as scope and
+granularity, before pulling data and before writing a cell. Offer **side by side** (`Actual │
+Plan` column pair per period, variance columns at the far right — recommend this), **stacked
+blocks**, or **totals only**; on a deferred answer use side-by-side and say so. In **enrichment
+mode** the user's existing structure wins. Layout is formula topology, not cosmetics — changing
+it later means rebuilding the grid, and a side-by-side grid's two-columns-per-period stride
+breaks cross-sheet links into single-scenario source blocks (`datarails-excel-agent__internal`
+§7). Reference implementation: `forecast-variance` Step 2b.
+
 **MANDATORY: elaborating on DR-backed data → offer a drill-down.** When the user wants
 to go deeper on a figure or section — *"explain / elaborate / break down / dig into / what
 makes up / why is X / show me the detail"* — and you are in Excel context, first determine
@@ -362,10 +386,22 @@ in Excel context — DR cells in scope? drill-down offered? If yes-then-no, add 
 
 - `agent.get_session` success is the **only** authoritative Excel context signal.
   Never infer context from user wording.
-- `isConnected` is **not** a guard condition. Refresh, DR-formula reads, and
-  evaluate all work on an unconnected workbook. `connect_file` is required only
-  for `create_dynamic_range` and `drilldown_*`, and requires explicit user
-  confirmation — never called automatically.
+- `isConnected` is **not** a guard condition. Refresh, DR-formula reads, evaluate
+  **and every `drilldown_*`** work on an unconnected workbook. `connect_file` is
+  required only for `create_dynamic_range`, and requires explicit user confirmation
+  — never called automatically. Never gate a drill on `isConnected`, and never tell a
+  user drill-down is unavailable because the workbook is unconnected.
+- **A successful `drilldown_*` returns `data: null` and writes a new worksheet** —
+  an empty payload is success, not failure. Read the result off the created sheet; row 1
+  echoes the source cell's filter context and serves as the citation in place of
+  `data.sources[]` (`datarails-excel-agent__internal` §6). The drill-hazard protocol
+  (confirm, snapshot, repair, keep-or-delete) lives in `/dr-drilldown` Step 0.
+- **Probe before declaring any bridge capability unavailable, and never file a bug on a
+  bridge command** until you have (a) run it, (b) re-read the fetched manual's catalog row
+  for it, and (c) retried with the manual's exact params — same spirit as the server-prefix
+  note above: one failed lookup is not a missing capability. An empty payload is not an error
+  either (see the drill rule above). If a probe contradicts a claim you already made to the
+  user, correct it in one line and move on.
 - `refresh_ribbon` is offered once per invocation and only when Excel context
   is confirmed. Never re-asked on follow-up questions in the same session.
 - `refresh-after-insert` is **specific to DR.GET formula insertion** — fires
@@ -375,11 +411,30 @@ in Excel context — DR cells in scope? drill-down offered? If yes-then-no, add 
   `DR.GET`/`DR.QTD`/`DR.YTD`/etc., any DR function). Cold-question mode (raw API
   values from the MCP aggregation tools) always skips drill-down.
 
-**One named exception, not a blanket reprieve:** `forecast-variance` is the
-single remaining skill with inline Excel-context logic (its Step 0/0b guard —
-duplication-audit finding L12, tracked for migration to Anchors A/B/C). No
-other skill may inline Excel-context detection, and no new inline copies may
-be added — new or edited skills always use the delegation anchors.
+**Inline Excel-context logic is sanctioned in two forms — audit finding L12 is
+retired, its premise reversed by live evidence.** L12 tracked `forecast-variance`'s
+inline Step 0/0b guard as debt awaiting migration to the delegation anchors. Two
+2026-08-13 sessions on the Claude-for-Excel surface showed the delegation model is
+the weaker one there: a runtime `read_skill` hop into a `user-invocable: false`
+connector is exactly the kind of handoff that never happens when no skill has
+routed yet (the same reason the DR.GET contract is inlined rather than referenced
+— see above). The sanctioned forms:
+
+- **A full inline Step 0 workflow** for skills whose behavior *changes* in Excel
+  context: `forecast-variance` (the original, now the reference implementation)
+  and `get-formula` (its Step 0/7-A/8-A, modeled on it).
+- **The synced Excel-context routing preamble** for file-producing skills that
+  cannot deliver in Excel context and must detect + decline + route honestly:
+  canonical copy at `docs/internal/excel-context-preamble.md`, inlined verbatim
+  into the 8 report/workbook generators, kept byte-identical by
+  `tools/sync-excel-context-preamble.py` (CI-checked; edit the canonical file,
+  never an inlined copy, then `--write`).
+
+`excel-context__internal` remains the delegation target where a skill is already
+running and wants the guard/refresh/drilldown patterns mid-flow. What no skill may
+do is invent a *third* variant: new skills take the preamble (file producers) or
+copy the `forecast-variance` Step 0 shape (Excel-behavior skills), never a bespoke
+probe.
 
 ### Plugin Content Types
 
