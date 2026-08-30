@@ -68,8 +68,25 @@ tables can be hundreds of columns wide in some orgs.
 Format results as a readable table. Highlight any notable patterns. If a result
 is empty, say so plainly (it may be a too-narrow filter, not missing data). If a
 response carries `"truncated": true`, the returned rows are an incomplete
-prefix — narrow the query per the `guidance` (more filters / fewer columns /
-lower limit+offset paging) and re-fetch; never present the prefix as complete.
+prefix — never present the prefix as complete, and **never sum it** (summing a
+truncated prefix silently under-counts). For a grand total, read the top-level
+`totals` field beside the rows (`{"data": [...], "totals": {...}}`) — it is
+computed across all groups, not just the returned prefix, so truncation does
+not affect it. It combines the per-group results rather than re-scanning the
+rows, so it is exact only where the aggregation is decomposable: SUM, COUNT,
+MIN and MAX. It is **wrong for AVG** (unweighted mean of group averages —
+recompute as SUM total ÷ COUNT total from two calls, since a field may be
+aggregated at most once per request), **COUNT_UNIQUE** (sum of per-group
+distinct counts) and **UNIQUE_VALUES** (cross-group de-duplication unverified)
+— for a distinct count use the distinct-values tools instead.
+`totals` is absent on dimension-less aggregations (the single row IS the total)
+and may be absent on responses cached before the rollout. Narrow the query per
+the `guidance` (more filters / fewer columns / lower limit+offset paging) and
+re-fetch **only when the rows themselves are needed** beyond the cap — with one
+exception: a truncated response **without** `totals` cannot answer a
+grand-total request from its prefix. Re-run the aggregation once — a fresh run
+may miss the stale entry and return `totals`. If it still carries none, narrow
+or chunk by dimension until complete and sum those rows; never total the prefix.
 
 ## Arguments
 

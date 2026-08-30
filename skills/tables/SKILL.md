@@ -65,9 +65,18 @@ If any Datarails tool call fails with an authentication or connection error, tel
 - Useful for understanding categorical data
 - If a distinct-values call errors, fall back to sampling rows and dedupe client-side
 - On `"truncated": true` in any data response, the returned rows are an
-  incomplete prefix — narrow the query per the `guidance` (more filters / fewer
-  columns / lower limit+offset paging) and re-fetch; never present the prefix as
-  complete
+  incomplete prefix — never present the prefix as complete or sum it for a
+  total. Aggregation responses carry exact grand totals in a top-level `totals`
+  field (computed across all groups, not just the returned prefix, so it is
+  unaffected by truncation; it combines the per-group results, so it is exact
+  only for SUM/COUNT/MIN/MAX — never read it for AVG, COUNT_UNIQUE or
+  UNIQUE_VALUES) — read the
+  total there; if a truncated aggregation lacks `totals` (pre-rollout cache),
+  re-run it once (a fresh run may return `totals`) and, if it still lacks them,
+  narrow or chunk until complete rather than totaling the prefix;
+  narrow the query per the `guidance` (more filters / fewer
+  columns / lower limit+offset paging) and re-fetch only when the rows
+  themselves are needed
 
 ## Arguments
 

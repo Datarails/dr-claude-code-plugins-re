@@ -63,7 +63,7 @@ response (see the Excel Context Contract in CLAUDE.md, §Transport). Do **not** 
   - **Flex** (response has `isLoggedIn`): if `isLoggedIn` is **false**, tell the user to sign in to Datarails and **stop** — do not reach Step 0b. If **true**, proceed to Step 0b.
   - **COM** (response has no `isLoggedIn` — it exposes `isConnected` instead): a successful probe means the session is active. Proceed to Step 0b. Do **not** treat `isConnected: false` as a login failure.
 
-> **Do NOT gate analysis on `isConnected`.** Refresh, DR-formula reads, and evaluate all work on an unconnected workbook. `connect_file` is required **only** for `create_dynamic_range` and `drilldown_*`, and **only on COM** (Flex sessions have no `isConnected` field). Check `isConnected` at the drill-down step (Step 6), not here, and only when the session payload contains it. If a drill needs it and `isConnected` is false, ask: *"This drill-down requires the workbook connected to Datarails. Connect now with `connect_file`?"* — wait for explicit yes (mutating command, never auto-call).
+> **Do NOT gate analysis on `isConnected`.** Refresh, DR-formula reads, evaluate **and drill-down** all work on an unconnected workbook. `connect_file` is required **only** for `create_dynamic_range`, and **only on COM** (Flex sessions have no `isConnected` field). Do not check `isConnected` here or at Step 6, and never tell the user a drill is blocked because the workbook is unconnected.
 
 **Step 0b — Data refresh (ask once per session, Excel context only):** If `agent.get_session` succeeded, ask: *"Should I refresh data from Datarails before pulling? (Recommended if you haven't refreshed today.)"* If the user confirms, call `refresh_ribbon` (`timeoutMs: 600000`) and wait for terminal status. Skip if the user says no. **On follow-up questions in the same session, do NOT re-ask or re-refresh** — data is already fresh. In non-Excel context, skip entirely — `refresh_ribbon` is not available.
 
@@ -94,8 +94,8 @@ If the schema genuinely has no identifiable cost center field, flag this in the 
 > 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
-> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row. **A total is obtained by summing the rows** — there is no total row to read. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
-> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
+> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row mixed into the `data` list; grand totals arrive in a separate top-level `totals` field beside the rows (`{"data": [...], "totals": {...}}`), computed across **all** groups, not just the returned prefix. **For a grand total, read `totals` — never sum the rows when the response carries `truncated: true`** (summing the returned prefix silently under-counts; dev repro: 474 of 31,455 rows summed to 21% of the true total). **`totals` combines the per-group results rather than re-scanning the rows**, so it is exact exactly when the aggregation is decomposable: SUM (sum of the group sums), COUNT (sum of the group counts), MIN, and MAX. It is **WRONG for AVG** (unweighted mean of the group averages) and **COUNT_UNIQUE** (sum of the per-group distinct counts, so a value recurring across groups is counted once per group) — true average = SUM total ÷ COUNT total (two calls: a field may be aggregated at most once per request); true distinct count = the distinct-values tools. Treat every aggregation type not named exact above — **`UNIQUE_VALUES` included**, whose cross-group de-duplication is unverified (the `COUNT_UNIQUE` behaviour above is evidence the engine may not de-duplicate across groups at all) — as not decomposable: derive it from complete rows or the distinct-values tools, never from `totals`. `totals` is absent on dimension-less aggregations (the single returned row IS the total) and may be absent on responses cached before the rollout (cache TTL ≤ 7 days) — only in those two cases is a total obtained by summing complete (untruncated) rows. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~50 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. On aggregations the top-level `totals` field is **unaffected by truncation** (computed across all groups, not just the returned prefix) — read grand totals from it instead of re-fetching. Narrow the query (fewer dimensions, more filters, fewer selected columns — or a business metric for a named KPI) and re-fetch **only when the rows themselves are needed** beyond the cap; with `totals` present, a SUM/COUNT/MIN/MAX grand total never requires a re-fetch or chunking by dimension (AVG, COUNT_UNIQUE and UNIQUE_VALUES never read `totals` — true average = SUM total ÷ COUNT total from two calls; true distinct count = the distinct-values tools). A truncated response **without** `totals` (pre-rollout cache) cannot answer a grand-total question from its prefix. Re-run the aggregation **once** — a fresh run may miss the stale entry and return `totals`. If the re-run still carries no `totals`, stop re-running and fall back to narrowing or chunking by dimension until the responses are complete, then sum those rows. Never total the prefix.
 
 ### Step 1b — Resolve the scenario domain and the plan side (never assume `Budget` exists)
 
@@ -131,6 +131,30 @@ Before pulling data, read what is in the active sheet:
 - **Cold-question mode**: the sheet is empty or unrelated. Build a fresh variance block from scratch, including Commentary + Source Ref columns from the start.
 
 Do not assume which mode — read the sheet first.
+
+### Step 2b — Confirm comparison, granularity AND layout (before any write)
+
+Ask all three in one `ask_user_question` turn, before pulling data and before writing any cell.
+Layout is formula topology, not cosmetics — changing it later means rebuilding the grid, so never
+pick it silently.
+
+1. **Comparison** — offer only the sides Step 1b resolved (e.g. actuals vs plan YTD, forecast vs
+   plan full-year, both).
+2. **Granularity** — e.g. cost centre × period, cost centre totals only, with an account split.
+3. **Layout** — one of:
+
+| Layout | Shape |
+|---|---|
+| **Side by side per period** (recommend this) | `Actual │ Plan` column pair under each period header; YTD totals, Δ$, Δ%, Status, Commentary at the far right. The compared numbers sit adjacent. |
+| Stacked blocks | Separate actuals / plan / variance grids down the sheet. Compact per row; the reader jumps between blocks to compare one figure. |
+| Totals only | One row per member — Actual, Plan, Δ$, Δ%, Status, Commentary. No period columns. |
+
+User defers ("you choose") → use side-by-side, say so in one line. **Enrichment mode:** the user's
+existing structure wins — confirm you'll match it rather than restructuring their sheet.
+
+Side-by-side advances **two** columns per period while a single-scenario source block advances one,
+so give each side its own DR formula rather than linking across (stride trap —
+`datarails-excel-agent__internal` §7).
 
 ### Step 3 — Pull data using the discovered dimensions (in parallel)
 
@@ -233,7 +257,11 @@ If either condition is false, skip this step entirely and state why:
 - Non-Excel context → `drilldown_list` not available.
 - **Cold-question mode** → data cells were written as **raw values** from the FinanceOS API (`start_aggregation_by_alias` → `get_aggregation_result_by_alias`), not DR formulas. `drilldown_list` targets DR formula cells — it has nothing to act on. Tell the user drill-down is unavailable in this mode.
 
-> **Drill-down works on any DR function cell**, not just `DR.GET`. The cell must resolve to a Datarails widget (DR.GET/QTD/YTD/MTD/...). Before firing, if `isConnected` is false, confirm `connect_file` with the user (see Step 0).
+> **Drill-down works on any DR function cell**, not just `DR.GET`. The cell must resolve to a Datarails widget (DR.GET/QTD/YTD/MTD/...).
+>
+> **No connection needed**, and a successful drill returns `data: null` while writing a new worksheet — an empty reply is not failure; read the result off that sheet (`datarails-excel-agent__internal` §6).
+>
+> **A drill is mutating in effect** — it adds a sheet, forces the drilled cell to recalculate, and its repair refresh can move neighbouring stale numbers. Follow `/dr-drilldown` Step 0: tell the user, get an explicit yes, snapshot first, repair and report after. Never fire a drill on a variance sheet you just built without that confirmation.
 
 If both conditions are true: after writing commentary, you **MUST** output a **Drill-Down Menu** block directly in chat. Do not end the response without it.
 
@@ -252,6 +280,7 @@ Only invoke `drilldown_list` (params: `sheetName`, `cellAddress`; `timeoutMs: 18
 
 ### Anti-patterns (Excel context)
 
+- **Never choose the layout for the user** — side-by-side vs stacked vs totals-only is a Step 2b question, asked before any cell is written. Guessing costs a rebuild, not a reformat
 - **Never omit the cost center dimension** from commentary — "R&D over budget" is insufficient; name the cost center
 - **Never omit the report field dimension** — "expenses up" is insufficient; name the line item
 - **Never hardcode dimension field names** — always discover from schema; they vary by client
@@ -267,7 +296,7 @@ Only invoke `drilldown_list` (params: `sheetName`, `cellAddress`; `timeoutMs: 18
 **Variance math rules (all modes):**
 - Compute every side over the **same explicit period window** (data-scope item 3 — default the latest complete fiscal year or trailing 12 closed months, never an unscoped all-time total), pulled with identical dimensions and account scoping so rows line up.
 - **Label every table, chart, and commentary output with the period + the resolved sides it covers** (e.g., "2025-01…2025-09, Actuals vs FY25 Plan v2").
-- Apply data-scope item 4 to every aggregation response: every row is a real group and no total row is appended, so sums, shares, and variance denominators come from your own sum of the rows; read null counts only from the explicit `[null]` bucket; when COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself.
+- Apply data-scope item 4 to every aggregation response: every row is a real group and no total row is appended to the rows — grand totals and overall share denominators read from the top-level `totals` field (exact even when rows are truncated); per-side and per-bucket sums (the actual and plan legs of each variance) come from your own sum of complete rows, never a truncated prefix — note `totals` spans **all** rows of the call, so it is not a per-scenario leg; read null counts only from the explicit `[null]` bucket; when COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself.
 - Variance $ = actual − plan; variance % = variance $ / |plan|. When the plan side is zero or missing for a row, report the $ variance and mark the % as n/m — never divide by zero or fabricate a value.
 
 ### Budget Variance
@@ -347,10 +376,23 @@ workbook, the only valid form is:
   otherwise Excel autocorrects the bare token to its built-in `VALUE()` and
   the formula breaks.
 - Bare `=DR.GET(...)` only — never wrapped in IFERROR/IF/ROUND.
+- **Every rule here applies to the retrieval/period family** — `DR.GET`,
+  `DR.QTD`, `DR.YTD`, `DR.MTD` share one form (`=DR.QTD(Value, "[Dim]",
+  CellRef, ...)`), one cell-reference discipline, one `Value` defined-name
+  requirement, one no-wrapping rule. "DR.GET" in this contract means that
+  family. Helper functions with their own documented signatures (e.g.
+  `DR.INCLUDE`, `DR.RANGE`) are **not** covered here — author those only from
+  their own documentation, never by analogy with this form.
+- **In a live Excel context, writing DR formulas and refreshing them is one
+  atomic step** — a freshly written DR cell reads `Missing` until an agent
+  refresh lands, and only read-back values may be quoted. The Excel-context
+  routing preamble (or the skill's own Step 0 workflow) owns that procedure;
+  this contract owns the formula text.
 
 The get-formula skill (`/dr-get-formula`) is the full reference — parameter
 cells, validated dimension values, report layouts. Prefer it for whole formula
-workbooks; apply this contract when adding DR.GET formulas to a workbook here.
+workbooks; apply this contract when adding any retrieval/period DR formula
+(`DR.GET`/`DR.QTD`/`DR.YTD`/`DR.MTD`) to a workbook here.
 <!-- end:drget-authoring-contract -->
 
 ## Output
@@ -497,7 +539,7 @@ Works with:
 - `/dr-dashboard` - Current performance view
 - **Excel Add-In bridge** - In Excel context (see the Excel Context Contract in CLAUDE.md for exact params/timeouts):
   - `agent.get_session` — verify Excel context + login state (Step 0)
-  - `connect_file` — connect workbook; **only** needed for `create_dynamic_range` / `drilldown_*`, confirm with user first
+  - `connect_file` — connect workbook; **only** needed for `create_dynamic_range` (**not** for `drilldown_*` — that works unconnected), confirm with user first
   - `refresh_ribbon` — refresh stale data before pulling (`timeoutMs: 600000`); ask once per session
   - `agent.read_range` / `agent.evaluate_drget` — read a DR formula cell's value + `data.sources[]` for citation
   - `drilldown_list` — cell-level breakdown on large-variance rows after analysis (`timeoutMs: 180000`)

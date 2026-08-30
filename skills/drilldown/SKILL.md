@@ -51,11 +51,14 @@ Drill into any cell that contains Datarails data to see the underlying line-item
 
 ## Verify Connection
 
-If any Datarails tool call fails with an authentication or connection error, tell the user:
+If a `datarails-finance-os` **connector** call fails with an authentication or connection error, tell the user:
 
 > The Datarails connector isn't connected. Click the **"+"** button next to the prompt, select **Connectors**, find **Datarails**, and click **Connect**.
 
 Then STOP — do not retry until the user has reconnected.
+
+(A failed Excel-context guard probe is **not** this case — that is normal detection,
+per Step 0, and never a reason to send the user to Connectors UI.)
 
 ## Workflow
 
@@ -69,13 +72,50 @@ Contract (see CLAUDE.md — do not probe `agent.get_session` inline).
 - **Excel context active** (guard returns `excel_context: true` — live workbook + add-in bridge):
   **Delegate DR formula cells to the add-in agent drill-down. Do NOT use the openpyxl/MCP path below.**
   1. Resolve the target cell address (`sheetName` + `cellAddress`) from the user's reference / current selection.
-  2. Confirm the cell holds a DR formula (`DR.GET`/`DR.QTD`/`DR.YTD`/`DR.MTD`/… — any DR function), directly or via a formula chain whose precedents are DR cells. If it's a static value or a non-DR formula with no DR precedents → tell the user drill-down needs a DR cell; stop.
-  3. Fire the add-in agent drill-down (via the Excel Add-In bridge — see the Excel Context Contract in CLAUDE.md):
+  2. Confirm the drill target **is itself a DR formula cell** (`DR.GET`/`DR.QTD`/`DR.YTD`/`DR.MTD`/… — any DR function). `drilldown_*` acts on DR widget cells only — never pass it the address of a non-DR cell. If the referenced cell is an ordinary formula over DR precedents (e.g. `=N35-H35`), **resolve to the precedent**: one DR precedent → drill that cell (and say so); several → list them and ask which to drill. A static value or a formula with no DR precedents → tell the user drill-down needs a DR cell; stop.
+  3. **Tell the user what a drill does to their workbook — before firing.** A drill is
+     not read-only. Three side effects, all observed live (2026-08-13, COM transport):
+     - **The add-in renders its output as new sheets** (`Drill Down 1`, `Pivot Drill
+       Down 1`, …) — one per drill, and they stay after the answer is delivered.
+     - **Drilling forces the target cell to recalculate.** A DR function returns
+       `Missing` until refreshed, so the drilled cell — and every formula depending on
+       it — can go `Missing` / `#VALUE!` the moment the drill lands (observed cascading
+       through a whole variance column).
+     - **The repair refresh can move neighbouring numbers.** Refreshing the broken
+       cells repulls every DR cell in its scope; any that were stale move to their
+       current values — observed shifting two untouched cells and a downstream YTD
+       total the user never asked to change.
+     One sentence suffices ("drilling adds a breakdown sheet and refreshes the drilled
+     cells — stale values in that range will update"). **Then ask, and wait for an
+     explicit yes before firing** — the drill is mutating in effect, the add-in will
+     not prompt (confirmation is always the caller's responsibility per the
+     mutating-command rule), and if the sheet is a carefully staged snapshot (board
+     pack, locked forecast) the update may be exactly what the user does not want. If
+     they decline, offer the read-only alternative: the MCP aggregation path
+     approximates the breakdown without touching the workbook. Skip re-asking only
+     when the user has already authorized drilling in this same session.
+  4. **Snapshot before firing.** Read and keep (`get_cell_ranges`) the current values of
+     the drilled cell, its dependents, and the surrounding DR block the user is looking
+     at — this is the baseline that makes step 7's before → after report a measurement
+     instead of a guess. It is one cheap read of cells already on screen.
+  5. Fire the add-in agent drill-down (via the Excel Add-In bridge — see the Excel Context Contract in CLAUDE.md):
      - **default / list breakdown** → `drilldown_list` (`sheetName`, `cellAddress`; `timeoutMs: 180000`)
      - **break down by a field** (`--by` / pivot) → `drilldown_by_pivot` (`sheetName`, `cellAddress`, `rowField`; optional `targetTemplateId`/`targetTemplateName`). **`rowField` is exactly one field** — if `--by` listed several, pass the first and tell the user a pivot drills one field at a time.
-  4. The add-in resolves `dr_control` filters, dates (EOMONTH), and totals **natively** — do not re-derive them. Present what the bridge returns (cite `data.sources[]`). **Skip Phases 0–5.**
+  6. **Read the result off the sheet — the bridge returns no data.** A successful drill's envelope is `{"status":"done","final":true}` with **`data: null`**; that is success, not failure. Find the sheet step 3 warned about by diffing the worksheet collection before/after, and read its used range. Row 1 echoes the source cell's filter context as `Source: | [<dimension>]:<member> | …` — one segment per filter the cell resolved, with dimension and member names discovered from the workbook at runtime, never assumed. **Use that row as the citation in place of `data.sources[]`**, and check it matches the cell you meant to drill. A pivot drill's total should equal the DR cell it came from; if it doesn't, say so rather than presenting the rows. The add-in resolves `dr_control` filters, dates (EOMONTH), and totals **natively** — do not re-derive them. **Skip Phases 0–5.**
+  7. **Repair and report — the drill isn't done when the answer is.**
+     - Read the drilled cell and its dependents back. If any show `Missing` / `#VALUE!`,
+       repair with `refresh_selected_cells_ribbon` scoped to the affected DR cells —
+       never `refresh_ribbon` — then read back again and confirm clean.
+     - Diff against the step-4 snapshot and report every changed cell with before →
+       after, **naming the range you compared**. Those are usually truer numbers (stale
+       cells catching up to the source), but they are a change to the user's model they
+       did not ask for; a shifted total with no explanation is how quiet errors get
+       trusted. An empty diff is reported as "nothing moved in <range>" — a claim the
+       snapshot lets you stand behind — never as an unqualified all-clear.
+     - Name the drill sheets that were created and ask whether to keep them as evidence
+       or delete them. Never delete them unasked.
 
-  **Connection:** `drilldown_*` requires the workbook connected. **Let the Excel-context connector handle this gate** (per the Excel Context Contract) — its Connection requirement checks `isConnected` (a COM-only field; no gate on Flex) and prompts for explicit `connect_file` confirmation when needed. Do not probe or branch on `isConnected` here.
+  **Connection: none needed.** `drilldown_*` works on an **unconnected** workbook. Do not probe or branch on `isConnected`, and never tell the user a drill is unavailable because the workbook is unconnected. If a drill genuinely fails, read the envelope's `errorCode`/`errorMessage` and re-check param names against the fetched manual before concluding anything — never report a drill failure you have not probed (see `CLAUDE.md`'s Excel Context Contract). (`connect_file` is still required for `create_dynamic_range`.)
 
 - **No Excel context, file provided** (guard returns `excel_context: false` — Claude Code with `--file`, no bridge): use the MCP/openpyxl workflow (Phases 0–5 below).
 
@@ -326,11 +366,11 @@ Example for `=B6-B7` where B6 = DR.GET(Revenues) and B7 = DR.GET(COGS):
 
 **This step is CRITICAL. Never skip it.**
 
-If a result arrives with `"truncated": true`, the rows are an incomplete prefix — narrow the query per the `guidance` (more filters / fewer columns / lower limit+offset paging) and re-fetch before validating; never present the prefix as complete.
+If a result arrives with `"truncated": true`, the rows are an incomplete prefix, but the top-level `totals` field beside them is still exact for the SUM used here — computed across all groups, not just the returned prefix, so truncation does not affect it. Run the validation below against `totals`, **never by summing truncated rows** (summing the prefix silently under-counts and would fail the match against the cell). The presented breakdown, however, still needs complete rows: narrow the query per the `guidance` (more filters / fewer columns / lower limit+offset paging) and re-fetch before presenting; never present a truncated prefix as the complete breakdown.
 
 After receiving the aggregation results:
 
-1. Sum all the `Amount` values in the drill-down result.
+1. Take the grand total of the `Amount` values in the drill-down result — read it from the top-level `totals` field when present (exact even under truncation); sum the rows only when `totals` is absent **and** the response is complete (dimension-less aggregations omit `totals` — the single row IS the total — and responses cached before the rollout may omit it). A truncated response without `totals` can validate nothing — re-run the aggregation once (a fresh run may return `totals`); if it still carries none, narrow or chunk until the rows are complete and sum those, and never validate against a prefix.
 2. Compare this total to the original cell value (cached value from the workbook).
 3. Check the match:
 

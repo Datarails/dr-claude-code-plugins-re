@@ -68,8 +68,8 @@ Connect).
 > 1. **Scenario domain.** Pull distinct values of the scenario field (`start_distinct_values_by_alias`/`_by_id` → poll the matching result tool) — never assume a scenario name exists (`Budget` frequently doesn't; many orgs carry only `{Actuals, Forecast}`). For budget/plan questions, if no budget-like scenario exists, look for a planning-version-like field (alias/name matching `/plan|version|cycle|budget/i`) and use its versions as the plan side; if neither exists, say so and offer a comparison across the scenarios that do exist.
 > 2. **Account grain.** Pull distinct values of each account-hierarchy level field (L0/L1/L2-like). Use the level whose values partition P&L flows into revenue/COGS/opex-like buckets — on many orgs the top level is the balance-sheet equation (ASSET/LIABILITY/EQUITY/INCOME) and P&L line items live one level deeper. For P&L work, scope to P&L flows and exclude balance-sheet buckets; never present asset/liability/equity totals as revenue or expenses.
 > 3. **Period scope.** Discover the date field's range (distinct values of the reporting-month field, or MIN and MAX in two separate calls — one aggregation per field per call). Default every P&L question to the latest complete fiscal year (or trailing 12 closed months) — never an unscoped all-time total: financials tables are multi-year cumulative and mix balance-sheet stock with P&L flow. **Label every output with the period + scenario it covers.**
-> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row. **A total is obtained by summing the rows** — there is no total row to read. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
-> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~100 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. Follow the `guidance`: narrow the query (fewer dimensions, more filters, fewer selected columns) or use a business metric for a named KPI, then re-fetch.
+> 4. **Reading GROUP BY responses.** Each response returns **exactly one row per requested group** — no subtotal rows and no grand-total row mixed into the `data` list; grand totals arrive in a separate top-level `totals` field beside the rows (`{"data": [...], "totals": {...}}`), computed across **all** groups, not just the returned prefix. **For a grand total, read `totals` — never sum the rows when the response carries `truncated: true`** (summing the returned prefix silently under-counts; dev repro: 474 of 31,455 rows summed to 21% of the true total). **`totals` combines the per-group results rather than re-scanning the rows**, so it is exact exactly when the aggregation is decomposable: SUM (sum of the group sums), COUNT (sum of the group counts), MIN, and MAX. It is **WRONG for AVG** (unweighted mean of the group averages) and **COUNT_UNIQUE** (sum of the per-group distinct counts, so a value recurring across groups is counted once per group) — true average = SUM total ÷ COUNT total (two calls: a field may be aggregated at most once per request); true distinct count = the distinct-values tools. Treat every aggregation type not named exact above — **`UNIQUE_VALUES` included**, whose cross-group de-duplication is unverified (the `COUNT_UNIQUE` behaviour above is evidence the engine may not de-duplicate across groups at all) — as not decomposable: derive it from complete rows or the distinct-values tools, never from `totals`. `totals` is absent on dimension-less aggregations (the single returned row IS the total) and may be absent on responses cached before the rollout (cache TTL ≤ 7 days) — only in those two cases is a total obtained by summing complete (untruncated) rows. Null groups arrive explicitly labeled `[null]` and are real groups; read null counts from that bucket. **Defensive filter:** keep only rows in which **every requested dimension key is present** — a roll-up row *omits* one or more keys entirely, whereas a genuine null is *present* with the value `[null]`. On a correct response this is a no-op; it guards against a stale cached response still carrying legacy subtotal and grand-total rows, each of which equals the whole total and would inflate any sum. When COUNT-ing rows per group, aggregate a different field than the GROUP BY dimension itself — a same-field COUNT of the grouped dimension can 500.
+> 5. **Truncated results.** Any data tool may return `{"data": [...], "truncated": true, "total_rows": N, "returned_rows": M, "guidance": "..."}` when the result exceeds the response size limit (~50 KB). The `data` prefix is **incomplete** — never compute totals, shares, or trends from it, and never present it as the full result. On aggregations the top-level `totals` field is **unaffected by truncation** (computed across all groups, not just the returned prefix) — read grand totals from it instead of re-fetching. Narrow the query (fewer dimensions, more filters, fewer selected columns — or a business metric for a named KPI) and re-fetch **only when the rows themselves are needed** beyond the cap; with `totals` present, a SUM/COUNT/MIN/MAX grand total never requires a re-fetch or chunking by dimension (AVG, COUNT_UNIQUE and UNIQUE_VALUES never read `totals` — true average = SUM total ÷ COUNT total from two calls; true distinct count = the distinct-values tools). A truncated response **without** `totals` (pre-rollout cache) cannot answer a grand-total question from its prefix. Re-run the aggregation **once** — a fresh run may miss the stale entry and return `totals`. If the re-run still carries no `totals`, stop re-running and fall back to narrowing or chunking by dimension until the responses are complete, then sum those rows. Never total the prefix.
 
 2. `profile_numeric_fields(table_id)` — SUM/AVG/MIN/MAX/COUNT per
    numeric field. **Reading the response:** it arrives in the
@@ -107,7 +107,11 @@ those are real groups. On a correct response this keeps everything; during the
 stale-cache window it drops legacy roll-up rows that would otherwise inflate
 the missing-value denominator, always satisfy `COUNT > 1` for duplicate
 detection, and shift rare-category thresholds. **Every recipe below runs on
-`valid_rows`,** and the total-rows denominator is the sum of its group counts.
+`valid_rows`,** and the total-rows denominator reads from the response's
+top-level `totals` COUNT when present (exact even under truncation); when
+`totals` is absent (stale pre-rollout cache — the same window that can carry
+roll-up rows), it is the sum of `valid_rows` group counts from a complete
+response.
 
 For each anomaly category, apply the recipe below to the aggregates from
 step 2. Scope every aggregate to the period from the data-scope preamble
@@ -137,10 +141,12 @@ with the period + scenario it covers.
 - From the `get_aggregation_result_by_id` GROUP BY result, the null group
   arrives explicitly labeled `[null]` — read the null count from that
   bucket only. The response carries **one row per group and no total
-  row**, so the total-rows denominator is the **sum of all group counts**
-  (including `[null]`); compute it yourself — counting a total row
-  as one inflates null rates toward 100% and fakes a giant duplicate.
-  Null rate = `[null]` bucket count ÷ that summed total. (Or filter
+  row in the data** — the total-rows denominator is the top-level `totals`
+  COUNT when present (exact even under truncation), else the **sum of all
+  group counts** (including `[null]`) from a complete response — counting a
+  legacy total row as one inflates null rates toward 100% and fakes a giant
+  duplicate.
+  Null rate = `[null]` bucket count ÷ that denominator. (Or filter
   directly with an advanced `is null` condition.)
 - Severity heuristic: ≥10% null on a non-nullable field → CRITICAL;
   ≥1% → HIGH; <1% → LOW.
@@ -161,7 +167,8 @@ with the period + scenario it covers.
 **Rare categorical values**
 - From the per-field GROUP BY result, flag values whose frequency is
   below a small absolute threshold (e.g. `< 10` rows) or below
-  `0.01%` of total rows (denominator = the **sum of all group counts**,
+  `0.01%` of total rows (denominator = the top-level `totals` COUNT when
+  present, else the **sum of all group counts** from a complete response,
   computed client-side). These are often typos, test data, or
   stale enums.
 - Severity heuristic: usually LOW or MEDIUM unless the field is a
@@ -204,7 +211,7 @@ can re-derive it manually if they want.
 | Type | How the skill computes it |
 |------|---------------------------|
 | `outliers` | Range heuristic on `profile_numeric_fields` MIN/MAX/AVG (key-mapped from the `DR_Values` layout) |
-| `missing` | `[null]` bucket from `start_aggregation_by_id` → `get_aggregation_result_by_id` GROUP BY ÷ summed group counts |
+| `missing` | `[null]` bucket from `start_aggregation_by_id` → `get_aggregation_result_by_id` GROUP BY ÷ total-rows denominator (`totals` COUNT when present, else summed group counts) |
 | `duplicates` | `start_aggregation_by_id` → `get_aggregation_result_by_id` GROUP BY candidate key + COUNT of a different dense field, filter COUNT > 1 |
 | `rare-category` | `start_aggregation_by_id` → `get_aggregation_result_by_id` GROUP BY field + filter COUNT < threshold |
 | `temporal` | Aggregate by date dimension (or advanced date filter) + inspect for future/past-bound values |
@@ -243,7 +250,7 @@ Scanned 125,000 records | Computed 47 findings
 
 3. HIGH NULL RATE: vendor_name
    • Derived from: aggregate(group_by=[vendor_name], COUNT(amount)) →
-     [null] bucket ÷ summed group counts
+     [null] bucket ÷ total-rows denominator (totals COUNT)
    • 2,500 records (2.0%) have a null vendor_name while vendor_id
      is populated.
 
