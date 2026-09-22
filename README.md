@@ -88,6 +88,9 @@ Invoke any of these as **`/datarails-financeos:<name>`**, or just describe the t
 |-------|--------------|
 | `get-formula` | Generate Excel workbooks with live `DR.GET` formulas |
 | `drilldown` | Break a Datarails number into its line items — from a workbook cell, a pasted `DR.GET` formula, or a plain-language description (no file needed) |
+| `datarails-excel-agent` | Act on the **open** workbook through the Datarails Excel Add-In — refresh, drill a cell, insert a `DR.GET` function, publish, connect, submit. Requires the Add-In; in Claude Code it falls back to file output |
+
+> `excel-context` also ships, but you don't invoke it — it's the connector the other skills delegate to for Excel-context detection, refresh and drill-down.
 
 > A few short **command aliases** also resolve under the same namespace for common tasks — `/datarails-financeos:explore-tables`, `:data-check`, `:budget-comparison`, `:test-api` — each launches the matching skill above.
 

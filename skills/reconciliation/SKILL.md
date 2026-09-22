@@ -88,7 +88,7 @@ range — a new-sheet block is one contiguous range, so one scoped call covers a
 count — then read the range back. `refresh_ribbon` is not the tool for this: it repulls
 every DR cell in the file and can silently move numbers elsewhere in the user's model.
 It is reserved for the one case the scoped command can't cover — scattered inserts
-across multiple sheets, per `excel-context__internal`'s refresh-after-insert rule — and
+across multiple sheets, per `excel-context`'s refresh-after-insert rule — and
 even then only with the user's explicit OK, after snapshotting the DR ranges you can
 bound, reporting each changed cell in them before → after with the compared ranges
 named, and saying plainly that cells beyond them may also have updated. If the user

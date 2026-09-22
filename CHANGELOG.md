@@ -2,10 +2,52 @@
 
 Release notes for the Datarails Finance OS plugin for Claude.
 
-## [3.4.2] — 2026-08-30
+## [3.5.0] — 2026-09-22
+This release brings Datarails workbook operations — refresh, drill-down,
+inserting functions, publishing — into Claude for the first time. It is also
+about the accuracy of totals on large result sets, and about the plugin working
+properly when you run it inside Excel.
 
-This release is about the accuracy of totals on large result sets, and about
-the plugin working properly when you run it inside Excel.
+### Added
+
+- **Claude can now act on the workbook you have open.** Until now the plugin
+  could answer questions about your Datarails data and build files for you, but
+  anything touching the workbook in front of you — refreshing the numbers,
+  drilling into a cell, inserting a `DR.GET` function, publishing a range,
+  connecting or submitting — had to be done by hand. Those operations now run
+  through the Datarails Excel Add-In, so you can just ask: "refresh", "what's
+  behind this cell", "insert the revenue function at D2". Claude reads the
+  command catalog from the Add-In itself at runtime, so it always matches the
+  version you have installed rather than a list that can fall behind. It needs
+  the Add-In loaded; without it, the plugin behaves exactly as before and
+  produces files instead.
+- **Claude tells you when the Add-In has stopped listening.** The Add-In's
+  bridge can quietly detach mid-session — a closed task pane, a suspended tab —
+  after which a request would sit unanswered and Claude would wait on it until
+  it ran out of time, with nothing on screen to explain the pause. Claude now
+  checks that the Add-In is alive before waiting, and if it is not, says so and
+  asks you to reopen the task pane instead of hanging.
+
+
+- **You are asked how a multi-period grid should be laid out before it is
+  built.** Nothing previously required confirming the shape of a multi-period
+  comparison, so a layout was chosen silently and your first sight of it was
+  the finished sheet — and a wrong guess means rebuilding it, not reformatting
+  it. The variance workflow now settles the layout with you first.
+- **Drill-down says what it will leave behind before it runs.** Each drill adds
+  a worksheet that stays in the workbook afterwards. The skill now tells you
+  that up front and helps you keep or clear those sheets when you are done.
+- **Formula building can write into the workbook you have open.** It previously
+  produced formulas for you to place yourself. It can now insert them into the
+  open workbook, refresh them, and read the values back, so what it reports is
+  what the sheet actually shows.
+
+### Changed
+
+- **The formula authoring rules cover the whole retrieval family.** The rules
+  that governed `DR.GET` apply equally to the period variants `DR.MTD`,
+  `DR.QTD` and `DR.YTD`, and now say so — a period formula is written and
+  refreshed exactly like the base one.
 
 ### Fixed
 
@@ -49,28 +91,6 @@ the plugin working properly when you run it inside Excel.
   reconciliation — had no handling for running inside Excel and would take a
   route that only works outside it. Each now detects where it is running and
   chooses accordingly.
-
-### Added
-
-- **You are asked how a multi-period grid should be laid out before it is
-  built.** Nothing previously required confirming the shape of a multi-period
-  comparison, so a layout was chosen silently and your first sight of it was
-  the finished sheet — and a wrong guess means rebuilding it, not reformatting
-  it. The variance workflow now settles the layout with you first.
-- **Drill-down says what it will leave behind before it runs.** Each drill adds
-  a worksheet that stays in the workbook afterwards. The skill now tells you
-  that up front and helps you keep or clear those sheets when you are done.
-- **Formula building can write into the workbook you have open.** It previously
-  produced formulas for you to place yourself. It can now insert them into the
-  open workbook, refresh them, and read the values back, so what it reports is
-  what the sheet actually shows.
-
-### Changed
-
-- **The formula authoring rules cover the whole retrieval family.** The rules
-  that governed `DR.GET` apply equally to the period variants `DR.MTD`,
-  `DR.QTD` and `DR.YTD`, and now say so — a period formula is written and
-  refreshed exactly like the base one.
 
 ## [3.3.4] — 2026-08-09
 

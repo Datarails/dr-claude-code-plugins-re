@@ -154,7 +154,7 @@ existing structure wins — confirm you'll match it rather than restructuring th
 
 Side-by-side advances **two** columns per period while a single-scenario source block advances one,
 so give each side its own DR formula rather than linking across (stride trap —
-`datarails-excel-agent__internal` §7).
+`datarails-excel-agent` §7).
 
 ### Step 3 — Pull data using the discovered dimensions (in parallel)
 
@@ -259,7 +259,7 @@ If either condition is false, skip this step entirely and state why:
 
 > **Drill-down works on any DR function cell**, not just `DR.GET`. The cell must resolve to a Datarails widget (DR.GET/QTD/YTD/MTD/...).
 >
-> **No connection needed**, and a successful drill returns `data: null` while writing a new worksheet — an empty reply is not failure; read the result off that sheet (`datarails-excel-agent__internal` §6).
+> **No connection needed**, and a successful drill returns `data: null` while writing a new worksheet — an empty reply is not failure; read the result off that sheet (`datarails-excel-agent` §6).
 >
 > **A drill is mutating in effect** — it adds a sheet, forces the drilled cell to recalculate, and its repair refresh can move neighbouring stale numbers. Follow `/dr-drilldown` Step 0: tell the user, get an explicit yes, snapshot first, repair and report after. Never fire a drill on a variance sheet you just built without that confirmation.
 
