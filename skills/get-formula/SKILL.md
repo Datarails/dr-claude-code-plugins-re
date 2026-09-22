@@ -1,6 +1,6 @@
 ---
 name: dr-get-formula
-description: Generate Excel workbooks with DR.GET formulas that pull live financial data from Datarails. Creates P&L templates, budget models, and variance reports with validated dimension values. Self-contained — discovers the client's financials table and fields on its own, no profile or setup step required.
+description: Generate Excel workbooks with DR.GET formulas that pull live financial data from Datarails. Creates P&L templates, budget models, and variance reports with validated dimension values. Asks which account level to cut the P&L at and which design to use before building. Self-contained — discovers the client's financials table and fields on its own, no profile or setup step required.
 user-invocable: true
 allowed-tools:
   - mcp__datarails-finance-os__list_data_models
@@ -22,13 +22,14 @@ allowed-tools:
   - mcp__datarails-finance-os__get_distinct_values_by_id
   - mcp__datarails-finance-os__list_business_metrics
   - mcp__datarails-finance-os__list_xl_functions
+  - AskUserQuestion
   - Write
   - Read
   - Bash
   - execute_office_js
   - set_cell_range
   - get_cell_ranges
-argument-hint: "[--type summary|detail|budget|variance] [--year <YYYY>] [--output <file>] [--file]"
+argument-hint: "[--type summary|detail|budget|variance] [--year <YYYY>] [--level <field>] [--design datarails-default|ocean|ocean-bs|ocean-cf|ocean-summary|ocean-ebitda|genesis|genesis-bva|plain|<sheet>] [--output <file>] [--file]"
 ---
 
 # DR.GET Formula Workbook Generator
@@ -57,6 +58,8 @@ Generate Excel workbooks containing DR.GET formulas that pull live financial dat
 | `--year <YYYY>` | Calendar year for date headers | Current year |
 | `--output <file>` | Output file path. **Passing it requests file mode** — it is never ignored | `tmp/DR_GET_<type>_<YEAR>.xlsx` |
 | `--file` | Request file mode explicitly, without naming a path | Auto-detect (Step 0) |
+| `--level <field>` | Account-hierarchy field that drives one P&L row each. Passing it **skips the row-axis half of Step 6.5** | The discovered `<account_l1_5_field>` |
+| `--design <preset>` | `datarails-default`, `ocean` (variants: `ocean-bs`, `ocean-cf`, `ocean-summary`, `ocean-ebitda`), `genesis` (variant: `genesis-bva`), `plain`, or the name of a sheet **in the open workbook** to mirror. Passing it **skips the design half of Step 6.5** | Ask (Step 6.5) |
 
 ## Adapting to the client's environment
 
@@ -270,6 +273,23 @@ forward.
 
 > **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
 
+   **Also collect the whole account-level ladder, not just the default.** Which level
+   the P&L is cut at is the user's call (Step 6.5), so bind a *set* —
+   `<account_level_candidates>` — of every field whose alias/name matches an
+   account-hierarchy shape, ordered coarsest → finest by the level number in the name:
+
+   - `/^(dr_)?acc(ount)?[ _]?(group[ _]?)?l[ _]?\d+([._]\d+)?$/i` — the numbered levels
+     (`dr_acc_l0`, `dr_acc_l_0.5`, `dr_acc_l1`, `dr_acc_l1.5`, `account_group_l2`, …).
+     Sort on the number, so a half-level lands between its neighbours.
+   - `<report_field>` and the leaf account fields (`account name`, `account id`) — the
+     fine end of the ladder, after the numbered levels.
+
+   Orgs carry different subsets: one exposes `L0`…`L3`, another only `L1`/`L2`, another an
+   in-between half-level. **Never assume a fixed ladder** — the set is whatever this
+   schema returned, and hardcoding `L1`/`L2` as the alternatives is exactly the
+   client-specific assumption the plugin's Critical Rules forbid.
+   `<account_l1_5_field>` stays the **default** pick, not the only one.
+
    If `<amount_field>` or `<scenario_field>` has no clear match, ask the user
    which field to use, then continue. The cycle / planning / report fields
    are only needed for `--type budget`, `--type variance`, and `--type
@@ -311,6 +331,14 @@ fails, fall back to the by-id twin.
 #### Step 3: Discover Account Hierarchy
 
 Use the financials table (alias or id) and the fields discovered in Step 2.
+
+**Run the distinct call across `<account_level_candidates>`, not just the default field.**
+Step 6.5a offers the user each level *with the row count it would produce*, and these are
+those counts — one `start_distinct_values_*` per candidate, the same call shown below. It
+is a handful of cheap parallel calls, and without them the question degenerates into asking
+someone to pick a field name blind. If a candidate's call errors, drop it from the offered
+list rather than guessing its size — and if only one candidate survives, skip 6.5a's
+question and say which level you used.
 
 Discover the account values directly from the distinct-values API:
 ```
@@ -356,7 +384,9 @@ start_aggregation_by_alias(<financials_alias>, dimensions=[<scenario_field>], me
 
 #### Step 5: Map Parent-Child Relationships (for detail reports)
 
-For `--type detail`, discover which child values belong to which parent:
+For `--type detail`, discover which child values belong to which parent. The **parent is
+`<row_level_field>`** and the child is the next-finer entry in `<account_level_candidates>`
+— the L1.5 → L2 pair below is the default case, not the only one:
 ```
 # For each L1.5 value, find which L2 values belong to it
 # (<actuals_scenario> = the actuals-like scenario value discovered in Step 4)
@@ -391,7 +421,129 @@ registry = {
 
 **Every value in the workbook MUST come from this registry. Never hardcode or guess values.**
 
-## Datarails Brand Styling
+#### Step 6.5: Confirm the row axis and the design — ask, once, before building
+
+Discovery is done and nothing has been written yet. Two choices shape the whole
+deliverable, and both have historically been made silently on the user's behalf.
+**Ask them together, in one `ask_user_question` turn, then build** — the same
+clarifying-turn discipline `CLAUDE.md` mandates for grid layout, and for the same reason:
+both are decided before a cell is written because changing either afterwards means
+rebuilding, not reformatting. One turn, not two round trips.
+
+**Skip the question when the answer is already known:**
+
+| Situation | Do |
+|---|---|
+| `--level` / `--design` passed | Honour it, don't re-ask that half |
+| User already said it in prose ("P&L by L2", "match my Quarterly P&L tab") | Honour it, don't re-ask that half |
+| Already answered earlier in THIS conversation | Reuse it — don't re-ask on the second report |
+| No interactive user (autonomous / scheduled run) | Take both defaults, and **say in the final report which defaults you took** |
+
+##### (a) Which level should each P&L row be?
+
+Default is `<account_l1_5_field>` — the level this skill has always used, and the right
+answer for most summary P&Ls. Offer the rest of `<account_level_candidates>` alongside it,
+**with the row count each would produce**, so the choice is concrete rather than a guess
+about someone else's naming convention. You already have those counts: they are the
+distinct-value sets from Step 3, so extend Step 3's distinct call across the candidates
+(it is one `start_distinct_values_*` per field, the same call you already make).
+
+Present it as the shape of the report, not as a schema quiz — illustrative, your org's
+ladder and counts will differ:
+
+```
+How should I cut the P&L?
+
+  1. Level 1.5 — 14 rows  (default — Revenues, COGS, S&M, R&D, G&A, …)
+  2. Level 1   — 5 rows   (coarser: Revenue, COGS, OpEx, Finance, Tax)
+  3. Level 2   — 47 rows  (finer: Marketing, Sales, Salaries, Rent, …)
+  4. Report Field — 130 rows (finest — long report; consider --type detail instead)
+
+Or say a field name if you have another in mind.
+```
+
+Bind the answer as **`<row_level_field>`** and carry it forward. Everything downstream —
+Step 3's value set, the row labels, the DR.GET row dimension, the report-type layouts —
+uses `<row_level_field>`, not `<account_l1_5_field>`.
+
+**Three things that must follow the chosen level, not the default:**
+
+1. **The calculated lines.** Gross Profit / Total OpEx / Operating Income / Net Income are
+   Excel formulas over *named row groups* (see Calculated Lines below). Those groups were
+   implicitly the L1.5 names. At another level the same lines still exist but sit over
+   different row sets — re-derive which rows roll into each subtotal from the chosen
+   level's own values, and if you cannot map them confidently, **write the line items and
+   say which subtotals you left out** rather than emitting a `SUM` over a guess. A
+   plausible-but-wrong Total OpEx is worse than a missing one.
+2. **Row count sanity.** Past ~60 rows a "summary" P&L is not a summary. Say so and offer
+   `--type detail` (which nests children under parents) instead of silently emitting a
+   150-row block.
+3. **`--type detail`'s parent/child pair.** Step 5 maps parent → child. The parent is
+   `<row_level_field>`; the child is the **next finer** candidate in the ladder, not
+   hardcoded L2. If `<row_level_field>` is already the finest candidate, there is no child
+   level — say so and build the summary shape.
+
+##### (b) Which design?
+
+```
+And how should it look?
+
+  1. Datarails default  — the current Datarails brand styling (navy banner, Poppins)
+  2. Ocean style        — the Datarails template look: quiet printed statement,
+                          hairline gutters, small grey type, K-suffixed thousands
+  3. Genesis style      — the Datarails template look: navy title bar on a grey page
+                          canvas, blue bold subtotals, management-pack style
+  4. Match a sheet in this workbook — name it and I'll mirror its formatting
+  5. Plain              — values and number formats only
+```
+
+**Offer Ocean and Genesis by name; pick the *variant* yourself.** Both are families of
+geometries sharing one formatting vocabulary, and which one applies follows from what is
+being built — `ocean` for a P&L, `ocean-bs` for a balance sheet, `ocean-cf` for cash flow,
+`ocean-summary` for a one-screen statement summary, `ocean-ebitda` for a wide-label EBITDA
+P&L; `genesis` for a P&L, `genesis-bva` **only** for an actual-vs-budget report. Do not make
+the user choose between near-identical names; choose the variant from the report type and
+say which you used.
+
+`genesis-bva` runs its headings and subtotals a point larger than `genesis` because it
+carries a KPI block under Total Revenue. Using it for a plain P&L looks subtly wrong —
+headings too large for a sheet with no KPI rows to balance them. **Default to `genesis`.**
+
+**Ocean and Genesis are the shipped Datarails Template Library designs**, extracted from
+the real template workbooks and committed as presets in
+**`references/report-designs.md`**. Read that file when either is chosen — it carries each
+family's formatting vocabulary, its geometries, and the conventions common to both. **Both
+looks vary across their own source sheets**, so neither is a single spec: take the base
+variant unless the report type calls for another. Offer them by name like this whenever a user asks for
+a report; most people do not know the library exists, and "one of our standard looks" is a
+better opening than a question about styling.
+
+**Never ask the user to open, download, or fetch another file.** They are working in the
+file they have open, and the presets exist precisely so the design needs no external
+source. Options 1–3 and 5 need nothing; option 4 reads a sheet **already in this
+workbook** via `execute_office_js` (see below). There is no sixth option that involves the
+user going and getting something — if a template is not one of the presets, say so and
+offer the closest one rather than sending them to the Template Library.
+
+**Geometry travels with the preset.** Every Datarails-template preset puts labels outside
+column A (B for most, C for `ocean-summary`), starts data at D or E, and drives period
+headers off a `DR_DATE_PICKER` name rather than `$B$1`–`$B$3` parameter cells — so the
+Phase 3 Cell reference map's `$A{row}` becomes `$B{row}`/`$C{row}` and the header rows
+move. Derive every reference from the chosen variant's geometry row; never mix one
+variant's map with another's grid. This is the one place the Cell reference map is a
+**variable, not a constant** — safe only because each variant states its whole grid, so
+references stay derivable rather than guessed.
+
+**Building a balance sheet under `ocean-bs` or `ocean-summary`? Carry the balance check.**
+Those templates end with a silent `ABS(assets - liabilities&equity) < 1` guard. It is one
+cell and it is the cheapest possible detection of a row grouping that dropped or
+double-counted a line.
+
+## Datarails Brand Styling — the `default` design
+
+This is the design used when the user picks **Datarails default** in Step 6.5 (or when no
+one is there to ask). If they picked a report to mirror, this section is superseded by the
+extracted profile — see the next section.
 
 When generating Excel or PowerPoint files, apply Datarails brand styling:
 
@@ -426,6 +578,44 @@ When generating Excel or PowerPoint files, apply Datarails brand styling:
 **Variance coloring:** Any cell showing a delta/change: green (`2ECC71`) if favorable, red (`E74C3C`) if unfavorable. Apply automatically based on value sign and metric context.
 
 **PowerPoint:** Navy (`0C142B`) background, 16:9 widescreen, Poppins font, white text, amber (`FFA30F`) accent lines, card backgrounds `001F37`.
+
+## Applying a design
+
+`references/report-designs.md` holds every preset — `datarails-default`, `ocean`,
+`genesis`, `plain` — each with its own geometry table and formatting table. **Read it when
+the chosen design is anything but `datarails-default`**, and apply one preset whole. Do not
+blend two, and do not carry a facet you did not read: half of Genesis over half of Ocean is
+neither.
+
+The `ocean-*` and `genesis` presets were extracted from the shipped Datarails Template
+Library workbooks, so choosing them is genuinely "build it in the Datarails template style"
+— no file to open, nothing to fetch, and no risk of inventing a look and calling it ours.
+`KPI for Dashboard` is deliberately **not** a preset (it is a widget-authoring workbook, not
+a report design — the reference file says what to tell a user who asks for it by name).
+
+### Option 4: mirroring a sheet in the open workbook
+
+Only when the user named a sheet **in the workbook they already have open**. Read a
+representative slice with `execute_office_js` — the header rows, one label cell, one data
+cell, one subtotal row, the date-header row — and capture: grid origin, header/banner rows,
+fonts per role, fills, number-format strings, totals treatment, indentation, date format,
+column widths, gridlines and freeze position. That slice characterises the look and is
+cheap; reading the whole sheet is not.
+
+**Copy the design, never the content.** Take formatting, geometry and number formats. Do
+**not** copy the source's row labels, values or formulas — rows come from
+`<row_level_field>`'s validated registry, every number from a fresh DR.GET. A mirrored
+report that inherits the source's hardcoded account names is wrong even when it looks
+right.
+
+If the named sheet is not in this workbook, say so and offer the presets — do not ask the
+user to go open it.
+
+### Reporting the design
+
+Step 9 names the design used. For a mirrored sheet, name the sheet and any facet that could
+not be carried over (a font that is not installed, conditional formatting, a chart);
+for a preset, name the preset. Unreported gaps read as bugs.
 
 ### Phase 3: Workbook Generation
 
@@ -485,7 +675,10 @@ writes DR.GET formulas into cells — followed by one batched refresh in Step 8-
 
 **Number formats and styling** go through `set_cell_range`'s `cellStyles`
 (`numberFormat`, `fontWeight`, `backgroundColor`), not the openpyxl calls in the Excel
-Formatting block below — that block is file mode's equivalent. The date-serial rule is
+Formatting block below — that block is file mode's equivalent. **Which** styling depends on
+the Step 6.5b answer — a preset from `references/report-designs.md`, or a profile read off
+a sheet in this workbook through `execute_office_js`. Under `ocean` / `genesis` the preset's
+geometry also moves the label and data columns, so write the block to the preset's grid. The date-serial rule is
 identical in both modes: EOM serials with an `MMM-YY` number format.
 
 Then go to **Step 8-A** — the refresh is not optional and not a follow-up task.
@@ -493,6 +686,10 @@ Then go to **Step 8-A** — the refresh is not optional and not a follow-up task
 #### Step 7-B: File generation with openpyxl
 
 Use Bash to run a Python script (inline or from file) that generates the workbook using openpyxl.
+
+Apply the preset chosen in Step 6.5b from `references/report-designs.md`, geometry
+included. File mode cannot offer option 4 (mirroring an open sheet — there is no open
+workbook), so on a `--design <sheet>` request in file mode, say that and offer the presets.
 
 **First line of workbook setup — before writing any formula:** add the
 `Value` defined name (`wb.defined_names.add(DefinedName("Value",
@@ -505,20 +702,21 @@ DR.GET formula in the file breaks.
 ##### `--type summary` (Summary P&L)
 - **Parameter cells** (Row 1-3): Scenario, Scenario Cycle, Planning Scenario
 - **Date headers** (Row 5): EOM serial dates formatted as MMM-YY
-- **P&L rows** (Row 6+): One row per L1.5 value (from registry)
-- **Calculated rows**: Gross Profit, Total OpEx, Operating Income, Net Income
+- **P&L rows** (Row 6+): One row per `<row_level_field>` value (from registry)
+- **Calculated rows**: Gross Profit, Total OpEx, Operating Income, Net Income — derived
+  from the chosen level's own row groups (Step 6.5a), not from L1.5 names
 - **Two sheets**: Actuals, Budget
 
 ##### `--type detail` (Departmental Detail)
 - Same parameter/date structure as summary
-- Rows grouped by L1.5 parent with L2 children indented
-- Subtotal rows per L1.5 group
+- Rows grouped by `<row_level_field>` parent with the next-finer level's children indented
+- Subtotal rows per `<row_level_field>` group
 
 ##### `--type budget` (Budget Template)
 - Scenario pre-set to the forecast-like scenario value discovered in Step 4
 - Scenario Cycle defaults to the current cycle from the registry (e.g. `0+12`, if the org uses cycles)
 - Planning Scenario defaults to a planning-scenario value discovered in Step 4
-- All L1.5 line items with monthly columns
+- All `<row_level_field>` line items with monthly columns
 
 ##### `--type variance` (Actuals vs Budget)
 - Two formula blocks: Actuals and Budget
@@ -528,6 +726,12 @@ DR.GET formula in the file breaks.
 #### DR.GET Formula Construction
 
 **Every DR.GET formula must be a bare `=DR.GET(...)` call. No IFERROR, no IF, no ROUND, no wrapping of any kind.**
+
+**The row dimension is `<row_level_field>` — the level chosen in Step 6.5a.** The patterns
+below are written with `{l1_5_field}` because L1.5 is the default; substitute the chosen
+field wherever it appears. Getting this wrong is silent: the formula resolves against a
+dimension whose values do not match the labels in column A, and the block fills with
+`Missing` or, worse, with plausible numbers from the wrong grain.
 
 **Actuals formula pattern:**
 ```python
@@ -578,7 +782,10 @@ ws.cell(row=gp_row, column=col).value = f'={get_column_letter(col)}{rev_row}-{ge
 
 #### Calculated Lines (No DR.GET)
 
-These P&L lines are always Excel formulas referencing other rows:
+These P&L lines are always Excel formulas referencing other rows. The row groups they span
+follow `<row_level_field>` (Step 6.5a) — at a coarser level a subtotal may collapse to a
+single line and should be dropped rather than emitted as a `SUM` of one cell; at a finer
+level it spans more rows. Never emit a subtotal whose membership you had to guess:
 
 | Line | Formula Pattern |
 |------|----------------|
@@ -660,6 +867,13 @@ user a file that fails verification.
 Both modes report: number of validated dimension values used, number of DR.GET
 formulas written, number of calculated rows.
 
+**Both modes also state the two Step 6.5 choices** — the level the rows were cut at, and
+where the design came from. Say it in one line (`Cut at Level 1.5 (14 rows), Datarails
+default styling`) so the user can tell at a glance whether they got what they meant, and
+name the default explicitly when nobody was there to ask. If a design was mirrored, name
+the source sheet or file and any facet you could not carry over; if a subtotal was dropped
+because its membership was not derivable at the chosen level, name it here too.
+
 **In-sheet mode** also reports:
 - The name of the new sheet and the range the block occupies
 - That the refresh ran and the read-back was clean — or exactly which cells still
@@ -699,6 +913,21 @@ formulas written, number of calculated rows.
 ### Actuals vs Budget variance
 ```bash
 /dr-get-formula --type variance --year 2026
+```
+
+### Cut the P&L at a different level
+```bash
+/dr-get-formula --type summary --level dr_acc_l2
+```
+
+### Build it in a Datarails template design
+```bash
+/dr-get-formula --type variance --design ocean
+```
+
+### Match the design of a sheet already in the open workbook
+```bash
+/dr-get-formula --type summary --design "Quarterly P&L"
 ```
 
 ### Custom output location (file mode)

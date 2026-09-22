@@ -264,16 +264,13 @@ in context everywhere else.
 
 ### Excel Context Contract
 
-> **Internal / desktop-only.** The Excel Add-In bridge skills this contract governs —
-> `datarails-excel-agent__internal` and `excel-context__internal` — are stripped
-> from the public mirror by the publish pipeline. This contract only applies in a live
-> Excel Add-In context (desktop); in the public/Cowork target there is no bridge, so the
-> Excel-context path is dormant and public finance skills fall through to their MCP path.
+> **Ships publicly.** The Excel Add-In bridge skills this contract governs —
+> `datarails-excel-agent` and `excel-context` — are promoted to the public mirror like
+> any other skill. The contract only *applies* where a live Excel Add-In bridge exists;
+> on a surface without one the probe fails as a normal detection result and finance
+> skills fall through to their MCP path.
 
 > **Terminology — "agent" means the `datarails-excel-agent` skill, NOT the MCP connector.**
-> (`datarails-excel-agent` is the shorthand used throughout this doc and skill bodies; the
-> component's exact frontmatter name is **`datarails-excel-agent__internal`** — folder
-> `skills/datarails-excel-agent__internal/`. Same skill.)
 > Throughout these skills, **"the agent" / "agent bridge" / "agent refresh" / "agent
 > drill-down" / "agent commands" / "agent mode"** all refer to the **`datarails-excel-agent`
 > skill**, which drives the **Datarails Excel Add-In** via the hidden `__dr_agent` bridge
@@ -289,7 +286,7 @@ in context everywhere else.
 > actuator.
 
 Any skill that offers Excel-context behavior (in-sheet enrichment, agent refresh,
-drill-down) **must delegate to `excel-context__internal`** rather than implementing
+drill-down) **must delegate to `excel-context`** rather than implementing
 Excel context detection inline. This contract applies globally; it overrides
 inline logic in individual skill files.
 
@@ -347,7 +344,7 @@ to **any skill and any write path** — `add_function_by_id`, `create_dynamic_ra
 batch) **before reading or reporting any value**. A freshly written DR.GET shows
 "Loading…" / `#BUSY!` / `#N/A` until refreshed — never present that as the value,
 and never satisfy the refresh with native Excel recalc. This is the most common
-Excel-context mistake. (Connector: `excel-context__internal refresh-after-insert`.)
+Excel-context mistake. (Connector: `excel-context refresh-after-insert`.)
 
 **MANDATORY: confirm the LAYOUT before building any multi-period grid.** Any skill about to
 write an analysis grid spanning two or more scenario sides (actual / plan / forecast) across
@@ -357,8 +354,33 @@ Plan` column pair per period, variance columns at the far right — recommend th
 blocks**, or **totals only**; on a deferred answer use side-by-side and say so. In **enrichment
 mode** the user's existing structure wins. Layout is formula topology, not cosmetics — changing
 it later means rebuilding the grid, and a side-by-side grid's two-columns-per-period stride
-breaks cross-sheet links into single-scenario source blocks (`datarails-excel-agent__internal`
+breaks cross-sheet links into single-scenario source blocks (`datarails-excel-agent`
 §7). Reference implementation: `forecast-variance` Step 2b.
+
+**MANDATORY: confirm the ACCOUNT LEVEL and the DESIGN before building an account-grouped
+report.** Any skill about to write a P&L or other account-grouped grid **must ask which level
+of the account hierarchy each row represents**, and **where the design comes from**, in the
+same clarifying turn as scope, granularity and layout — before pulling data and before writing
+a cell. Default the level to the L1.5-style field the org exposes and **offer the rest of the
+discovered ladder with the row count each would produce**; never present a hardcoded `L1`/`L2`
+pair, because the ladder is per-org (some carry `L0`…`L3`, some a half-level, some neither) and
+hardcoding it is the client-specific assumption the Critical Rules forbid. Offer the design as
+Datarails default styling, one of the **shipped Datarails Template Library looks** (the
+`ocean` family or `genesis` — extracted into `get-formula/references/report-designs.md`), mirroring a sheet
+**already open in the workbook**, or plain. On a deferred answer take both defaults **and say
+which you took**. Level is not cosmetic — it sets the row set, the
+DR.GET row dimension, and which subtotals are even derivable, so a wrong pick is a rebuild; and
+a subtotal whose membership is not derivable at the chosen level is **omitted and named**, never
+`SUM`-ed over a guess. **Never send the user off to open, download or fetch a
+file** — they are acting on the workbook they have open, which is why the template looks ship
+as committed presets rather than being read from the org at runtime (`download_file` cannot
+fetch a filebox document anyway). Never reconstruct a template's design from its name: if a
+requested look is not a preset, say so and offer the closest one. A preset carries its own
+**geometry** as well as its formatting, so the DR.GET reference map is derived from the chosen
+preset — the one sanctioned exception to a fixed cell contract, safe only because the preset
+states the whole grid. Offer the looks by name but **pick the geometry variant yourself** from
+the report type; do not make the user choose between near-identical names. Reference implementation: `get-formula` Step 6.5 +
+`references/report-designs.md`.
 
 **MANDATORY: elaborating on DR-backed data → offer a drill-down.** When the user wants
 to go deeper on a figure or section — *"explain / elaborate / break down / dig into / what
@@ -370,17 +392,17 @@ whether the figures in scope are **DR formula cells**: read them with `agent.get
 `drilldown_by_pivot` through the agent. Drill-down is the **default elaboration path** for
 DR-backed figures: do not just narrate the cached value or silently re-derive via the
 `datarails-finance-os` MCP connector when a live drill is available. (Connector:
-`excel-context__internal drilldown`.) **Checklist:** before finalizing any data-elaboration answer
+`excel-context drilldown`.) **Checklist:** before finalizing any data-elaboration answer
 in Excel context — DR cells in scope? drill-down offered? If yes-then-no, add the offer.
 
 **Four mandatory delegation points:**
 
 | Point | When | Delegate to |
 |-------|------|-------------|
-| Guard | Step 0 — before any data pull (probe Excel context + login) | `excel-context__internal guard` |
-| Refresh | Step 0b — after guard confirms Excel context | `excel-context__internal refresh` |
-| Refresh after DR.GET insert | Immediately after each `add_function_by_id` call (or batch) | `excel-context__internal refresh-after-insert` |
-| Drill-down | Final step — after analysis written to sheet | `excel-context__internal drilldown` |
+| Guard | Step 0 — before any data pull (probe Excel context + login) | `excel-context guard` |
+| Refresh | Step 0b — after guard confirms Excel context | `excel-context refresh` |
+| Refresh after DR.GET insert | Immediately after each `add_function_by_id` call (or batch) | `excel-context refresh-after-insert` |
+| Drill-down | Final step — after analysis written to sheet | `excel-context drilldown` |
 
 **Rules enforced by the connector** (bridge command IDs, not `agent.*` aliases):
 
@@ -394,7 +416,7 @@ in Excel context — DR cells in scope? drill-down offered? If yes-then-no, add 
 - **A successful `drilldown_*` returns `data: null` and writes a new worksheet** —
   an empty payload is success, not failure. Read the result off the created sheet; row 1
   echoes the source cell's filter context and serves as the citation in place of
-  `data.sources[]` (`datarails-excel-agent__internal` §6). The drill-hazard protocol
+  `data.sources[]` (`datarails-excel-agent` §6). The drill-hazard protocol
   (confirm, snapshot, repair, keep-or-delete) lives in `/dr-drilldown` Step 0.
 - **Probe before declaring any bridge capability unavailable, and never file a bug on a
   bridge command** until you have (a) run it, (b) re-read the fetched manual's catalog row
@@ -430,7 +452,7 @@ routed yet (the same reason the DR.GET contract is inlined rather than reference
   `tools/sync-excel-context-preamble.py` (CI-checked; edit the canonical file,
   never an inlined copy, then `--write`).
 
-`excel-context__internal` remains the delegation target where a skill is already
+`excel-context` remains the delegation target where a skill is already
 running and wants the guard/refresh/drilldown patterns mid-flow. What no skill may
 do is invent a *third* variant: new skills take the preamble (file producers) or
 copy the `forecast-variance` Step 0 shape (Excel-behavior skills), never a bespoke
