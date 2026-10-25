@@ -92,6 +92,8 @@ Invoke any of these as **`/datarails-financeos:<name>`**, or just describe the t
 
 > `excel-context` also ships, but you don't invoke it — it's the connector the other skills delegate to for Excel-context detection, refresh and drill-down.
 
+> `report-design` (a router) and the `report-design-*` template skills also ship as companions to `get-formula`: exact, self-contained build specs for the official Datarails report templates (the official DR SC Style set — P&L EBITDA, Balance Sheet, Cash Flow, Financial Statement Summary, KPIs). They load automatically when a statement is built in a Datarails template look in the open workbook — you don't invoke them, and nothing has to be attached.
+
 > A few short **command aliases** also resolve under the same namespace for common tasks — `/datarails-financeos:explore-tables`, `:data-check`, `:budget-comparison`, `:test-api` — each launches the matching skill above.
 
 ## The intelligence workbook

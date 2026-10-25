@@ -70,7 +70,7 @@ Sheet `__dr_agent` (very-hidden). Reference cells **by defined name**, never by 
 | `dr_agent_inbox` | A2..A_max | One JSON request per row (you write). |
 | `dr_agent_outbox` | B2..B_max | One JSON response per row (add-in writes). |
 | `dr_agent_status` | C2..C_max | `queued` → `running` → `progress*` → `done\|failed\|cancelled`. |
-| `dr_agent_listener_heartbeat` | H1 | Listener liveness (JSON; stamped ~every 2 s while the listener is driving THIS workbook). **May be absent** (older add-in) **or present-but-empty** (COM before its first command) — see below. |
+| `dr_agent_listener_heartbeat` | H1 | Listener liveness (JSON; stamped ~every 2 s while a request is in flight on THIS workbook, blanked when the listener goes idle). **May be absent** (older add-in) **or present-but-empty** (an idle listener, on COM and Flex alike) — see below. |
 
 ## Listener liveness — check BEFORE you wait
 
@@ -85,9 +85,10 @@ and Flex:
 ```js
 // Returns ONE of four states. Branch on `state` — never on booleans.
 //   "unsupported" → no heartbeat range at all (older add-in).
-//   "unstamped"   → range exists, listener has never stamped it. NORMAL on COM before your first
-//                   command (COM only heartbeats a workbook it is actively driving). Also what you
-//                   see when the add-in never loaded at all — so it is NOT a licence to wait forever.
+//   "unstamped"   → range exists and is blank. NORMAL whenever the listener is idle, on COM and
+//                   Flex alike: both stamp only while a request is in flight and blank H1 when it
+//                   drains. Also what you see when the add-in never loaded at all — so it is NOT a
+//                   licence to wait forever.
 //   "stale"       → it was stamped, but not within the last 6 s → nothing is draining the bridge.
 //   "alive"       → stamped within the last 6 s → healthy.
 async function checkListenerAlive(ctx) {
@@ -117,7 +118,7 @@ async function checkListenerAlive(ctx) {
 | `state` | Before sending | Re-checked while a row is still `queued`/empty past ~6 s |
 |---|---|---|
 | `alive` | Proceed. | Listener alive but busy — **keep waiting** (see §3: never abort on wall clock). |
-| `unstamped` | **Proceed** — do NOT block. Normal on COM pre-first-command; the first send starts the heartbeat. | **Still `unstamped` → STOP.** A running listener stamps within ~2 s of picking up work, so 6 s unstamped means nothing is draining the bridge. Surface the stalled-listener message. |
+| `unstamped` | **Proceed** — do NOT block. Normal for an idle listener on either add-in; the first send starts the heartbeat. | **Still `unstamped` → STOP.** A running listener stamps within ~2 s of picking up work, so 6 s unstamped means nothing is draining the bridge. Surface the stalled-listener message. |
 | `stale` | **STOP** — do not send, do not wait. Surface the stalled-listener message. | **STOP** — surface the stalled-listener message. |
 | `unsupported` | Proceed with the legacy §3 waits (no regression on older add-ins). | No liveness signal exists — fall through to the §5 no-pickup rule (~10 s → fallback catalog). |
 
@@ -188,6 +189,13 @@ Poll `dr_agent_outbox` row `k-2` until the envelope has `final: true`.
 **Cancel:** write `cancel-requested` into the status cell **and** increment
 `dr_agent_cancel_seq` (G1) in the same `Excel.run`. (Or send `agent.cancel_request` with the
 target `requestId`.)
+
+> **No `setTimeout` in Claude for Excel's `execute_office_js`.** The surface has no timer
+> API, so a sleep-then-check loop inside one call either fails outright or blocks without
+> ever re-reading the sheet. **Poll across separate tool calls instead**: one call writes
+> the request, a later call re-reads the outbox row. The per-command timeouts in the
+> catalog are budgets for how long to keep polling across calls, not durations to sleep
+> inside one.
 
 ## 4. First action — fetch the operating manual
 
@@ -278,6 +286,8 @@ For `drilldown_list` / `drilldown_by_pivot` / `drilldown_by_pivot_favorites_*`:
   echoes the source cell's filter context and is the citation in place of `data.sources[]`.
 - **No connection needed.** They run with `isConnected: false`. Never gate a drill on `isConnected`,
   and never tell the user a drill is blocked because the workbook is unconnected.
+
+- **Do not restyle the drill-down sheet.** A refresh re-renders it and resets cell formatting; row 1 belongs to the add-in. If the user wants a styled version, build it on a separate tab. For a chart on it, or any custom tab, load `report-design` (house style).
 
 A drill is mutating in effect and must be confirmed first — that protocol is `/dr-drilldown`
 Step 0. Do not restate it here.

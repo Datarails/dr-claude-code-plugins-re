@@ -68,8 +68,8 @@ once per conversation, then carry the values forward.
    - `<amount_field>`       — numeric: `^amount$` → `transaction_amount` → `value`
    - `<scenario_field>`     — categorical: `^scenario$` → `^version$`
    - `<date_field>`         — date/timestamp: `reporting_date` → `posting_date` → `^date$`
-   - `<account_l1_field>`   — `dr_acc_l1` → `account_l1` → `account_group_l1`
-   - `<account_l2_field>`   — `dr_acc_l2` → `account_l2` (optional, for `--breakdown`)
+   - `<account_l1_field>`   — `dr_acc_l1` → `account_l1` → `account group l1` → `account_group_l1`
+   - `<account_l2_field>`   — `dr_acc_l2` → `account_l2` → `account group l2` → `account_group_l2` (optional, for `--breakdown`)
 
 > **Alias coverage is per field, not per table.** A table having an alias does *not* mean its fields are aliased — real orgs often expose only a handful of aliased fields (e.g. ~5 of ~185 on a mapped financials table), and the load-bearing fields (`amount`, `scenario`, account groups, dates) are frequently *not* among them. Treat the alias/by-id choice **per field**: `get_fields_by_id(<id>)` returns every field with its numeric `id` and its `alias` (empty if none). Address a field by alias (via the `*_by_alias` tools) when it has one, else by numeric `id` (via the `*_by_id` tools). By-id always works — never abandon the query because the aliased set is thin.
 

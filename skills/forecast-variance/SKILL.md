@@ -370,12 +370,35 @@ workbook, the only valid form is:
 - Date cells referenced by formulas hold end-of-month **date serials**
   computed from the calendar — never raw epoch timestamps from API responses
   (epochs land a day early with a time component and never match).
-- Before writing any formula, create the workbook-scoped defined name `Value`
-  referring to the string constant `"Value"`
-  (`wb.defined_names.add(DefinedName("Value", attr_text='"Value"'))`) —
-  otherwise Excel autocorrects the bare token to its built-in `VALUE()` and
-  the formula breaks.
-- Bare `=DR.GET(...)` only — never wrapped in IFERROR/IF/ROUND.
+- The function token must resolve in the workbook before any formula is written —
+  but **how you make that true differs by mode, and using the file-mode method on
+  an open workbook silently breaks every cell.**
+  - **File mode (openpyxl):** create the workbook-scoped defined name
+    (`wb.defined_names.add(DefinedName("Value", attr_text='"Value"'))`), which
+    stops Excel autocorrecting the bare token to its built-in `VALUE()`.
+  - **In-sheet (a live workbook with the add-in):** **do not hand-create that
+    name.** A hand-made `Value` name satisfies the parser but registers no
+    widget, so every DR cell refreshes to **0** with no error, and
+    `evaluate_drget` reports `Widget not found: 'Value'`. Instead: **probe,
+    then register.** Write one DR cell to a scratch location and refresh it —
+    if it resolves to a number the widget is already registered (anything the
+    add-in authored will be), so skip registration and clear the cell. If it
+    reads `0`, register with `add_function_by_id` (confirm first; use the
+    catalog's register-only flag where it has one, otherwise insert into a
+    scratch cell and clear it), then refresh and re-read. **Classify an
+    existing name by what it points at:** a `widget_<id>_…` token is the
+    add-in's own and must be left alone, the literal `"<token>"` is the
+    hand-made trap and should be removed, anything else is a stop-and-ask.
+    An unregistered token reads `#VALUE!` (Excel autocorrects it to the
+    built-in `VALUE()`), not only `0`. Worked example: `get-formula` Step 7-A.
+- Bare `=DR.GET(...)` only — never wrapped in anything, including a leading
+  unary minus. The ban exists because refresh detection and read-back depend on
+  seeing the cell's own `Missing`/`Loading…`/`#BUSY!` sentinels: `IFERROR` hides
+  them, and arithmetic on a text sentinel turns it into `#VALUE!`, which is not
+  diagnosable. **Signs and derivations belong in the formula that aggregates the
+  cells, not in the cell** — a statement needing a negated or combined figure
+  writes bare DR.GET cells and does the arithmetic in a separate total row,
+  where each contributing sign is visible.
 - **Every rule here applies to the retrieval/period family** — `DR.GET`,
   `DR.QTD`, `DR.YTD`, `DR.MTD` share one form (`=DR.QTD(Value, "[Dim]",
   CellRef, ...)`), one cell-reference discipline, one `Value` defined-name

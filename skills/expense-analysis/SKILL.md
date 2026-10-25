@@ -69,7 +69,7 @@ once per conversation, then carry the values forward.
    - `<scenario_field>`     — categorical: `^scenario$` → `^version$`
    - `<date_field>`         — date/timestamp: `reporting_date` → `posting_date` → `^date$`
    - `<account_level_fields>` — categorical, one per hierarchy level:
-     `dr_acc_l\d` → `account_l\d` → `account_group_l\d` (collect every
+     `dr_acc_l\d` → `account_l\d` → `account group l\d` → `account_group_l\d` (collect every
      level you find — L0/L1/L2-like; the working grain among them is
      picked in item 3, and the next level down serves as breakdown
      depth)
