@@ -2,6 +2,88 @@
 
 Release notes for the Datarails Finance OS plugin for Claude.
 
+## [3.7.5] — 2026-10-25
+This release is about financial statements in the Datarails look: balance
+sheets and cash flow statements join the P&L, and reports built in a Datarails
+template now come out matching the template, colours and logo included.
+
+### Added
+
+- **Balance sheets.** Claude can now build a balance sheet from your Datarails
+  data, in the Datarails balance-sheet design — grouped into assets, liabilities
+  and equity with subtotals, and a check that the statement actually balances,
+  reported every time rather than left for you to spot.
+
+- **Cash flow statements.** Claude can now build an indirect-method cash flow —
+  net income, non-cash add-backs, working capital, investing and financing, and
+  the reconciliation to the cash movement. It reports whether the statement ties,
+  and says so plainly when it does not rather than adjusting figures until it
+  does.
+
+- **The official Datarails report templates, built for you in the open
+  workbook.** Ask for a report "in the Datarails template" and Claude now builds
+  it to the exact design of the official DR SC Style templates — P&L EBITDA,
+  Balance Sheet, Cash Flow, Financial Statement Summary and KPIs for Dashboard,
+  each with its sheet variants (year over year, budget vs actual, rolling twelve
+  months and more). Layout, colours, fonts, column widths and logos all come
+  with the plugin, so there is nothing to download or attach. Where an official
+  template has a formula mistake, Claude builds the corrected version and tells
+  you what it changed.
+
+- **A consistent look for what the templates don't cover.** Charts, extra tabs
+  with no template, and the sheet a drill-down creates now follow one Datarails
+  house style — colours, number formats and chart layout — instead of whatever
+  default the moment produced.
+
+- **Year-to-date columns.** Claude can now build a year-to-date column, and where
+  the year-to-date function's exact behaviour can't be confirmed for your
+  workbook it builds the figure from monthly values instead and tells you it
+  did, rather than guessing at which year the total covers.
+
+### Fixed
+
+- **Datarails-template reports now carry the template's colours and logo.** Asking
+  for a P&L in a Datarails template design could produce a black-and-white
+  version of the layout — the right structure with none of the design. The
+  template palettes and logos are now applied by default, so a Datarails-template
+  report looks like the template. If something genuinely can't be applied on
+  your machine — a font that isn't installed, for instance — Claude tells you
+  instead of leaving it out quietly.
+
+- **`DR.GET` cells written into an open workbook could all refresh to zero.** In
+  some cases Claude set the Datarails function up in a way that let the formulas
+  parse but return nothing, so an entire report came back as zeros with no error
+  shown. Claude now checks that the function actually resolves — writing a single
+  cell and reading it back before building the rest — so a report that would have
+  come back empty stops and says so instead.
+
+- **Report columns and totals come out right the first time more often.** Claude now
+  knows what each column of a Datarails template is for — current period, prior-year
+  comparison, variance — rather than only how wide it should be, so it stops putting
+  the right numbers in the wrong places. Period titles that used to show as `#######`
+  now fit.
+
+- **Reports are laid out like reports.** Column-group titles are centred over the
+  columns they describe, every column is labelled — including the variance
+  columns, which could previously arrive with no header — and any working
+  calculations go on a separate, clearly labelled sheet instead of hidden columns
+  inside your report.
+
+- **Asking for a monthly trend in a template design now gets a question, not a
+  guess.** The Datarails template layouts compare a period against a prior period;
+  they are not twelve-month trends. Claude now asks which you want instead of
+  stretching one into the other.
+
+- **Account groups are found on standard Datarails financials tables.** When
+  building a P&L at a chosen account level, Claude could miss the account-group
+  fields on a standard financials table and fall back to matching them by
+  display name. It now looks them up by their standard names first.
+
+- **Waiting on the Excel Add-In no longer stalls inside a single step.** Claude
+  checks back on a running Add-In command across separate steps instead of trying
+  to pause and re-check inside one, which could fail or hang without ever seeing
+  the result.
+
 ## [3.5.0] — 2026-09-22
 This release brings Datarails workbook operations — refresh, drill-down,
 inserting functions, publishing — into Claude for the first time. It is also

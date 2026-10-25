@@ -186,7 +186,7 @@ When writing or updating a skill, copy the relevant recipe so heuristics stay co
    by case-insensitive match
    on the alias/name: `amount` (numeric: `^amount$`→`transaction_amount`→`value`),
    `scenario` (`^scenario$`→`^version$`), `date` (`reporting_date`→`posting_date`→`^date$`),
-   `account_l1` (`dr_acc_l1`→`account_l1`→`account_group_l1`). Ask the user if
+   `account_l1` (`dr_acc_l1`→`account_l1`→`account group l1`→`account_group_l1`). Ask the user if
    `amount`/`scenario` is unclear.
 3. Account categories — `start_distinct_values_by_alias(<alias>, <account_alias>)` (or
    `start_distinct_values_by_id(<id>, <account_field_id>)`), then poll the matching
@@ -381,6 +381,23 @@ preset — the one sanctioned exception to a fixed cell contract, safe only beca
 states the whole grid. Offer the looks by name but **pick the geometry variant yourself** from
 the report type; do not make the user choose between near-identical names. Reference implementation: `get-formula` Step 6.5 +
 `references/report-designs.md`.
+
+**MANDATORY: a design preset is fills, heights and images — and you verify it by reading it
+back.** Any skill applying a Datarails-template design must paint **column widths, row
+heights, and a fill on every cell in the block** (bands, page canvas, gutters, spacer rows,
+white data cells, subtotal stripes) before it touches fonts, and must place the preset's
+logo at **native pixel size**. Fonts and number formats alone do not produce these designs:
+a run that applied only those reported the Ocean look as delivered and the user saw black
+text on white — *"it doesn't look like Ocean design"*, *"there are no colors"*, *"logo is
+streched"*. Then **read the block back and compare it against the preset** — a band row, a
+spacer row, a gutter cell, a data cell, a subtotal row — and report what you observed, not
+what you intended; the same run told the user the design matched and was told *"not true"*.
+State any facet you could not apply (font not installed, surface cannot insert an image)
+rather than leaving it to be found. **Never re-derive a preset's colours from the source
+workbooks:** Ocean's palette lives in the workbook *theme*, and openpyxl reports theme
+colours as `None` — reading them as "no colour" is exactly how the palette was lost. The
+hexes in `get-formula/references/report-designs.md` are already resolved; use them
+literally. Reference implementation: `get-formula` § "Applying a design".
 
 **MANDATORY: elaborating on DR-backed data → offer a drill-down.** When the user wants
 to go deeper on a figure or section — *"explain / elaborate / break down / dig into / what
